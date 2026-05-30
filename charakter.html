@@ -403,8 +403,35 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const state = {
   name:'', heroClass:'',
   skin:'#f4c58a', hair:'#3d2b1f', armor:'#8b6914',
-  birthdate:'', fitnessLevel:'', goal:''
+  birthdate:'', fitnessLevel:'', goal:'',
+  gender:'', pronoun:'held', femScale:50
 };
+
+
+// ── Gender functions ─────────────────────────────────────────
+function selectGender(g, el) {
+  state.gender = g;
+  document.querySelectorAll('#step1 .class-card').forEach(c=>c.classList.remove('selected'));
+  el.classList.add('selected');
+  document.getElementById('diversePanel').style.display       = g==='diverse'?'block':'none';
+  document.getElementById('diverseSliderPanel').style.display = g==='diverse'?'block':'none';
+  if(g==='male')   state.pronoun = 'held';
+  if(g==='female') state.pronoun = 'heldin';
+}
+
+function selectPronoun(p, el) {
+  state.pronoun = p;
+  document.querySelectorAll('#diversePanel .option-card').forEach(c=>c.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+document.addEventListener('input', e => {
+  if(e.target.id !== 'femSlider') return;
+  const v = +e.target.value;
+  const lbl = document.getElementById('sliderLabel');
+  lbl.textContent = v<30 ? 'Eher männlich' : v>70 ? 'Eher weiblich' : 'Ausgewogen';
+  state.femScale = v;
+});
 
 // ── Class stats ─────────────────────────────────────────────
 const CLASS_STATS = {
@@ -639,6 +666,10 @@ async function saveCharacter(){
     gender:     state.gender,
     pronoun:    state.pronoun,
     fem_scale:  state.femScale,
+    gender:     state.gender,
+    pronoun:    state.pronoun,
+    fem_scale:  state.femScale,
+    weapon:     state.heroClass==='warrior'?'Schwert':state.heroClass==='archer'?'Bogen':'Holzstab',
     created_at: new Date().toISOString()
   };
 
