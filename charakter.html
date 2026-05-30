@@ -170,6 +170,56 @@ body{font-family:'Crimson Pro',Georgia,serif;background:var(--bg);color:var(--te
 
   <div class="card">
 
+    <!-- STEP 1: Geschlecht -->
+    <div class="step active" id="step1">
+      <div class="sec-title">Schritt 1 — Wähle dein Geschlecht</div>
+      <div class="class-grid">
+        <div class="class-card" data-class="warrior" onclick="selectGender('male',this)">
+          <span class="class-icon">🧔</span>
+          <div class="class-name" style="color:var(--gold)">Männlich</div>
+          <div class="class-desc">Du spielst als Held und Abenteurer.</div>
+        </div>
+        <div class="class-card" data-class="archer" onclick="selectGender('female',this)">
+          <span class="class-icon">👩</span>
+          <div class="class-name" style="color:var(--gold)">Weiblich</div>
+          <div class="class-desc">Du spielst als Heldin und Abenteurerin.</div>
+        </div>
+        <div class="class-card" data-class="mage" onclick="selectGender('diverse',this)">
+          <span class="class-icon">🧑</span>
+          <div class="class-name" style="color:var(--gold)">Divers</div>
+          <div class="class-desc">Du entscheidest selbst wie du angesprochen wirst.</div>
+        </div>
+      </div>
+      <div id="diversePanel" style="display:none;margin-top:20px">
+        <div class="sec-title">Wie möchtest du angesprochen werden?</div>
+        <div class="option-cards">
+          <div class="option-card" onclick="selectPronoun('held',this)">
+            <div class="option-radio"></div>
+            <div class="option-text"><strong>Als Held &amp; Abenteurer</strong><span>Männliche Ansprache</span></div>
+          </div>
+          <div class="option-card" onclick="selectPronoun('heldin',this)">
+            <div class="option-radio"></div>
+            <div class="option-text"><strong>Als Heldin &amp; Abenteurerin</strong><span>Weibliche Ansprache</span></div>
+          </div>
+        </div>
+      </div>
+      <div id="diverseSliderPanel" style="display:none;margin-top:20px">
+        <div class="sec-title">Wie gestaltest du deinen Charakter?</div>
+        <div style="padding:16px;background:var(--card2);border:1px solid var(--border);border-radius:3px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-family:Cinzel,serif;font-size:.65rem;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)">
+            <span>Männlicher</span><span>Weiblicher</span>
+          </div>
+          <input type="range" id="femSlider" min="0" max="100" value="50"
+            style="width:100%;accent-color:var(--gold);cursor:pointer"
+            oninput="state.femScale=this.value"/>
+          <div style="text-align:center;margin-top:6px;font-size:.85rem;color:var(--dim)" id="sliderLabel">Ausgewogen</div>
+        </div>
+      </div>
+      <div class="btn-row" style="margin-top:24px">
+        <button class="btn-primary" onclick="goStep(2)">Weiter →</button>
+      </div>
+    </div>
+
     <!-- STEP 1: Name -->
     <div class="step" id="step2">
       <div class="sec-title">Schritt 2 — Dein Heldenname</div>
@@ -386,11 +436,10 @@ function updateProgress(step){
 function goStep(n){
   // validate
   if(n===2 && !state.gender){ alert('Bitte wähle dein Geschlecht!'); return; }
-  if(n===2 && !state.gender){ alert('Bitte wähle dein Geschlecht!'); return; }
-    if(n===3 && !document.getElementById('heroName').value.trim()){
+  if(n===3 && !document.getElementById('heroName').value.trim()){
     alert('Bitte gib deinem Helden einen Namen!'); return;
   }
-  if(n===3 && !state.heroClass){
+  if(n===4 && !state.heroClass){
     alert('Bitte wähle eine Klasse!'); return;
   }
   if(n===5){

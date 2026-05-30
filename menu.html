@@ -782,16 +782,16 @@ async function buyItem(itemName, price, icon, desc) {
 
 function startMission(type){
   const BASE_MISSIONS={
-    goblin:{enemy:'archer', exp:10, gold:1, item:null},
-    noble: {enemy:'warrior',exp:2,  gold:5, item:null},
-    ring:  {enemy:'mage',   exp:4,  gold:1, item:'Geflochtener Ring'}
+    goblin:{enemy:'warrior', enemykey:'goblin',  exp:10, gold:1, item:null},
+    noble: {enemy:'archer',  enemykey:'bandit',  exp:2,  gold:5, item:null},
+    ring:  {enemy:'mage',    enemykey:'wichtel', exp:4,  gold:1, item:'Geflochtener Ring'}
   };
   const base = BASE_MISSIONS[type];
   const cls  = character?.class||'warrior';
   const lvl  = character?.level||1;
   const rewards = getMissionRewards(base, lvl);
   const elvl = getEnemyLevel(lvl);
-  window.location.href=`kampf.html?player=${cls}&level=${lvl}&enemy=${base.enemy}&elvl=${elvl}&exp=${rewards.exp}&gold=${rewards.gold}${rewards.item?'&item='+encodeURIComponent(rewards.item):''}`;
+  window.location.href=`kampf.html?player=${cls}&level=${lvl}&enemy=${base.enemy}&enemykey=${base.enemykey}&elvl=${elvl}&exp=${rewards.exp}&gold=${rewards.gold}${rewards.item?'&item='+encodeURIComponent(rewards.item):''}`;
 }
 
 function closeOverlay(id){

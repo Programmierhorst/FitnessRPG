@@ -316,9 +316,16 @@ async function awardXP(supabaseClient, userId, earnedExp, earnedGold) {
 
 // ── Combat engine ────────────────────────────────────────────
 const CLASSES = {
-  warrior:{name:'Krieger',  icon:'⚔️', color:'var(--warrior)',lebenskraft:3,staerke:3,gewandheit:1,intelligenz:1,schnelligkeit:1,ausdauer:1},
-  archer: {name:'Bogenschütze',icon:'🏹',color:'var(--archer)', lebenskraft:1,staerke:1,gewandheit:3,intelligenz:1,schnelligkeit:2,ausdauer:2},
-  mage:   {name:'Magier',   icon:'🔮', color:'var(--mage)',  lebenskraft:2,staerke:1,gewandheit:1,intelligenz:3,schnelligkeit:1,ausdauer:2},
+  warrior:{name:'Krieger',     icon:'⚔️', color:'var(--warrior)',lebenskraft:3,staerke:3,gewandheit:1,intelligenz:1,schnelligkeit:1,ausdauer:1},
+  archer: {name:'Bogenschütze',icon:'🏹', color:'var(--archer)', lebenskraft:1,staerke:1,gewandheit:3,intelligenz:1,schnelligkeit:2,ausdauer:2},
+  mage:   {name:'Magier',      icon:'🔮', color:'var(--mage)',   lebenskraft:2,staerke:1,gewandheit:1,intelligenz:3,schnelligkeit:1,ausdauer:2},
+};
+
+// Spezielle Gegner-Definitionen (überschreiben Name+Icon wenn gesetzt)
+const ENEMIES = {
+  goblin:  {name:'Goblin',   icon:'👺', color:'var(--warrior)', lebenskraft:1,staerke:1,gewandheit:1,intelligenz:1,schnelligkeit:1,ausdauer:1},
+  bandit:  {name:'Bandit',   icon:'🗡️', color:'var(--archer)',  lebenskraft:1,staerke:1,gewandheit:1,intelligenz:1,schnelligkeit:1,ausdauer:1},
+  wichtel: {name:'Wichtel',  icon:'🧙', color:'var(--mage)',    lebenskraft:1,staerke:1,gewandheit:1,intelligenz:1,schnelligkeit:1,ausdauer:1},
 };
 
 // Get mission + fighter info from URL params (default: warrior vs archer demo)
@@ -331,12 +338,15 @@ const MISSION = {
   gold:  parseInt(params.get('gold') || '1'),
   item:  params.get('item') || null
 };
-const clsA  = params.get('player') || 'warrior';
-const clsB  = params.get('enemy')  || 'archer';
+const clsA     = params.get('player') || 'warrior';
+const clsB     = params.get('enemy')  || 'archer';
+const enemyKey = params.get('enemykey') || null; // z.B. 'goblin', 'bandit', 'wichtel'
 const lvA   = parseInt(params.get('level')||'1');
 const lvB   = parseInt(params.get('elvl') || String(getEnemyLevel(lvA)));
 
-const sA = CLASSES[clsA], sB = CLASSES[clsB];
+const sA = CLASSES[clsA];
+// Wenn ein spezieller Gegner definiert ist, nutze dessen Stats
+const sB = enemyKey && ENEMIES[enemyKey] ? ENEMIES[enemyKey] : CLASSES[clsB];
 
 function maxLP(lk,lv){ return 30+lk*2+lv*4; }
 function gmain(cls,s){ return {warrior:s.staerke,archer:s.gewandheit,mage:s.intelligenz}[cls]; }
