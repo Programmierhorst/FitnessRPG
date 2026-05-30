@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>FitnessRPG – Dein Abenteuer beginnt</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@400;600&family=Crimson+Pro:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--gold:#c9a84c;--gold-l:#e8c97a;--gold-d:#7a5c1e;--bg:#0a0c10;--text:#e8dcc8;--dim:#8a7a60}
+html,body{width:100%;height:100%;overflow:hidden}
+body{font-family:'Crimson Pro',Georgia,serif;background:var(--bg);color:var(--text);display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none}
+
+/* stars */
+.stars{position:fixed;inset:0;pointer-events:none}
+.stars::before,.stars::after{content:'';position:absolute;inset:0}
+.stars::before{background-image:radial-gradient(1px 1px at 8% 12%,rgba(255,255,255,.7) 0%,transparent 100%),radial-gradient(1px 1px at 22% 45%,rgba(255,255,255,.5) 0%,transparent 100%),radial-gradient(1px 1px at 38% 8%,rgba(255,255,255,.6) 0%,transparent 100%),radial-gradient(1px 1px at 54% 60%,rgba(255,255,255,.4) 0%,transparent 100%),radial-gradient(1px 1px at 68% 28%,rgba(255,255,255,.6) 0%,transparent 100%),radial-gradient(1px 1px at 82% 75%,rgba(255,255,255,.5) 0%,transparent 100%),radial-gradient(1px 1px at 91% 12%,rgba(255,255,255,.7) 0%,transparent 100%),radial-gradient(1px 1px at 6% 88%,rgba(255,255,255,.4) 0%,transparent 100%),radial-gradient(1px 1px at 47% 92%,rgba(255,255,255,.5) 0%,transparent 100%),radial-gradient(1px 1px at 75% 50%,rgba(255,255,255,.3) 0%,transparent 100%),radial-gradient(2px 2px at 30% 30%,rgba(201,168,76,.4) 0%,transparent 100%),radial-gradient(2px 2px at 70% 20%,rgba(201,168,76,.3) 0%,transparent 100%)}
+.stars::after{background:radial-gradient(ellipse at 50% 50%,rgba(201,168,76,.04) 0%,transparent 70%);animation:glow 4s ease-in-out infinite}
+@keyframes glow{0%,100%{opacity:.6}50%{opacity:1}}
+
+/* scene container */
+.scene{position:relative;z-index:1;width:min(600px,92vw);text-align:center;padding:40px 20px}
+
+/* narrator orb */
+.orb{width:70px;height:70px;margin:0 auto 32px;background:radial-gradient(circle at 35% 30%,var(--gold-l),var(--gold-d));clip-path:polygon(50% 0%,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%);animation:orbPulse 2.5s ease-in-out infinite;display:none}
+@keyframes orbPulse{0%,100%{filter:drop-shadow(0 0 10px rgba(201,168,76,.6)) drop-shadow(0 0 30px rgba(201,168,76,.2))}50%{filter:drop-shadow(0 0 20px rgba(201,168,76,.9)) drop-shadow(0 0 50px rgba(201,168,76,.4))}}
+
+/* text box */
+.textbox{background:rgba(10,12,16,.85);border:1px solid rgba(201,168,76,.3);border-radius:4px;padding:32px 36px;box-shadow:0 0 40px rgba(0,0,0,.6),inset 0 1px 0 rgba(201,168,76,.1);min-height:140px;display:flex;flex-direction:column;justify-content:center;position:relative;display:none}
+.textbox::before{content:'';position:absolute;inset:0;border-radius:4px;background:linear-gradient(135deg,rgba(201,168,76,.04) 0%,transparent 50%);pointer-events:none}
+
+.narrator{font-family:'Cinzel',serif;font-size:.65rem;letter-spacing:.2em;text-transform:uppercase;color:var(--gold);margin-bottom:14px}
+
+.story-text{font-size:clamp(1rem,3vw,1.25rem);font-weight:300;line-height:1.75;color:var(--text);font-style:italic;min-height:60px}
+
+/* typewriter cursor */
+.cursor{display:inline-block;width:2px;height:1.1em;background:var(--gold);vertical-align:text-bottom;animation:blink .8s step-end infinite;margin-left:2px}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+
+/* tap hint */
+.tap-hint{margin-top:20px;font-family:'Cinzel',serif;font-size:.6rem;letter-spacing:.2em;text-transform:uppercase;color:var(--dim);animation:hintFade 1.5s ease-in-out infinite;display:none}
+@keyframes hintFade{0%,100%{opacity:.3}50%{opacity:.8}}
+
+/* class name highlight */
+.class-highlight{color:var(--gold-l);font-style:normal;font-weight:400}
+
+/* fade overlay */
+.fade-overlay{position:fixed;inset:0;background:#0a0c10;opacity:0;pointer-events:none;z-index:100;transition:opacity 1.2s ease}
+.fade-overlay.active{opacity:1;pointer-events:all}
+
+/* decorative corners */
+.corner{position:fixed;width:60px;height:60px;opacity:.25;pointer-events:none;z-index:2}
+.corner svg{width:100%;height:100%}
+.corner.tl{top:12px;left:12px}
+.corner.tr{top:12px;right:12px;transform:scaleX(-1)}
+.corner.bl{bottom:12px;left:12px;transform:scaleY(-1)}
+.corner.br{bottom:12px;right:12px;transform:scale(-1)}
+</style>
+</head>
+<body>
+
+<div class="stars"></div>
+
+<!-- corners -->
+<div class="corner tl"><svg viewBox="0 0 60 60" fill="none"><path d="M3 57 L3 3 L57 3" stroke="#c9a84c" stroke-width="1.5" fill="none"/><circle cx="3" cy="3" r="2.5" fill="#c9a84c"/></svg></div>
+<div class="corner tr"><svg viewBox="0 0 60 60" fill="none"><path d="M3 57 L3 3 L57 3" stroke="#c9a84c" stroke-width="1.5" fill="none"/><circle cx="3" cy="3" r="2.5" fill="#c9a84c"/></svg></div>
+<div class="corner bl"><svg viewBox="0 0 60 60" fill="none"><path d="M3 57 L3 3 L57 3" stroke="#c9a84c" stroke-width="1.5" fill="none"/><circle cx="3" cy="3" r="2.5" fill="#c9a84c"/></svg></div>
+<div class="corner br"><svg viewBox="0 0 60 60" fill="none"><path d="M3 57 L3 3 L57 3" stroke="#c9a84c" stroke-width="1.5" fill="none"/><circle cx="3" cy="3" r="2.5" fill="#c9a84c"/></svg></div>
+
+<div class="scene">
+  <div class="orb" id="orb"></div>
+  <div class="textbox" id="textbox">
+    <div class="narrator">🌟 Der Erzähler</div>
+    <div class="story-text" id="storyText"></div>
+    <div class="tap-hint" id="tapHint">Tippe um weiterzulesen...</div>
+  </div>
+</div>
+
+<div class="fade-overlay" id="fadeOverlay"></div>
+
+<script>
+const sb = supabase.createClient(
+  'https://zjykfbfsrmdsllrbblmz.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpqeWtmYmZzcm1kc2xscmJibG16Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk4NTUwOTksImV4cCI6MjA5NTQzMTA5OX0.I8mFhiKo-Fv_GpF-ATWXXYXUUKxu6OzxZdkJr4COGIE'
+);
+
+const CLASS_DE = { warrior:'Krieger', archer:'Bogenschütze', mage:'Magier' };
+
+let slides       = [];
+let currentSlide = 0;
+let isTyping     = false;
+let typeTimer    = null;
+let charClass    = 'Held';
+
+// ── Load character class from Supabase ──────────────────────
+async function loadCharacter() {
+  const { data:{ session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = 'index.html'; return; }
+  const { data } = await sb.from('characters')
+    .select('class').eq('user_id', session.user.id)
+    .order('created_at', { ascending: false }).limit(1);
+  if (data && data.length > 0) {
+    charClass = CLASS_DE[data[0].class] || 'Held';
+  }
+  buildSlides();
+  startIntro();
+}
+
+function buildSlides() {
+  slides = [
+    `So, so… Du möchtest also ein <span class="class-highlight">${charClass}</span> sein?`,
+    `Willkommen, kleiner Held, in einer Welt voller Abenteuer!\n\nEs erwarten dich viele Dungeons und Bosse, Rivalitäten und Freundschaften mit anderen Helden – und so einiges an Magischem und Geheimnisvollem in dieser Welt.`,
+    `Aber Achtung – ohne Fleiß, kein Preis!\n\nDu wirst viel an dir arbeiten müssen, wenn du dein Abenteuer bestehen möchtest…`
+  ];
+}
+
+// ── Intro: fade in orb then textbox ─────────────────────────
+function startIntro() {
+  const orb     = document.getElementById('orb');
+  const textbox = document.getElementById('textbox');
+  orb.style.display     = 'block';
+  orb.style.opacity     = '0';
+  orb.style.transition  = 'opacity 1s ease';
+  setTimeout(() => { orb.style.opacity = '1'; }, 100);
+  setTimeout(() => {
+    textbox.style.display  = 'flex';
+    textbox.style.opacity  = '0';
+    textbox.style.transition = 'opacity .8s ease';
+    setTimeout(() => { textbox.style.opacity = '1'; }, 50);
+    setTimeout(() => showSlide(0), 400);
+  }, 1200);
+}
+
+// ── Show a slide with typewriter effect ──────────────────────
+function showSlide(index) {
+  const el   = document.getElementById('storyText');
+  const hint = document.getElementById('tapHint');
+  hint.style.display = 'none';
+  el.innerHTML = '';
+  isTyping = true;
+
+  // Split text into segments (handle \n and <span>)
+  const raw   = slides[index];
+  const parts = raw.split(/(\n|<span[^>]*>.*?<\/span>)/g).filter(Boolean);
+  let   html  = '';
+  let   i     = 0;
+  const allChars = [];
+
+  // Pre-build character list
+  parts.forEach(part => {
+    if (part === '\n') {
+      allChars.push({ type:'br' });
+    } else if (part.startsWith('<span')) {
+      // treat as block
+      allChars.push({ type:'span', html:part });
+    } else {
+      for (const ch of part) allChars.push({ type:'char', ch });
+    }
+  });
+
+  el.innerHTML = '<span class="cursor"></span>';
+
+  function typeNext() {
+    if (i >= allChars.length) {
+      isTyping = false;
+      hint.style.display = 'block';
+      return;
+    }
+    const item = allChars[i++];
+    const cursor = el.querySelector('.cursor');
+    if (item.type === 'br') {
+      cursor.insertAdjacentHTML('beforebegin','<br/>');
+    } else if (item.type === 'span') {
+      cursor.insertAdjacentHTML('beforebegin', item.html);
+    } else {
+      cursor.insertAdjacentHTML('beforebegin', item.ch === '<' ? '&lt;' : item.ch === '>' ? '&gt;' : item.ch);
+    }
+    const delay = item.type === 'char' ? (item.ch === '.' || item.ch === '…' ? 120 : item.ch === ',' ? 80 : 28) : 0;
+    typeTimer = setTimeout(typeNext, delay);
+  }
+  typeNext();
+}
+
+// ── Tap / click handler ──────────────────────────────────────
+document.body.addEventListener('click', () => {
+  if (isTyping) {
+    // Skip typewriter – show full text immediately
+    clearTimeout(typeTimer);
+    const el   = document.getElementById('storyText');
+    const hint = document.getElementById('tapHint');
+    el.innerHTML = slides[currentSlide]
+      .replace(/\n/g,'<br/>')
+      + '<span class="cursor"></span>';
+    isTyping = false;
+    hint.style.display = 'block';
+    return;
+  }
+
+  currentSlide++;
+
+  if (currentSlide < slides.length) {
+    showSlide(currentSlide);
+  } else {
+    // Last slide done → fade out and go to main menu
+    const overlay = document.getElementById('fadeOverlay');
+    overlay.classList.add('active');
+    setTimeout(() => window.location.href = 'menu.html', 1400);
+  }
+});
+
+// ── Boot ─────────────────────────────────────────────────────
+loadCharacter();
+</script>
+</body>
+</html>

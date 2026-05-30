@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>FitnessRPG – Marktplatz</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@400;600&family=Crimson+Pro:wght@300;400&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --gold:#c9a84c;--gold-l:#e8c97a;--gold-d:#7a5c1e;
+  --bg:#0a0c10;--card:#10141c;--card2:#141820;
+  --border:rgba(201,168,76,.25);--text:#e8dcc8;--dim:#8a7a60;
+}
+html,body{width:100%;height:100%;overflow:hidden}
+body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text)}
+
+/* ── SCENE ── */
+.scene{position:relative;width:100%;height:100vh;overflow:hidden}
+
+/* sky gradient */
+.sky{position:absolute;inset:0;background:linear-gradient(180deg,#0d0a18 0%,#1a1228 40%,#2d1f0a 70%,#1a0f05 100%)}
+
+/* stars */
+.stars-layer{position:absolute;inset:0;pointer-events:none}
+.star{position:absolute;border-radius:50%;background:#fff;animation:twinkle var(--d,3s) ease-in-out infinite var(--del,0s)}
+@keyframes twinkle{0%,100%{opacity:var(--o,.4)}50%{opacity:1}}
+
+/* moon */
+.moon{position:absolute;top:6%;right:12%;width:60px;height:60px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#f5e6c8,#c9a84c);box-shadow:0 0 30px rgba(201,168,76,.4),0 0 60px rgba(201,168,76,.15)}
+
+/* mountains bg */
+.mountains{position:absolute;bottom:38%;width:100%;pointer-events:none}
+
+/* ground */
+.ground{position:absolute;bottom:0;width:100%;height:42%;background:linear-gradient(180deg,#1a1205 0%,#0f0b03 100%)}
+.ground-line{position:absolute;top:0;width:100%;height:2px;background:linear-gradient(90deg,transparent,rgba(201,168,76,.3),transparent)}
+
+/* cobblestones */
+.cobbles{position:absolute;bottom:0;width:100%;height:38%;pointer-events:none}
+
+/* ── INTERACTIVE ELEMENTS ── */
+.clickable{cursor:pointer;transition:filter .2s,transform .2s}
+.clickable:hover{filter:brightness(1.15);transform:translateY(-2px)}
+.clickable:active{transform:translateY(0)}
+
+/* speech bubble */
+.bubble{position:absolute;background:#f5e6c8;border:2px solid #8b6914;border-radius:10px;padding:10px 14px;font-family:'Crimson Pro',serif;font-size:.82rem;color:#2c1f0e;line-height:1.4;max-width:200px;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5));animation:bubblePop .4s cubic-bezier(.34,1.56,.64,1) both}
+.bubble::after{content:'';position:absolute;bottom:-10px;left:50%;transform:translateX(-50%);border:6px solid transparent;border-top-color:#8b6914}
+@keyframes bubblePop{from{opacity:0;transform:scale(.8) translateY(6px)}to{opacity:1;transform:scale(1) translateY(0)}}
+
+/* HUD top bar */
+.hud{position:absolute;top:0;left:0;right:0;z-index:10;display:flex;justify-content:space-between;align-items:center;padding:10px 16px;background:linear-gradient(180deg,rgba(0,0,0,.7),transparent)}
+.hud-name{font-family:'Cinzel',serif;font-size:.75rem;letter-spacing:.12em;color:var(--gold-l)}
+.hud-gold{font-family:'Cinzel',serif;font-size:.75rem;letter-spacing:.1em;color:var(--gold);display:flex;align-items:center;gap:5px}
+.hud-level{font-family:'Cinzel',serif;font-size:.7rem;color:var(--dim);letter-spacing:.1em}
+
+/* label tags */
+.scene-label{position:absolute;font-family:'Cinzel',serif;font-size:.58rem;letter-spacing:.15em;text-transform:uppercase;color:var(--gold);background:rgba(0,0,0,.6);border:1px solid var(--border);border-radius:2px;padding:2px 7px;pointer-events:none;white-space:nowrap}
+
+/* ── OVERLAYS ── */
+.overlay{position:fixed;inset:0;z-index:100;display:none;background:rgba(0,0,0,.75);backdrop-filter:blur(4px);align-items:center;justify-content:center}
+.overlay.active{display:flex;animation:fadeIn .3s ease}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+
+/* mission panel */
+.mission-panel{background:var(--card);border:1px solid var(--border);border-radius:4px;width:min(520px,95vw);max-height:90vh;overflow-y:auto;box-shadow:0 0 60px rgba(0,0,0,.8)}
+.mp-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)}
+.mp-title{font-family:'Cinzel Decorative',serif;font-size:1rem;color:var(--gold-l)}
+.mp-close{background:none;border:none;color:var(--dim);cursor:pointer;font-size:1.2rem;padding:4px 8px;transition:color .2s}
+.mp-close:hover{color:var(--gold)}
+.mp-npc{display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-bottom:1px solid var(--border);background:rgba(201,168,76,.04)}
+.mp-npc-icon{font-size:2.2rem;flex-shrink:0}
+.mp-npc-text{font-size:.9rem;color:var(--text);line-height:1.6;font-style:italic}
+.mp-missions{padding:16px 20px;display:flex;flex-direction:column;gap:12px}
+.mission-card{background:var(--card2);border:1px solid var(--border);border-radius:3px;padding:14px 16px;cursor:pointer;transition:all .25s;position:relative;overflow:hidden}
+.mission-card:hover{border-color:var(--gold);transform:translateY(-1px);box-shadow:0 4px 16px rgba(201,168,76,.15)}
+.mission-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px}
+.mission-card.exp-focus::before{background:var(--gold)}
+.mission-card.gold-focus::before{background:#f39c12}
+.mission-card.item-focus::before{background:#8e44ad}
+.mc-title{font-family:'Cinzel',serif;font-size:.8rem;letter-spacing:.08em;color:var(--gold-l);margin-bottom:4px}
+.mc-desc{font-size:.88rem;color:var(--dim);line-height:1.4;margin-bottom:10px}
+.mc-rewards{display:flex;gap:10px;flex-wrap:wrap}
+.mc-reward{padding:3px 9px;border-radius:2px;font-family:'Cinzel',serif;font-size:.6rem;letter-spacing:.08em;text-transform:uppercase}
+.mc-reward.exp{background:rgba(201,168,76,.12);border:1px solid rgba(201,168,76,.3);color:var(--gold-l)}
+.mc-reward.gold{background:rgba(243,156,18,.12);border:1px solid rgba(243,156,18,.3);color:#f39c12}
+.mc-reward.item{background:rgba(142,68,173,.12);border:1px solid rgba(142,68,173,.3);color:#bb8fce}
+.mc-tag{position:absolute;top:8px;right:10px;font-family:'Cinzel',serif;font-size:.55rem;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
+
+/* hero panel */
+.hero-panel{background:var(--card);border:1px solid var(--border);border-radius:4px;width:min(480px,95vw);max-height:90vh;overflow-y:auto;box-shadow:0 0 60px rgba(0,0,0,.8)}
+.hp-hdr{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.hp-hdr-title{font-family:'Cinzel Decorative',serif;font-size:.95rem;color:var(--gold-l)}
+.hero-summary{display:flex;gap:16px;padding:16px 20px;align-items:center;border-bottom:1px solid var(--border)}
+.hero-avatar-big{font-size:3rem;background:rgba(201,168,76,.08);border:1px solid var(--border);border-radius:50%;width:70px;height:70px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.hero-meta{flex:1}
+.hero-meta-name{font-family:'Cinzel Decorative',serif;font-size:1rem;color:var(--gold-l);margin-bottom:2px}
+.hero-meta-class{font-family:'Cinzel',serif;font-size:.65rem;letter-spacing:.15em;text-transform:uppercase;color:var(--dim);margin-bottom:8px}
+.hero-res{display:flex;gap:10px}
+.res-badge{padding:4px 10px;background:rgba(201,168,76,.08);border:1px solid var(--border);border-radius:2px;font-family:'Cinzel',serif;font-size:.65rem;color:var(--gold)}
+.stats-section{padding:14px 20px;border-bottom:1px solid var(--border)}
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.stat-item{background:var(--card2);border:1px solid var(--border);border-radius:3px;padding:8px 12px}
+.stat-item-name{font-family:'Cinzel',serif;font-size:.58rem;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin-bottom:3px}
+.stat-item-val{font-size:1.2rem;font-weight:300;color:var(--gold-l)}
+.bag-section{padding:14px 20px}
+.bag-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}
+.bag-slot{aspect-ratio:1;background:var(--card2);border:1px solid var(--border);border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:1.4rem;position:relative;cursor:pointer;transition:border-color .2s}
+.bag-slot:hover{border-color:var(--gold)}
+.bag-slot.empty{opacity:.3}
+.bag-slot-label{position:absolute;bottom:2px;left:0;right:0;text-align:center;font-size:.5rem;font-family:'Cinzel',serif;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 2px}
+.sec-hdr{font-family:'Cinzel',serif;font-size:.65rem;letter-spacing:.18em;text-transform:uppercase;color:var(--gold);display:flex;align-items:center;gap:8px}
+.sec-hdr::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* shop panel */
+.shop-panel{background:var(--card);border:1px solid var(--border);border-radius:4px;width:min(460px,95vw);max-height:90vh;overflow-y:auto;box-shadow:0 0 60px rgba(0,0,0,.8)}
+.sp-hdr{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.sp-title{font-family:'Cinzel Decorative',serif;font-size:.9rem;color:var(--gold-l)}
+.shop-items{padding:14px 20px;display:flex;flex-direction:column;gap:10px}
+.shop-item{display:flex;align-items:center;gap:12px;background:var(--card2);border:1px solid var(--border);border-radius:3px;padding:12px}
+.si-icon{font-size:1.8rem;flex-shrink:0}
+.si-info{flex:1}
+.si-name{font-family:'Cinzel',serif;font-size:.75rem;letter-spacing:.08em;color:var(--text);margin-bottom:3px}
+.si-desc{font-size:.82rem;color:var(--dim)}
+.si-price{font-family:'Cinzel',serif;font-size:.72rem;color:var(--gold);white-space:nowrap}
+.btn-buy{padding:6px 12px;background:linear-gradient(135deg,var(--gold-d),var(--gold));border:none;border-radius:2px;color:#1a1200;font-family:'Cinzel',serif;font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;margin-left:8px;transition:all .2s}
+.btn-buy:hover{box-shadow:0 2px 10px rgba(201,168,76,.4)}
+
+.btn-close{background:none;border:none;color:var(--dim);cursor:pointer;font-size:1.1rem;padding:4px 8px;transition:color .2s}
+.btn-close:hover{color:var(--gold)}
+
+@keyframes levelPop {
+  from { opacity:0; transform:translate(-50%,-50%) scale(.5); }
+  to   { opacity:1; transform:translate(-50%,-50%) scale(1); }
+}
+</style>
+</head>
+<body>
+<div class="scene" id="scene">
+
+  <!-- HUD -->
+  <div class="hud">
+    <div>
+      <div class="hud-name" id="hudName">Held</div>
+      <div class="hud-level" id="hudLevel">Level 1</div>
+    </div>
+    <div class="hud-gold">💰 <span id="hudGold">0</span> Gold</div>
+    </div>
+    <div style="position:absolute;bottom:0;left:0;right:0;height:3px;background:rgba(255,255,255,.1)">
+      <div id="xpBar" style="height:100%;background:linear-gradient(90deg,var(--gold),var(--gold-l));width:0%;transition:width .5s ease"></div>
+  </div>
+
+  <!-- SVG scene -->
+  <svg id="sceneSvg" style="position:absolute;inset:0;width:100%;height:100%" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+
+    <!-- Sky -->
+    <defs>
+      <radialGradient id="moonGlow" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#f5e6c8" stop-opacity=".15"/><stop offset="100%" stop-color="#f5e6c8" stop-opacity="0"/></radialGradient>
+      <radialGradient id="torchL" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#e67e22" stop-opacity=".4"/><stop offset="100%" stop-color="#e67e22" stop-opacity="0"/></radialGradient>
+      <radialGradient id="torchR" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#e67e22" stop-opacity=".4"/><stop offset="100%" stop-color="#e67e22" stop-opacity="0"/></radialGradient>
+    </defs>
+    <rect width="800" height="600" fill="url(#skyGrad)"/>
+    <defs><linearGradient id="skyGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#08050f"/><stop offset="60%" stop-color="#160e28"/><stop offset="100%" stop-color="#2d1a06"/></linearGradient></defs>
+
+    <!-- Stars -->
+    <circle cx="80"  cy="40"  r="1.2" fill="#fff" opacity=".7"/>
+    <circle cx="150" cy="25"  r=".8"  fill="#fff" opacity=".5"/>
+    <circle cx="230" cy="55"  r="1"   fill="#fff" opacity=".6"/>
+    <circle cx="310" cy="20"  r=".7"  fill="#fff" opacity=".4"/>
+    <circle cx="400" cy="35"  r="1.2" fill="#fff" opacity=".7"/>
+    <circle cx="480" cy="15"  r=".9"  fill="#fff" opacity=".5"/>
+    <circle cx="560" cy="45"  r="1"   fill="#fff" opacity=".6"/>
+    <circle cx="640" cy="22"  r=".8"  fill="#fff" opacity=".4"/>
+    <circle cx="720" cy="38"  r="1.1" fill="#fff" opacity=".6"/>
+    <circle cx="50"  cy="80"  r=".7"  fill="#fff" opacity=".3"/>
+    <circle cx="180" cy="70"  r="1"   fill="#fff" opacity=".5"/>
+    <circle cx="350" cy="60"  r=".8"  fill="#fff" opacity=".4"/>
+    <circle cx="520" cy="75"  r="1.1" fill="#fff" opacity=".6"/>
+    <circle cx="690" cy="60"  r=".9"  fill="#fff" opacity=".5"/>
+    <circle cx="760" cy="80"  r=".7"  fill="#fff" opacity=".3"/>
+
+    <!-- Moon -->
+    <circle cx="680" cy="60" r="35" fill="#f5e6c8" opacity=".9"/>
+    <circle cx="680" cy="60" r="35" fill="url(#moonGlow)"/>
+    <circle cx="668" cy="52" r="5" fill="#e8d5b0" opacity=".5"/>
+    <circle cx="685" cy="65" r="3" fill="#e8d5b0" opacity=".4"/>
+    <circle cx="675" cy="70" r="4" fill="#e8d5b0" opacity=".3"/>
+
+    <!-- Mountains background -->
+    <path d="M0 320 L80 220 L160 280 L240 180 L330 260 L420 150 L510 250 L590 190 L680 270 L760 200 L800 240 L800 380 L0 380 Z" fill="#100a20" opacity=".9"/>
+    <path d="M0 360 L60 290 L130 330 L200 260 L280 310 L360 240 L440 300 L520 260 L600 310 L680 255 L750 295 L800 270 L800 380 L0 380 Z" fill="#140d24" opacity=".95"/>
+
+    <!-- Ground -->
+    <rect y="370" width="800" height="230" fill="#1a1205"/>
+    <line x1="0" y1="372" x2="800" y2="372" stroke="#c9a84c" stroke-width=".8" opacity=".25"/>
+
+    <!-- Cobblestone path -->
+    <rect x="200" y="375" width="400" height="80" rx="2" fill="#1f1608"/>
+    <line x1="200" y1="375" x2="600" y2="375" stroke="#c9a84c" stroke-width=".5" opacity=".15"/>
+    <line x1="200" y1="455" x2="600" y2="455" stroke="#c9a84c" stroke-width=".5" opacity=".15"/>
+    <!-- cobble stones -->
+    <rect x="210" y="380" width="55" height="30" rx="3" fill="none" stroke="#2a1e08" stroke-width="1.5"/>
+    <rect x="275" y="380" width="45" height="30" rx="3" fill="none" stroke="#2a1e08" stroke-width="1.5"/>
+    <rect x="330" y="380" width="60" height="30" rx="3" fill="none" stroke="#2a1e08" stroke-width="1.5"/>
+    <rect x="400" y="380" width="50" height="30" rx="3" fill="none" stroke="#2a1e08" stroke-width="1.5"/>
+    <rect x="460" y="380" width="55" height="30" rx="3" fill="none" stroke="#2a1e08" stroke-width="1.5"/>
+    <rect x="525" y="380" width="65" height="30" rx="3" fill="none" stroke="#2a1e08" stroke-width="1.5"/>
+    <rect x="225" y="418" width="60" height="30" rx="3" fill="none" stroke="#2a1e08" stroke-width="1.5"/>
+    <rect x="295" y="418" width="50" height="30" rx="3" fill="none" stroke="#2a1e08" stroke-width="1.5"/>
+    <rect x="355" y="418" width="65" height="30" rx="3" fill="none" stroke="#2a1e08" stroke-width="1.5"/>
+    <rect x="430" y="418" width="55" height="30" rx="3" fill="none" stroke="#2a1e08" stroke-width="1.5"/>
+    <rect x="495" y="418" width="60" height="30" rx="3" fill="none" stroke="#2a1e08" stroke-width="1.5"/>
+
+    <!-- ── LEFT STALL – Waffen & Rüstungen ── -->
+    <g id="stallLeft" class="clickable" onclick="openShop('weapons')" style="cursor:pointer">
+      <!-- stall back wall -->
+      <rect x="30" y="250" width="170" height="140" rx="3" fill="#1f1608"/>
+      <rect x="30" y="250" width="170" height="8"  rx="2" fill="#3d2b1f"/>
+      <!-- roof -->
+      <polygon points="10,255 210,255 195,220 25,220" fill="#7a3b1e"/>
+      <polygon points="10,255 210,255 195,220 25,220" fill="none" stroke="#c9a84c" stroke-width="1" opacity=".4"/>
+      <!-- roof stripes -->
+      <line x1="60"  y1="220" x2="50"  y2="255" stroke="#5a2b14" stroke-width="8"/>
+      <line x1="110" y1="220" x2="105" y2="255" stroke="#5a2b14" stroke-width="8"/>
+      <line x1="160" y1="220" x2="160" y2="255" stroke="#5a2b14" stroke-width="8"/>
+      <!-- counter -->
+      <rect x="25" y="340" width="180" height="18" rx="2" fill="#3d2b1f"/>
+      <rect x="25" y="340" width="180" height="5"  rx="1" fill="#5a3e20"/>
+      <!-- items on display -->
+      <text x="55"  y="330" font-size="22" text-anchor="middle">⚔️</text>
+      <text x="110" y="330" font-size="22" text-anchor="middle">🛡️</text>
+      <text x="162" y="330" font-size="22" text-anchor="middle">🏹</text>
+      <!-- sign -->
+      <rect x="60" y="265" width="100" height="28" rx="3" fill="#2c1f0e" stroke="#8b6914" stroke-width="1"/>
+      <text x="110" y="283" font-family="serif" font-size="9" fill="#c9a84c" text-anchor="middle" letter-spacing="1">WAFFEN &amp; RÜSTUNGEN</text>
+      <!-- torch -->
+      <rect x="185" y="260" width="6" height="16" rx="2" fill="#3d2b1f"/>
+      <ellipse cx="188" cy="258" rx="5" ry="7" fill="#e67e22" opacity=".9"/>
+      <ellipse cx="188" cy="254" rx="3" ry="5" fill="#f5c842" opacity=".8"/>
+      <circle cx="188" cy="258" r="18" fill="url(#torchL)" opacity=".6"/>
+    </g>
+
+    <!-- ── RIGHT STALL – Tränke & Rollen ── -->
+    <g id="stallRight" class="clickable" onclick="openShop('potions')" style="cursor:pointer">
+      <rect x="600" y="250" width="170" height="140" rx="3" fill="#1a1520"/>
+      <rect x="600" y="250" width="170" height="8"   rx="2" fill="#2a1f35"/>
+      <!-- roof -->
+      <polygon points="590,255 790,255 775,220 605,220" fill="#2e1b4a"/>
+      <polygon points="590,255 790,255 775,220 605,220" fill="none" stroke="#5b7fe8" stroke-width="1" opacity=".4"/>
+      <!-- roof stripes -->
+      <line x1="635" y1="220" x2="625" y2="255" stroke="#1e1230" stroke-width="8"/>
+      <line x1="685" y1="220" x2="680" y2="255" stroke="#1e1230" stroke-width="8"/>
+      <line x1="735" y1="220" x2="735" y2="255" stroke="#1e1230" stroke-width="8"/>
+      <!-- counter -->
+      <rect x="595" y="340" width="180" height="18" rx="2" fill="#2a1f35"/>
+      <rect x="595" y="340" width="180" height="5"  rx="1" fill="#3d2b50"/>
+      <!-- items -->
+      <text x="630"  y="330" font-size="22" text-anchor="middle">🧪</text>
+      <text x="690"  y="330" font-size="22" text-anchor="middle">📜</text>
+      <text x="747"  y="330" font-size="22" text-anchor="middle">💜</text>
+      <!-- sign -->
+      <rect x="625" y="265" width="110" height="28" rx="3" fill="#1a1228" stroke="#5b7fe8" stroke-width="1" opacity=".8"/>
+      <text x="680" y="283" font-family="serif" font-size="9" fill="#8fa8e8" text-anchor="middle" letter-spacing="1">TRÄNKE &amp; ROLLEN</text>
+      <!-- torch -->
+      <rect x="608" y="260" width="6" height="16" rx="2" fill="#2a1f35"/>
+      <ellipse cx="611" cy="258" rx="5" ry="7" fill="#5b7fe8" opacity=".7"/>
+      <ellipse cx="611" cy="254" rx="3" ry="5" fill="#8fa8e8" opacity=".6"/>
+    </g>
+
+    <!-- ── PRANGER (center) ── -->
+    <g id="prangerGroup" class="clickable" onclick="openMissions()" style="cursor:pointer">
+      <!-- post -->
+      <rect x="392" y="230" width="16" height="160" rx="3" fill="#2c1f0e"/>
+      <rect x="392" y="230" width="16" height="160" rx="3" fill="none" stroke="#5a3e20" stroke-width="1"/>
+      <!-- crossbar -->
+      <rect x="358" y="252" width="84" height="12" rx="3" fill="#3d2b1f" stroke="#5a3e20" stroke-width="1"/>
+      <!-- chains -->
+      <line x1="366" y1="264" x2="360" y2="290" stroke="#8b6914" stroke-width="2" stroke-dasharray="4,3"/>
+      <line x1="434" y1="264" x2="440" y2="290" stroke="#8b6914" stroke-width="2" stroke-dasharray="4,3"/>
+      <!-- neck board -->
+      <rect x="370" y="288" width="60" height="18" rx="3" fill="#2c1f0e" stroke="#8b6914" stroke-width="1.5"/>
+      <!-- figure head -->
+      <circle cx="400" cy="310" r="18" fill="#d4956a"/>
+      <!-- hat -->
+      <ellipse cx="400" cy="294" rx="20" ry="5" fill="#2c1f0e"/>
+      <rect x="388" y="278" width="24" height="18" rx="2" fill="#2c1f0e"/>
+      <!-- eyes -->
+      <circle cx="394" cy="310" r="2.5" fill="#2c1f0e"/>
+      <circle cx="406" cy="310" r="2.5" fill="#2c1f0e"/>
+      <!-- worried mouth -->
+      <path d="M394 318 Q400 315 406 318" stroke="#8b4513" stroke-width="1.5" fill="none"/>
+      <!-- body -->
+      <rect x="384" y="327" width="32" height="50" rx="4" fill="#7a3b1e"/>
+      <!-- arms up (in pranger) -->
+      <line x1="384" y1="340" x2="362" y2="330" stroke="#d4956a" stroke-width="6" stroke-linecap="round"/>
+      <line x1="416" y1="340" x2="438" y2="330" stroke="#d4956a" stroke-width="6" stroke-linecap="round"/>
+      <!-- legs -->
+      <rect x="386" y="375" width="13" height="22" rx="3" fill="#5a3e20"/>
+      <rect x="401" y="375" width="13" height="22" rx="3" fill="#5a3e20"/>
+      <!-- notice paper on post -->
+      <rect x="346" y="310" width="44" height="55" rx="2" fill="#f5e6c8" stroke="#8b6914" stroke-width="1.5" transform="rotate(-5,368,337)"/>
+      <line x1="352" y1="322" x2="384" y2="319" stroke="#8b6914" stroke-width="1" opacity=".4" transform="rotate(-5,368,337)"/>
+      <line x1="352" y1="330" x2="383" y2="327" stroke="#8b6914" stroke-width="1" opacity=".4" transform="rotate(-5,368,337)"/>
+      <line x1="352" y1="338" x2="383" y2="335" stroke="#8b6914" stroke-width="1" opacity=".4" transform="rotate(-5,368,337)"/>
+      <text x="368" y="328" font-size="7" fill="#5a3e20" text-anchor="middle" transform="rotate(-5,368,337)">📜 MISSIONEN</text>
+    </g>
+
+
+    <!-- ── KNIGHT (daily quests / guild) ── -->
+    <g id="knightChar" class="clickable" onclick="openKnight()" style="cursor:pointer">
+      <!-- shadow -->
+      <ellipse cx="220" cy="460" rx="30" ry="8" fill="rgba(0,0,0,.4)"/>
+      <!-- legs armored -->
+      <rect x="207" y="442" width="12" height="20" rx="3" fill="#4a5568"/>
+      <rect x="221" y="442" width="12" height="20" rx="3" fill="#4a5568"/>
+      <!-- boot tips -->
+      <ellipse cx="213" cy="462" rx="8" ry="4" fill="#2d3748"/>
+      <ellipse cx="227" cy="462" rx="8" ry="4" fill="#2d3748"/>
+      <!-- body/plate armour -->
+      <ellipse cx="220" cy="418" rx="20" ry="26" fill="#4a5568"/>
+      <!-- chest plate detail -->
+      <ellipse cx="220" cy="412" rx="14" ry="10" fill="#5a6a7a"/>
+      <line x1="220" y1="402" x2="220" y2="426" stroke="#3a4a58" stroke-width="1.5"/>
+      <!-- pauldrons (shoulder plates) -->
+      <ellipse cx="200" cy="408" rx="10" ry="7" fill="#5a6a7a"/>
+      <ellipse cx="240" cy="408" rx="10" ry="7" fill="#5a6a7a"/>
+      <!-- gold trim -->
+      <ellipse cx="220" cy="412" rx="14" ry="10" fill="none" stroke="#c9a84c" stroke-width="1" opacity=".6"/>
+      <ellipse cx="200" cy="408" rx="10" ry="7" fill="none" stroke="#c9a84c" stroke-width="1" opacity=".5"/>
+      <ellipse cx="240" cy="408" rx="10" ry="7" fill="none" stroke="#c9a84c" stroke-width="1" opacity=".5"/>
+      <!-- arms -->
+      <ellipse cx="198" cy="425" rx="7" ry="16" fill="#4a5568" transform="rotate(-8,198,425)"/>
+      <ellipse cx="242" cy="425" rx="7" ry="16" fill="#4a5568" transform="rotate(8,242,425)"/>
+      <!-- gauntlets -->
+      <ellipse cx="195" cy="438" rx="6" ry="6" fill="#5a6a7a"/>
+      <ellipse cx="245" cy="438" rx="6" ry="6" fill="#5a6a7a"/>
+      <!-- neck -->
+      <rect x="215" y="392" width="10" height="10" rx="2" fill="#5a6a7a"/>
+      <!-- helmet -->
+      <ellipse cx="220" cy="382" rx="18" ry="19" fill="#4a5568"/>
+      <!-- visor -->
+      <path d="M207 382 Q220 390 233 382" fill="#2d3748"/>
+      <rect x="207" y="376" width="26" height="8" rx="1" fill="#3a4a58"/>
+      <!-- helmet crest/plume -->
+      <path d="M220 363 Q225 355 222 346 Q218 355 220 363" fill="#c0392b" stroke="#e74c3c" stroke-width=".5"/>
+      <path d="M220 363 Q228 353 226 342 Q221 353 220 363" fill="#c0392b" opacity=".7"/>
+      <!-- eye slit -->
+      <rect x="210" y="378" width="20" height="3" rx="1" fill="#1a2030"/>
+      <!-- gold helmet trim -->
+      <ellipse cx="220" cy="382" rx="18" ry="19" fill="none" stroke="#c9a84c" stroke-width="1" opacity=".4"/>
+      <!-- shield on arm -->
+      <ellipse cx="197" cy="425" rx="9" ry="12" fill="#2d3748" stroke="#c9a84c" stroke-width="1.5" opacity=".9"/>
+      <text x="197" y="429" font-size="10" text-anchor="middle">⚜️</text>
+      <!-- spear/lance -->
+      <rect x="243" y="360" width="4" height="80" rx="1" fill="#8b6914"/>
+      <polygon points="245,357 242,368 248,368" fill="#c0c0c0"/>
+      <!-- spear base -->
+      <ellipse cx="245" cy="440" rx="4" ry="3" fill="#5a3e20"/>
+    </g>
+    <text x="220" y="478" font-family="serif" font-size="8" fill="#c9a84c" text-anchor="middle" opacity=".7">⬆ Ritter</text>
+
+    <!-- ── HERO CHARACTER (bottom center-right) ── -->
+    <g id="heroChar" class="clickable" onclick="openHero()" style="cursor:pointer">
+      <!-- shadow -->
+      <ellipse cx="580" cy="460" rx="28" ry="8" fill="rgba(0,0,0,.4)"/>
+      <!-- body -->
+      <ellipse cx="580" cy="430" rx="16" ry="22" fill="#8b6914" opacity=".95"/>
+      <!-- legs -->
+      <rect x="569" y="444" width="10" height="18" rx="3" fill="#5a3e20"/>
+      <rect x="581" y="444" width="10" height="18" rx="3" fill="#5a3e20"/>
+      <!-- arms -->
+      <ellipse cx="562" cy="427" rx="6" ry="14" fill="#d4956a" transform="rotate(-10,562,427)"/>
+      <ellipse cx="598" cy="427" rx="6" ry="14" fill="#d4956a" transform="rotate(10,598,427)"/>
+      <!-- armor -->
+      <ellipse cx="580" cy="422" rx="12" ry="8" fill="#c9a84c" opacity=".6"/>
+      <!-- neck + head -->
+      <rect x="575" y="400" width="10" height="10" rx="2" fill="#d4956a"/>
+      <circle cx="580" cy="393" r="16" fill="#d4956a"/>
+      <!-- hair -->
+      <ellipse cx="580" cy="380" rx="16" ry="9" fill="#3d2b1f"/>
+      <!-- eyes -->
+      <circle cx="575" cy="393" r="2.5" fill="#2c1f0e"/>
+      <circle cx="585" cy="393" r="2.5" fill="#2c1f0e"/>
+      <!-- smile -->
+      <path d="M575 399 Q580 403 585 399" stroke="#8b4513" stroke-width="1.5" fill="none"/>
+      <!-- weapon -->
+      <rect x="598" y="408" width="4" height="36" rx="1" fill="#8b6914"/>
+      <polygon points="600,406 597,414 603,414" fill="#c0c0c0"/>
+    </g>
+    <text x="580" y="478" font-family="serif" font-size="8" fill="#c9a84c" text-anchor="middle" opacity=".7">⬆ Dein Held</text>
+
+    <!-- Torch glow effects -->
+    <circle cx="188" cy="258" r="40" fill="url(#torchL)" opacity=".3"/>
+    <circle cx="611" cy="258" r="40" fill="url(#torchR)" opacity=".2"/>
+
+    <!-- Banner flags top -->
+    <polygon points="30,10 30,50 60,30" fill="#7a3b1e" opacity=".8"/>
+    <polygon points="770,10 770,50 740,30" fill="#2e1b4a" opacity=".8"/>
+
+  </svg>
+
+  <!-- Speech bubble over pranger -->
+  <div class="bubble" id="prangerBubble" style="position:absolute;top:28%;left:50%;transform:translateX(-50%);z-index:5;text-align:center">
+    🗣️ „Abenteurer, ich habe die neusten Missionen vom König erhalten!"
+  </div>
+
+  <!-- Labels -->
+  <div class="scene-label" style="position:absolute;top:62%;left:6%">Waffen &amp; Rüstungen</div>
+  <div class="scene-label" style="position:absolute;top:62%;right:6%">Tränke &amp; Rollen</div>
+  <div class="scene-label" style="position:absolute;top:44%;left:50%;transform:translateX(-50%)">Missionen</div>
+  <div class="scene-label" style="position:absolute;top:62%;left:22%;transform:translateX(-50%)">Tägliche Aufgaben</div>
+
+</div>
+
+<!-- ── MISSION OVERLAY ── -->
+<div class="overlay" id="missionOverlay">
+  <div class="mission-panel">
+    <div class="mp-header">
+      <div class="mp-title">📜 Missionen vom König</div>
+      <button class="mp-close" onclick="closeOverlay('missionOverlay')">✕</button>
+    </div>
+    <div class="mp-npc">
+      <div class="mp-npc-icon">🧑‍⚖️</div>
+      <div class="mp-npc-text" id="npcText">"Willkommen! Wähle deine Mission."</div>
+    </div>
+    <div class="mp-missions">
+      <div class="mission-card exp-focus" onclick="startMission('goblin')">
+        <div class="mc-tag">⭐ EXP Fokus</div>
+        <div class="mc-title">⚔️ Goblins greifen die Bauern an!</div>
+        <div class="mc-desc">Helft den Bauern dabei sich gegen die Goblins zu wehren.</div>
+        <div class="mc-rewards">
+          <span class="mc-reward exp">✨ 10 EXP</span>
+          <span class="mc-reward gold">💰 1 Gold</span>
+        </div>
+      </div>
+      <div class="mission-card gold-focus" onclick="startMission('noble')">
+        <div class="mc-tag">💰 Gold Fokus</div>
+        <div class="mc-title">🏰 Adliger in Not!</div>
+        <div class="mc-desc">Ein Adliger wurde von Banditen entführt. Findet und rettet ihn.</div>
+        <div class="mc-rewards">
+          <span class="mc-reward exp">✨ 2 EXP</span>
+          <span class="mc-reward gold">💰 5 Gold</span>
+        </div>
+      </div>
+      <div class="mission-card item-focus" onclick="startMission('ring')">
+        <div class="mc-tag">🎁 Item Chance</div>
+        <div class="mc-title">💍 Ich habe meinen Ring verloren!</div>
+        <div class="mc-desc">Ein kleines Mädchen hat ihren selbstgemachten Ring verloren. Finde ihn!</div>
+        <div class="mc-rewards">
+          <span class="mc-reward exp">✨ 4 EXP</span>
+          <span class="mc-reward gold">💰 1 Gold</span>
+          <span class="mc-reward item">💍 Geflochtener Ring (+1 LP)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── HERO OVERLAY ── -->
+<div class="overlay" id="heroOverlay">
+  <div class="hero-panel">
+    <div class="hp-hdr">
+      <div class="hp-hdr-title" id="heroPanelTitle">⚔️ Heldenmenü</div>
+      <button class="btn-close" onclick="closeOverlay('heroOverlay')">✕</button>
+    </div>
+    <div class="hero-summary">
+      <div class="hero-avatar-big" id="heroAvatarBig">⚔️</div>
+      <div class="hero-meta">
+        <div class="hero-meta-name" id="heroMetaName">Held</div>
+        <div class="hero-meta-class" id="heroMetaClass">Krieger • Level 1</div>
+        <div class="hero-res">
+          <div class="res-badge">💰 <span id="heroGold">0</span> Gold</div>
+          <div class="res-badge">✨ <span id="heroXP">0</span> XP</div>
+        </div>
+      </div>
+    </div>
+    <div class="stats-section">
+      <div class="sec-hdr">Stats</div>
+      <div class="stats-grid" id="heroStatsGrid"></div>
+    </div>
+    <div class="bag-section">
+      <div class="sec-hdr">Ausrüstung &amp; Beutel</div>
+      <div class="bag-grid" id="bagGrid"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── SHOP OVERLAY ── -->
+<div class="overlay" id="shopOverlay">
+  <div class="shop-panel">
+    <div class="sp-hdr">
+      <div class="sp-title" id="shopTitle">🛒 Shop</div>
+      <button class="btn-close" onclick="closeOverlay('shopOverlay')">✕</button>
+    </div>
+    <div class="shop-items" id="shopItems"></div>
+  </div>
+</div>
+
+<script>
+// ── LEVELSYSTEM ──────────────────────────────────────────────
+
+function expRequired(level) {
+  if (level <= 1)    return 0;
+  if (level <= 25)   return Math.max(1, Math.round(12 + (level-2)*0.681));
+  if (level <= 100)  return Math.max(expRequired(level-1), Math.round(0.04303*(level-25)**2 + 20));
+  if (level <= 300)  return Math.max(expRequired(level-1), Math.round(0.00622*(level-100)**2 + 100));
+  if (level <= 500)  return Math.max(expRequired(level-1), Math.round(0.00070*(level-300)**2 + 447));
+  if (level <= 1000) return Math.max(expRequired(level-1), Math.round(0.00417*(level-500)**2 + 495));
+  return 3332;
+}
+
+// Belohnungsmultiplikator basierend auf Level
+function rewardMultiplier(level) {
+  if (level <= 25)   return 1.0;
+  if (level <= 100)  return 1 + (level-25)/75 * 2;
+  if (level <= 300)  return 3 + (level-100)/200 * 4;
+  if (level <= 500)  return 7 + (level-300)/200 * 5;
+  if (level <= 1000) return 12 + (level-500)/500 * 8;
+  return 20;
+}
+
+// Missionsbelohnungen skaliert nach Level
+function getMissionRewards(missionBase, playerLevel) {
+  const mult = rewardMultiplier(playerLevel);
+  return {
+    exp:  Math.round(missionBase.exp  * mult),
+    gold: Math.round(missionBase.gold * mult),
+    item: missionBase.item || null
+  };
+}
+
+// Tägliche Aufgaben Belohnungen
+function getQuestRewards(questBase, playerLevel) {
+  const mult = rewardMultiplier(playerLevel);
+  return {
+    exp:  Math.round(questBase.exp  * mult),
+    gold: Math.max(1, Math.round(questBase.gold * mult))
+  };
+}
+
+// Gegnerlevel basierend auf Spielerlevel
+function getEnemyLevel(playerLevel) {
+  return Math.max(1, Math.round(playerLevel * 0.9));
+}
+
+// XP nach Kampf/Quest gutschreiben und Level-Up prüfen
+async function awardXP(supabaseClient, userId, earnedExp, earnedGold) {
+  // Aktuellen Stand laden
+  const { data: chars } = await supabaseClient
+    .from('characters')
+    .select('id, level, xp, gold')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(1);
+  
+  if (!chars || chars.length === 0) return null;
+  
+  const char = chars[0];
+  let newXP    = (char.xp    || 0) + earnedExp;
+  let newGold  = (char.gold  || 0) + earnedGold;
+  let newLevel = char.level  || 1;
+  let leveledUp = false;
+  const oldLevel = newLevel;
+
+  // Level-Up Schleife
+  while (true) {
+    const needed = expRequired(newLevel + 1);
+    if (newXP >= needed && newLevel < 9999) {
+      newXP -= needed;
+      newLevel++;
+      leveledUp = true;
+    } else {
+      break;
+    }
+  }
+
+  // In Supabase speichern
+  const { error } = await supabaseClient
+    .from('characters')
+    .update({ xp: newXP, gold: newGold, level: newLevel })
+    .eq('id', char.id);
+
+  return { error, newLevel, newXP, newGold, leveledUp, oldLevel };
+}
+
+const sb = supabase.createClient(
+  'https://zjykfbfsrmdsllrbblmz.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpqeWtmYmZzcm1kc2xscmJibG16Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk4NTUwOTksImV4cCI6MjA5NTQzMTA5OX0.I8mFhiKo-Fv_GpF-ATWXXYXUUKxu6OzxZdkJr4COGIE'
+);
+
+const CLASS_ICONS = {warrior:'⚔️',archer:'🏹',mage:'🔮'};
+const CLASS_NAMES = {warrior:'Krieger',archer:'Bogenschütze',mage:'Magier'};
+const STAT_ICONS  = {lp:'❤️',staerke:'⚔️',gewandheit:'🌿',intelligenz:'🔮',schnelligkeit:'⚡',ausdauer:'🛡️',lebenskraft:'💗'};
+
+let character = null;
+let firstMissionOpen = true;
+
+function showLevelUpBanner(level) {
+  const banner = document.createElement('div');
+  banner.style.cssText = `position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+    z-index:200;background:rgba(10,12,16,.95);border:2px solid var(--gold);
+    border-radius:6px;padding:28px 40px;text-align:center;
+    animation:levelPop .5s cubic-bezier(.34,1.56,.64,1) both`;
+  banner.innerHTML = `
+    <div style="font-size:2.5rem;margin-bottom:8px">⭐</div>
+    <div style="font-family:'Cinzel Decorative',serif;font-size:1.3rem;
+      background:linear-gradient(135deg,#e8c97a,#c9a84c);-webkit-background-clip:text;
+      -webkit-text-fill-color:transparent;background-clip:text">Level Up!</div>
+    <div style="font-family:Cinzel,serif;font-size:.8rem;letter-spacing:.15em;
+      color:var(--gold-l);margin-top:6px">Level ${level} erreicht!</div>`;
+  document.body.appendChild(banner);
+  setTimeout(() => banner.remove(), 2500);
+}
+
+async function loadCharacter(){
+  const {data:{session}} = await sb.auth.getSession();
+  if(!session){ window.location.href='index.html'; return; }
+  const {data} = await sb.from('characters').select('*')
+    .eq('user_id',session.user.id)
+    .order('created_at',{ascending:false}).limit(1);
+  if(!data||!data.length){ window.location.href='charakter.html'; return; }
+  character = data[0];
+  updateHUD();
+}
+
+function updateHUD(){
+  if(!character) return;
+  document.getElementById('hudName').textContent  = character.name || 'Held';
+  document.getElementById('hudLevel').textContent = `Level ${character.level||1}`;
+  document.getElementById('hudGold').textContent  = character.gold||0;
+  // XP progress bar
+  const lvl  = character.level||1;
+  const curXP = character.xp||0;
+  const needed = expRequired(lvl+1);
+  const pct = needed > 0 ? Math.min(100, (curXP/needed)*100) : 100;
+  const bar = document.getElementById('xpBar');
+  if(bar) bar.style.width = pct+'%';
+}
+
+function openMissions(){
+  if(firstMissionOpen){
+    document.getElementById('npcText').textContent =
+      '"Neu hier? Du scheinst noch ein Anfänger zu sein. Ich habe hier drei passende Missionen für dich. Meine Empfehlung: Sammle erst Erfahrung, dann kümmere dich um Gold und Ausrüstung!"';
+    firstMissionOpen = false;
+  }
+  document.getElementById('missionOverlay').classList.add('active');
+}
+
+async function openHero(){
+  if(!character){ await loadCharacter(); }
+  const cls = character.class||'warrior';
+  document.getElementById('heroAvatarBig').textContent  = CLASS_ICONS[cls]||'⚔️';
+  document.getElementById('heroMetaName').textContent   = character.name||'Held';
+  document.getElementById('heroMetaClass').textContent  = `${CLASS_NAMES[cls]||'Held'} • Level ${character.level||1}`;
+  document.getElementById('heroGold').textContent       = character.gold||0;
+  document.getElementById('heroXP').textContent         = character.xp||0;
+  document.getElementById('heroPanelTitle').textContent = character.pronoun==='heldin'?'👑 Heldinnenmenü':'⚔️ Heldenmenü';
+
+  const stats = ['lp','staerke','gewandheit','intelligenz','schnelligkeit','ausdauer'];
+  const labels= {lp:'Lebenspunkte',staerke:'Stärke',gewandheit:'Gewandheit',intelligenz:'Intelligenz',schnelligkeit:'Schnelligkeit',ausdauer:'Ausdauer'};
+  document.getElementById('heroStatsGrid').innerHTML = stats.map(s=>`
+    <div class="stat-item">
+      <div class="stat-item-name">${STAT_ICONS[s]||''} ${labels[s]}</div>
+      <div class="stat-item-val">${character[s]||1}</div>
+    </div>`).join('');
+
+  // Inventar aus Supabase laden
+  const weaponIcon = {Schwert:'⚔️',Bogen:'🏹',Holzstab:'🪄'}[character.weapon]||'🗡️';
+  
+  // Inventar laden
+  let invItems = [];
+  try {
+    const { data: inv } = await sb
+      .from('inventory')
+      .select('*')
+      .eq('character_id', character.id)
+      .order('created_at', { ascending: false });
+    if (inv) invItems = inv;
+  } catch(e) { console.log('Inventar laden fehlgeschlagen:', e); }
+
+  // Startwaffe + Inventar-Items
+  const allItems = [
+    { icon: weaponIcon, label: character.weapon || 'Waffe' },
+    ...invItems.map(i => ({ icon: i.item_icon || '🎒', label: i.item_name }))
+  ];
+
+  // Auf 12 Slots auffüllen
+  while (allItems.length < 12) allItems.push({ icon: '', label: '' });
+
+  document.getElementById('bagGrid').innerHTML = allItems.slice(0,12).map(s=>`
+    <div class="bag-slot${!s.icon?' empty':''}">
+      ${s.icon}
+      ${s.label?`<div class="bag-slot-label">${s.label}</div>`:''}
+    </div>`).join('');
+
+  document.getElementById('heroOverlay').classList.add('active');
+}
+
+const SHOPS = {
+  weapons:{
+    title:'⚔️ Waffen &amp; Rüstungen',
+    items:[
+      {icon:'⚔️',name:'Eisenschwert',desc:'+3 Stärke',price:10},
+      {icon:'🏹',name:'Elfenbogen',desc:'+3 Gewandheit',price:10},
+      {icon:'🪄',name:'Eichenstab',desc:'+3 Intelligenz',price:10},
+      {icon:'🛡️',name:'Holzschild',desc:'+2 Ausdauer',price:6},
+      {icon:'🪖',name:'Lederhelm',desc:'+1 LP',price:5},
+    ]
+  },
+  potions:{
+    title:'🧪 Tränke &amp; Rollen',
+    items:[
+      {icon:'🧪',name:'Heiltrank',desc:'Stellt 10 LP wieder her',price:3},
+      {icon:'💪',name:'Stärketrank',desc:'+1 Stärke für 1 Kampf',price:4},
+      {icon:'📜',name:'Feuerrolle',desc:'Magieschaden +2',price:5},
+      {icon:'⚡',name:'Windrolle',desc:'+2 Schnelligkeit für 1 Kampf',price:4},
+    ]
+  }
+};
+function openShop(type){
+  const shop=SHOPS[type];
+  document.getElementById('shopTitle').innerHTML=shop.title;
+  document.getElementById('shopItems').innerHTML=shop.items.map(i=>`
+    <div class="shop-item">
+      <div class="si-icon">${i.icon}</div>
+      <div class="si-info">
+        <div class="si-name">${i.name}</div>
+        <div class="si-desc">${i.desc}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="si-price">💰 ${i.price}</div>
+        <button class="btn-buy" onclick="buyItem('${i.name}',${i.price},'${i.icon}','${i.desc}')">Kaufen</button>
+      </div>
+    </div>`).join('');
+  document.getElementById('shopOverlay').classList.add('active');
+}
+async function buyItem(itemName, price, icon, desc) {
+  if (!character) return;
+  const currentGold = character.gold || 0;
+  if (currentGold < price) {
+    alert(`Du hast nicht genug Gold! Du hast ${currentGold} Gold, brauchst aber ${price}.`);
+    return;
+  }
+
+  const confirmed = confirm(`"${itemName}" für ${price} Gold kaufen?`);
+  if (!confirmed) return;
+
+  try {
+    const { data:{session} } = await sb.auth.getSession();
+    if (!session) return;
+
+    // Gold abziehen
+    const newGold = currentGold - price;
+    const { error: goldErr } = await sb
+      .from('characters')
+      .update({ gold: newGold })
+      .eq('id', character.id);
+
+    if (goldErr) { alert('Fehler beim Kauf.'); return; }
+
+    // Item ins Inventar
+    await sb.from('inventory').insert([{
+      character_id: character.id,
+      item_name: itemName,
+      item_type: 'shop',
+      item_icon: icon || '🎒',
+      stat_bonus: {},
+      quantity: 1
+    }]);
+
+    character.gold = newGold;
+    updateHUD();
+    alert(`✅ "${itemName}" gekauft!`);
+    closeOverlay('shopOverlay');
+  } catch(err) {
+    console.error(err);
+    alert('Fehler beim Kauf. Bitte versuche es erneut.');
+  }
+}
+
+function startMission(type){
+  const BASE_MISSIONS={
+    goblin:{enemy:'archer', exp:10, gold:1, item:null},
+    noble: {enemy:'warrior',exp:2,  gold:5, item:null},
+    ring:  {enemy:'mage',   exp:4,  gold:1, item:'Geflochtener Ring'}
+  };
+  const base = BASE_MISSIONS[type];
+  const cls  = character?.class||'warrior';
+  const lvl  = character?.level||1;
+  const rewards = getMissionRewards(base, lvl);
+  const elvl = getEnemyLevel(lvl);
+  window.location.href=`kampf.html?player=${cls}&level=${lvl}&enemy=${base.enemy}&elvl=${elvl}&exp=${rewards.exp}&gold=${rewards.gold}${rewards.item?'&item='+encodeURIComponent(rewards.item):''}`;
+}
+
+function closeOverlay(id){
+  document.getElementById(id).classList.remove('active');
+}
+
+
+// ── Daily quests ─────────────────────────────────────────────
+const DAILY_QUESTS = [
+  {id:'steps',    icon:'🚶', title:'1.000 Schritte gehen',       desc:'Gehe heute mindestens 1.000 Schritte.',  exp:5,  gold:1, done:false},
+  {id:'workout',  icon:'💪', title:'30 Min. Training absolvieren',desc:'Trainiere heute mindestens 30 Minuten.', exp:10, gold:2, done:false},
+  {id:'water',    icon:'💧', title:'2 Liter Wasser trinken',      desc:'Trinke heute mindestens 2 Liter Wasser.',exp:3,  gold:1, done:false},
+];
+
+function openKnight(){
+  renderDailyQuests();
+  const lvl = character?.level||1;
+  document.getElementById('guildStatus').textContent =
+    lvl>=5 ? '✅ Du kannst Gilden beitreten! (Bald verfügbar)' : `Gilden werden ab Level 5 freigeschaltet. (Aktuell: Level ${lvl})`;
+  document.getElementById('knightOverlay').classList.add('active');
+}
+
+function renderDailyQuests(){
+  const list = document.getElementById('dailyQuestList');
+  list.innerHTML = DAILY_QUESTS.map(q=>`
+    <div class="mission-card ${q.done?'':'exp-focus'}" style="${q.done?'opacity:.5':''}">
+      <div class="mc-title">${q.icon} ${q.title} ${q.done?'✅':''}</div>
+      <div class="mc-desc">${q.desc}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+        <div class="mc-rewards">
+          <span class="mc-reward exp">✨ ${q.exp} EXP</span>
+          <span class="mc-reward gold">💰 ${q.gold} Gold</span>
+        </div>
+        ${!q.done?`<button onclick="completeQuest('${q.id}')" style="padding:5px 12px;background:linear-gradient(135deg,var(--gold-d),var(--gold));border:none;border-radius:2px;color:#1a1200;font-family:Cinzel,serif;font-size:.6rem;letter-spacing:.08em;cursor:pointer">Erledigt ✓</button>`:''}
+      </div>
+    </div>`).join('');
+}
+
+async function completeQuest(id){
+  const q = DAILY_QUESTS.find(q=>q.id===id);
+  if(!q||q.done) return;
+  q.done = true;
+  renderDailyQuests();
+
+  try {
+    const { data:{session} } = await sb.auth.getSession();
+    if(!session) return;
+
+    const level = character?.level || 1;
+    const rewards = getQuestRewards({exp: q.exp, gold: q.gold}, level);
+
+    // Lade aktuellen Stand
+    const { data: chars } = await sb
+      .from('characters')
+      .select('id, level, xp, gold')
+      .eq('user_id', session.user.id)
+      .order('created_at', {ascending:false})
+      .limit(1);
+
+    if(!chars || !chars.length) return;
+    const char = chars[0];
+
+    let newXP   = (char.xp   || 0) + rewards.exp;
+    let newGold = (char.gold  || 0) + rewards.gold;
+    let newLevel = char.level || 1;
+    let leveledUp = false;
+
+    while(true) {
+      const needed = expRequired(newLevel + 1);
+      if(newXP >= needed && newLevel < 9999) {
+        newXP -= needed; newLevel++; leveledUp = true;
+      } else break;
+    }
+
+    await sb.from('characters')
+      .update({ xp: newXP, gold: newGold, level: newLevel })
+      .eq('id', char.id);
+
+    character.xp = newXP; character.gold = newGold; character.level = newLevel;
+    updateHUD();
+    if(leveledUp) showLevelUpBanner(newLevel);
+
+    // Kleine Bestätigung
+    const btn = document.querySelector(`[onclick="completeQuest('${id}')"]`);
+    if(btn) { btn.textContent = `+${rewards.exp} EXP +${rewards.gold} 💰`; btn.disabled = true; }
+
+  } catch(err) {
+    console.error('Quest Fehler:', err);
+    q.done = false;
+    renderDailyQuests();
+  }
+}
+
+loadCharacter();
+</script>
+
+<!-- ── KNIGHT / DAILY QUESTS OVERLAY ── -->
+<div class="overlay" id="knightOverlay">
+  <div class="mission-panel">
+    <div class="mp-header">
+      <div class="mp-title">⚜️ Tägliche Aufgaben</div>
+      <button class="mp-close" onclick="closeOverlay('knightOverlay')">✕</button>
+    </div>
+    <div class="mp-npc">
+      <div class="mp-npc-icon">🪖</div>
+      <div class="mp-npc-text">
+        "Guten Tag, Abenteurer! Ich bin Ritter Aldric, Rekrutierer des Königs.
+        Erledige deine täglichen Aufgaben um Erfahrung zu sammeln und dich für
+        eine Gilde zu empfehlen. Gilden werden ab Level 5 freigeschaltet!"
+      </div>
+    </div>
+    <div class="mp-missions" id="dailyQuestList">
+      <!-- filled by JS -->
+    </div>
+    <div style="padding:0 20px 16px">
+      <div style="padding:12px;background:rgba(201,168,76,.05);border:1px solid var(--border);border-radius:3px;text-align:center">
+        <div style="font-family:Cinzel,serif;font-size:.65rem;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin-bottom:6px">⚜️ Gilden</div>
+        <div id="guildStatus" style="font-size:.88rem;color:var(--dim)">Gilden werden ab Level 5 freigeschaltet.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

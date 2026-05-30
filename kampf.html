@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>FitnessRPG – Kampf</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@400;600&family=Crimson+Pro:wght@300;400&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --gold:#c9a84c;--gold-l:#e8c97a;--gold-d:#7a5c1e;
+  --bg:#0a0c10;--card:#10141c;--card2:#141820;
+  --border:rgba(201,168,76,.25);--text:#e8dcc8;--dim:#8a7a60;
+  --warrior:#e05c2a;--archer:#3aad6e;--mage:#5b7fe8;
+  --hp-green:#27ae60;--hp-red:#c0392b;
+}
+html,body{width:100%;height:100%;overflow:hidden}
+body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;align-items:center;justify-content:center}
+
+/* background */
+.bg-scene{position:fixed;inset:0;z-index:0;overflow:hidden}
+.bg-scene svg{width:100%;height:100%}
+
+/* main layout */
+.arena{position:relative;z-index:1;width:min(700px,98vw);padding:16px}
+
+/* top bar */
+.topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:8px}
+.ctrl-btn{padding:7px 14px;background:rgba(10,12,16,.7);border:1px solid var(--border);border-radius:3px;color:var(--dim);font-family:'Cinzel',serif;font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;transition:all .2s;backdrop-filter:blur(4px)}
+.ctrl-btn:hover{border-color:var(--gold);color:var(--gold-l)}
+.round-badge{font-family:'Cinzel',serif;font-size:.7rem;letter-spacing:.15em;color:var(--gold);text-transform:uppercase;background:rgba(10,12,16,.7);padding:6px 14px;border:1px solid var(--border);border-radius:3px;backdrop-filter:blur(4px)}
+
+/* fighter cards */
+.fighters{display:flex;align-items:flex-end;justify-content:space-between;gap:8px;margin-bottom:12px}
+.fighter{flex:1;background:rgba(10,12,16,.75);border:1px solid var(--border);border-radius:4px;padding:12px;backdrop-filter:blur(6px);transition:all .3s;position:relative}
+.fighter.attacking{animation:shake .35s ease}
+.fighter.hit{animation:flashRed .4s ease}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+@keyframes flashRed{0%,100%{background:rgba(10,12,16,.75)}50%{background:rgba(192,57,43,.25)}}
+
+.f-name{font-family:'Cinzel',serif;font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px}
+.f-name.warrior{color:var(--warrior)}.f-name.archer{color:var(--archer)}.f-name.mage{color:var(--mage)}
+.f-avatar{text-align:center;margin:8px 0;font-size:2.8rem;line-height:1;transition:transform .3s}
+.fighter.attacking .f-avatar{transform:scale(1.15)}
+.hp-bar-wrap{margin-top:8px}
+.hp-label{display:flex;justify-content:space-between;font-family:'Cinzel',serif;font-size:.58rem;color:var(--dim);margin-bottom:3px}
+.hp-bar{height:8px;background:rgba(255,255,255,.1);border-radius:4px;overflow:hidden;border:1px solid rgba(255,255,255,.06)}
+.hp-fill{height:100%;border-radius:4px;transition:width .5s ease;background:linear-gradient(90deg,var(--hp-green),#52d68a)}
+.hp-fill.low{background:linear-gradient(90deg,#e67e22,#f39c12)}
+.hp-fill.critical{background:linear-gradient(90deg,var(--hp-red),#e74c3c)}
+
+.vs-badge{font-family:'Cinzel Decorative',serif;font-size:1rem;color:var(--gold);text-shadow:0 0 12px rgba(201,168,76,.6);align-self:center;flex-shrink:0}
+
+/* stats mini */
+.f-stats{display:grid;grid-template-columns:1fr 1fr;gap:3px 8px;margin-top:8px}
+.f-stat{font-size:.72rem;color:var(--dim)}
+.f-stat span{color:var(--text)}
+
+/* combat log */
+.log-wrap{background:rgba(10,12,16,.8);border:1px solid var(--border);border-radius:3px;padding:10px 14px;height:110px;overflow-y:auto;backdrop-filter:blur(4px);margin-bottom:12px;scroll-behavior:smooth}
+.log-entry{font-size:.88rem;line-height:1.6;padding:1px 0;border-bottom:1px solid rgba(201,168,76,.05)}
+.log-entry:last-child{border:none}
+.log-atk{color:var(--gold-l)}.log-def{color:#7fb3e8}.log-miss{color:var(--dim)}.log-round{color:var(--gold);font-family:'Cinzel',serif;font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;margin-top:4px}
+
+/* floating damage */
+.dmg-float{position:absolute;font-family:'Cinzel Decorative',serif;font-size:1.1rem;font-weight:700;pointer-events:none;z-index:10;animation:floatUp .9s ease forwards}
+.dmg-float.atk{color:#f39c12;text-shadow:0 0 8px rgba(243,156,18,.6)}
+.dmg-float.def{color:#5dade2;text-shadow:0 0 8px rgba(93,173,226,.5)}
+@keyframes floatUp{0%{opacity:1;transform:translateY(0) scale(1)}60%{opacity:1;transform:translateY(-28px) scale(1.1)}100%{opacity:0;transform:translateY(-48px) scale(.8)}}
+
+/* overlay screens */
+.overlay{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.75);backdrop-filter:blur(4px);display:none;animation:fadeIn .5s ease}
+.overlay.active{display:flex}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.overlay-card{background:var(--card);border:1px solid var(--border);border-radius:4px;padding:36px 32px;text-align:center;max-width:380px;width:90vw;box-shadow:0 0 60px rgba(0,0,0,.8)}
+.ov-icon{font-size:3.5rem;margin-bottom:12px;display:block;animation:iconPop .5s .2s cubic-bezier(.34,1.56,.64,1) both}
+@keyframes iconPop{from{transform:scale(0) rotate(-20deg)}to{transform:scale(1) rotate(0)}}
+.ov-title{font-family:'Cinzel Decorative',serif;font-size:1.4rem;margin-bottom:8px}
+.ov-title.win{background:linear-gradient(135deg,var(--gold-l),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.ov-title.lose{color:#e74c3c}
+.ov-text{color:var(--dim);font-size:.95rem;line-height:1.6;margin-bottom:20px}
+.ov-rewards{background:var(--card2);border:1px solid var(--border);border-radius:3px;padding:14px;margin-bottom:20px;text-align:left}
+.ov-reward-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(201,168,76,.08);font-size:.9rem}
+.ov-reward-row:last-child{border:none}
+.ov-reward-label{color:var(--dim)}
+.ov-reward-val{color:var(--gold-l);font-family:'Cinzel',serif;font-size:.8rem}
+.ov-tips{background:rgba(192,57,43,.08);border:1px solid rgba(192,57,43,.2);border-radius:3px;padding:14px;margin-bottom:20px;text-align:left}
+.ov-tip{padding:5px 0;font-size:.88rem;color:var(--text);display:flex;gap:8px}
+.ov-tip::before{content:'💡';flex-shrink:0}
+.btn-ov{width:100%;padding:12px;background:linear-gradient(135deg,var(--gold-d),var(--gold),var(--gold-l));border:none;border-radius:3px;color:#1a1200;font-family:'Cinzel',serif;font-size:.78rem;font-weight:600;letter-spacing:.15em;text-transform:uppercase;cursor:pointer;margin-top:6px;transition:all .2s}
+.btn-ov:hover{box-shadow:0 4px 20px rgba(201,168,76,.4);transform:translateY(-1px)}
+.btn-ov.secondary{background:transparent;border:1px solid var(--border);color:var(--dim);margin-top:8px}
+.btn-ov.secondary:hover{border-color:var(--gold);color:var(--gold-l);transform:none;box-shadow:none}
+
+/* speed indicator */
+.speed-label{font-family:'Cinzel',serif;font-size:.6rem;letter-spacing:.1em;color:var(--dim);text-align:center}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<!-- dungeon background -->
+<div class="bg-scene">
+  <svg viewBox="0 0 800 600" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+    <!-- sky/dungeon -->
+    <rect width="800" height="600" fill="#0a0c10"/>
+    <!-- stone floor -->
+    <rect y="420" width="800" height="180" fill="#0f1218"/>
+    <line x1="0" y1="420" x2="800" y2="420" stroke="#c9a84c" stroke-width=".5" opacity=".2"/>
+    <!-- floor stones -->
+    <rect x="0" y="430" width="120" height="40" rx="1" fill="none" stroke="#1a1f2a" stroke-width="1"/>
+    <rect x="130" y="430" width="100" height="40" rx="1" fill="none" stroke="#1a1f2a" stroke-width="1"/>
+    <rect x="240" y="430" width="130" height="40" rx="1" fill="none" stroke="#1a1f2a" stroke-width="1"/>
+    <rect x="380" y="430" width="110" height="40" rx="1" fill="none" stroke="#1a1f2a" stroke-width="1"/>
+    <rect x="500" y="430" width="140" height="40" rx="1" fill="none" stroke="#1a1f2a" stroke-width="1"/>
+    <rect x="650" y="430" width="150" height="40" rx="1" fill="none" stroke="#1a1f2a" stroke-width="1"/>
+    <rect x="60" y="475" width="150" height="40" rx="1" fill="none" stroke="#1a1f2a" stroke-width="1"/>
+    <rect x="220" y="475" width="120" height="40" rx="1" fill="none" stroke="#1a1f2a" stroke-width="1"/>
+    <rect x="350" y="475" width="160" height="40" rx="1" fill="none" stroke="#1a1f2a" stroke-width="1"/>
+    <rect x="520" y="475" width="130" height="40" rx="1" fill="none" stroke="#1a1f2a" stroke-width="1"/>
+    <!-- pillars left -->
+    <rect x="40" y="160" width="50" height="270" rx="2" fill="#111520"/>
+    <rect x="40" y="155" width="50" height="18" rx="1" fill="#1a2030"/>
+    <rect x="40" y="420" width="50" height="12" rx="1" fill="#1a2030"/>
+    <!-- pillars right -->
+    <rect x="710" y="160" width="50" height="270" rx="2" fill="#111520"/>
+    <rect x="710" y="155" width="50" height="18" rx="1" fill="#1a2030"/>
+    <rect x="710" y="420" width="50" height="12" rx="1" fill="#1a2030"/>
+    <!-- torches left -->
+    <rect x="55" y="190" width="8" height="20" rx="2" fill="#3d2b1f"/>
+    <ellipse cx="59" cy="188" rx="7" ry="10" fill="#e67e22" opacity=".9"/>
+    <ellipse cx="59" cy="183" rx="4" ry="7" fill="#f39c12" opacity=".8"/>
+    <ellipse cx="59" cy="178" rx="2" ry="5" fill="#fff" opacity=".4"/>
+    <!-- torches right -->
+    <rect x="737" y="190" width="8" height="20" rx="2" fill="#3d2b1f"/>
+    <ellipse cx="741" cy="188" rx="7" ry="10" fill="#e67e22" opacity=".9"/>
+    <ellipse cx="741" cy="183" rx="4" ry="7" fill="#f39c12" opacity=".8"/>
+    <ellipse cx="741" cy="178" rx="2" ry="5" fill="#fff" opacity=".4"/>
+    <!-- arch -->
+    <path d="M0 160 Q400 80 800 160 L800 0 L0 0 Z" fill="#0a0c10"/>
+    <path d="M0 165 Q400 85 800 165" stroke="#c9a84c" stroke-width=".8" fill="none" opacity=".3"/>
+    <!-- glow floor center -->
+    <ellipse cx="400" cy="425" rx="200" ry="18" fill="rgba(201,168,76,0.04)"/>
+  </svg>
+</div>
+
+<div class="arena">
+  <!-- top controls -->
+  <div class="topbar">
+    <button class="ctrl-btn" onclick="skipAll()">⏭ Überspringen</button>
+    <div class="round-badge" id="roundBadge">Runde 1</div>
+    <button class="ctrl-btn" onclick="toggleSpeed()">⚡ <span id="speedLabel">Normal</span></button>
+  </div>
+
+  <!-- fighters -->
+  <div class="fighters">
+    <!-- Fighter A -->
+    <div class="fighter" id="fighterA">
+      <div class="f-name" id="nameA">Krieger</div>
+      <div class="f-avatar" id="avatarA">⚔️</div>
+      <div class="hp-bar-wrap">
+        <div class="hp-label"><span>LP</span><span id="hpLabelA">40 / 40</span></div>
+        <div class="hp-bar"><div class="hp-fill" id="hpBarA" style="width:100%"></div></div>
+      </div>
+      <div class="f-stats" id="statsA"></div>
+    </div>
+
+    <div class="vs-badge">VS</div>
+
+    <!-- Fighter B -->
+    <div class="fighter" id="fighterB">
+      <div class="f-name" id="nameB">Bogenschütze</div>
+      <div class="f-avatar" id="avatarB">🏹</div>
+      <div class="hp-bar-wrap">
+        <div class="hp-label"><span>LP</span><span id="hpLabelB">36 / 36</span></div>
+        <div class="hp-bar"><div class="hp-fill" id="hpBarB" style="width:100%"></div></div>
+      </div>
+      <div class="f-stats" id="statsB"></div>
+    </div>
+  </div>
+
+  <!-- combat log -->
+  <div class="log-wrap" id="log"></div>
+  <div class="speed-label" id="tapHint">Tippe auf ⏭ um zu überspringen</div>
+</div>
+
+<!-- WIN overlay -->
+<div class="overlay" id="winOverlay">
+  <div class="overlay-card">
+    <span class="ov-icon">🏆</span>
+    <div class="ov-title win">Sieg!</div>
+    <div class="ov-text" id="winText">Du hast gewonnen!</div>
+    <div class="ov-rewards" id="rewardsBox"></div>
+    <button class="btn-ov" onclick="acceptRewards()">✅ Belohnungen annehmen</button>
+  </div>
+</div>
+
+<!-- LOSE overlay -->
+<div class="overlay" id="loseOverlay">
+  <div class="overlay-card">
+    <span class="ov-icon">💀</span>
+    <div class="ov-title lose">Niederlage</div>
+    <div class="ov-text">Dein Held ist gefallen... aber jede Niederlage macht dich stärker!</div>
+    <button class="btn-ov" onclick="showTips()">Weiter →</button>
+  </div>
+</div>
+
+<!-- TIPS overlay -->
+<div class="overlay" id="tipsOverlay">
+  <div class="overlay-card">
+    <span class="ov-icon">📖</span>
+    <div class="ov-title" style="color:var(--gold-l)">Ratschläge</div>
+    <div class="ov-tips">
+      <div class="ov-tip">Steigere das Level deines Charakters, damit du beim nächsten Abenteuer stärker bist!</div>
+      <div class="ov-tip">Rüste deinen Helden mit besseren Waffen und Rüstungen aus.</div>
+      <div class="ov-tip">Kaufe Tränke auf dem Markt – sie können im Kampf entscheidend sein!</div>
+    </div>
+    <button class="btn-ov" onclick="goMenu()">Weiter → Hauptmenü</button>
+  </div>
+</div>
+
+<script>
+// ── Supabase ─────────────────────────────────────────────────
+const sb = supabase.createClient(
+  'https://zjykfbfsrmdsllrbblmz.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpqeWtmYmZzcm1kc2xscmJibG16Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk4NTUwOTksImV4cCI6MjA5NTQzMTA5OX0.I8mFhiKo-Fv_GpF-ATWXXYXUUKxu6OzxZdkJr4COGIE'
+);
+
+// ── LEVELSYSTEM ──────────────────────────────────────────────
+
+function expRequired(level) {
+  if (level <= 1)    return 0;
+  if (level <= 25)   return Math.max(1, Math.round(12 + (level-2)*0.681));
+  if (level <= 100)  return Math.max(expRequired(level-1), Math.round(0.04303*(level-25)**2 + 20));
+  if (level <= 300)  return Math.max(expRequired(level-1), Math.round(0.00622*(level-100)**2 + 100));
+  if (level <= 500)  return Math.max(expRequired(level-1), Math.round(0.00070*(level-300)**2 + 447));
+  if (level <= 1000) return Math.max(expRequired(level-1), Math.round(0.00417*(level-500)**2 + 495));
+  return 3332;
+}
+
+// Belohnungsmultiplikator basierend auf Level
+function rewardMultiplier(level) {
+  if (level <= 25)   return 1.0;
+  if (level <= 100)  return 1 + (level-25)/75 * 2;
+  if (level <= 300)  return 3 + (level-100)/200 * 4;
+  if (level <= 500)  return 7 + (level-300)/200 * 5;
+  if (level <= 1000) return 12 + (level-500)/500 * 8;
+  return 20;
+}
+
+// Missionsbelohnungen skaliert nach Level
+function getMissionRewards(missionBase, playerLevel) {
+  const mult = rewardMultiplier(playerLevel);
+  return {
+    exp:  Math.round(missionBase.exp  * mult),
+    gold: Math.round(missionBase.gold * mult),
+    item: missionBase.item || null
+  };
+}
+
+// Tägliche Aufgaben Belohnungen
+function getQuestRewards(questBase, playerLevel) {
+  const mult = rewardMultiplier(playerLevel);
+  return {
+    exp:  Math.round(questBase.exp  * mult),
+    gold: Math.max(1, Math.round(questBase.gold * mult))
+  };
+}
+
+// Gegnerlevel basierend auf Spielerlevel
+function getEnemyLevel(playerLevel) {
+  return Math.max(1, Math.round(playerLevel * 0.9));
+}
+
+// XP nach Kampf/Quest gutschreiben und Level-Up prüfen
+async function awardXP(supabaseClient, userId, earnedExp, earnedGold) {
+  // Aktuellen Stand laden
+  const { data: chars } = await supabaseClient
+    .from('characters')
+    .select('id, level, xp, gold')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(1);
+  
+  if (!chars || chars.length === 0) return null;
+  
+  const char = chars[0];
+  let newXP    = (char.xp    || 0) + earnedExp;
+  let newGold  = (char.gold  || 0) + earnedGold;
+  let newLevel = char.level  || 1;
+  let leveledUp = false;
+  const oldLevel = newLevel;
+
+  // Level-Up Schleife
+  while (true) {
+    const needed = expRequired(newLevel + 1);
+    if (newXP >= needed && newLevel < 9999) {
+      newXP -= needed;
+      newLevel++;
+      leveledUp = true;
+    } else {
+      break;
+    }
+  }
+
+  // In Supabase speichern
+  const { error } = await supabaseClient
+    .from('characters')
+    .update({ xp: newXP, gold: newGold, level: newLevel })
+    .eq('id', char.id);
+
+  return { error, newLevel, newXP, newGold, leveledUp, oldLevel };
+}
+
+
+// ── Combat engine ────────────────────────────────────────────
+const CLASSES = {
+  warrior:{name:'Krieger',  icon:'⚔️', color:'var(--warrior)',lebenskraft:3,staerke:3,gewandheit:1,intelligenz:1,schnelligkeit:1,ausdauer:1},
+  archer: {name:'Bogenschütze',icon:'🏹',color:'var(--archer)', lebenskraft:1,staerke:1,gewandheit:3,intelligenz:1,schnelligkeit:2,ausdauer:2},
+  mage:   {name:'Magier',   icon:'🔮', color:'var(--mage)',  lebenskraft:2,staerke:1,gewandheit:1,intelligenz:3,schnelligkeit:1,ausdauer:2},
+};
+
+// Get mission + fighter info from URL params (default: warrior vs archer demo)
+const params = new URLSearchParams(location.search);
+
+// Mission rewards come from URL params (set by menu.html)
+const MISSION = {
+  title: params.get('title') || 'Mission',
+  exp:   parseInt(params.get('exp')  || '10'),
+  gold:  parseInt(params.get('gold') || '1'),
+  item:  params.get('item') || null
+};
+const clsA  = params.get('player') || 'warrior';
+const clsB  = params.get('enemy')  || 'archer';
+const lvA   = parseInt(params.get('level')||'1');
+const lvB   = parseInt(params.get('elvl') || String(getEnemyLevel(lvA)));
+
+const sA = CLASSES[clsA], sB = CLASSES[clsB];
+
+function maxLP(lk,lv){ return 30+lk*2+lv*4; }
+function gmain(cls,s){ return {warrior:s.staerke,archer:s.gewandheit,mage:s.intelligenz}[cls]; }
+
+function calcDmg(cls,s,r,lv,vsCls){
+  const m=gmain(cls,s);
+  const b=(r<=5?s.schnelligkeit:s.ausdauer)*0.5;
+  let d=(m*2.2+b+lv*0.5);
+  if(cls==='warrior'&&vsCls==='mage')    d*=1.25;
+  if(cls==='archer' &&vsCls==='warrior') d*=1.20;
+  return d;
+}
+function calcDef(ac,dc,dst,r,lv){
+  const dv=gmain(ac,dst);
+  const ds=r<=5?dst.schnelligkeit:dst.ausdauer;
+  let base=dv*1.8+ds*0.4+lv*0.3;
+  if(dc==='mage'&&ac==='archer') base+=dst.intelligenz*0.6;
+  return Math.max(0,base);
+}
+
+// ── Pre-compute all rounds ───────────────────────────────────
+function simulateFull(){
+  let ha=maxLP(sA.lebenskraft,lvA), hb=maxLP(sB.lebenskraft,lvB);
+  const maxA=ha, maxB=hb;
+  const rounds=[];
+  for(let r=1;r<=100&&ha>0&&hb>0;r++){
+    const ia=r<=5?sA.schnelligkeit:sA.ausdauer;
+    const ib=r<=5?sB.schnelligkeit:sB.ausdauer;
+    const fa=ia>ib||(ia===ib&&Math.random()<.5);
+    const events=[];
+    const pairs=fa?[[clsA,sA,'A',clsB,sB],[clsB,sB,'B',clsA,sA]]
+                  :[[clsB,sB,'B',clsA,sA],[clsA,sA,'A',clsB,sB]];
+    for(const[ac,ast,aid,dc,dst] of pairs){
+      const d=calcDmg(ac,ast,r,aid==='A'?lvA:lvB,dc);
+      const df=calcDef(ac,dc,dst,r,aid==='B'?lvA:lvB);
+      const net=Math.max(1,Math.round((d-df)*10)/10);
+      if(aid==='A'){hb-=net;}else{ha-=net;}
+      events.push({atk:aid,name:CLASSES[ac].name,icon:CLASSES[ac].icon,dmg:net,def:Math.round(df*10)/10});
+      if(ha<=0||hb<=0)break;
+    }
+    rounds.push({r,events,ha:Math.max(0,ha),hb:Math.max(0,hb),maxA,maxB});
+    if(ha<=0||hb<=0)break;
+  }
+  return{rounds,winner:ha>0?'A':'B',maxA,maxB};
+}
+
+// ── Animation state ──────────────────────────────────────────
+let allRounds=[], roundIdx=0, speed=1, animTimer=null, running=true;
+const SPEEDS={1:{label:'Normal',ms:900},2:{label:'Schnell',ms:400},3:{label:'Turbo',ms:150}};
+
+// ── Init UI ──────────────────────────────────────────────────
+function initUI(){
+  const sim=simulateFull();
+  allRounds=sim.rounds;
+  window._winner=sim.winner;
+  window._maxA=sim.maxA;
+  window._maxB=sim.maxB;
+
+  document.getElementById('nameA').textContent=sA.name;
+  document.getElementById('nameA').className='f-name '+clsA;
+  document.getElementById('avatarA').textContent=sA.icon;
+  document.getElementById('nameB').textContent=sB.name;
+  document.getElementById('nameB').className='f-name '+clsB;
+  document.getElementById('avatarB').textContent=sB.icon;
+
+  document.getElementById('hpLabelA').textContent=`${sim.maxA} / ${sim.maxA}`;
+  document.getElementById('hpLabelB').textContent=`${sim.maxB} / ${sim.maxB}`;
+
+  // mini stats
+  renderStats('statsA',clsA,sA);
+  renderStats('statsB',clsB,sB);
+
+  playRound();
+}
+
+function renderStats(id,cls,s){
+  const m=gmain(cls,s);
+  const icons={warrior:'⚔️',archer:'🏹',mage:'🔮'};
+  document.getElementById(id).innerHTML=`
+    <div class="f-stat">${icons[cls]} Angriff <span>${(m*2.2).toFixed(0)}</span></div>
+    <div class="f-stat">❤️ LP <span>${maxLP(s.lebenskraft,1)}</span></div>
+    <div class="f-stat">⚡ Initiative <span>${s.schnelligkeit}</span></div>
+    <div class="f-stat">🛡️ Ausdauer <span>${s.ausdauer}</span></div>`;
+}
+
+function updateHP(id,cur,max){
+  const pct=Math.max(0,cur/max*100);
+  const bar=document.getElementById('hpBar'+id);
+  const lbl=document.getElementById('hpLabel'+id);
+  bar.style.width=pct+'%';
+  bar.className='hp-fill'+(pct<20?' critical':pct<50?' low':'');
+  lbl.textContent=`${Math.max(0,Math.ceil(cur))} / ${max}`;
+}
+
+function addLog(html){
+  const log=document.getElementById('log');
+  const div=document.createElement('div');
+  div.className='log-entry';
+  div.innerHTML=html;
+  log.appendChild(div);
+  log.scrollTop=log.scrollHeight;
+}
+
+function floatDmg(side,val){
+  const el=document.getElementById('fighter'+side);
+  const f=document.createElement('div');
+  f.className='dmg-float atk';
+  f.textContent='-'+val;
+  f.style.cssText=`left:${20+Math.random()*40}%;top:20%`;
+  el.appendChild(f);
+  setTimeout(()=>f.remove(),950);
+}
+
+function playRound(){
+  if(roundIdx>=allRounds.length){
+    setTimeout(showResult,600);
+    return;
+  }
+  const rd=allRounds[roundIdx++];
+  document.getElementById('roundBadge').textContent=`Runde ${rd.r}`;
+  addLog(`<span class="log-round">── Runde ${rd.r} ──</span>`);
+
+  let delay=0;
+  for(const ev of rd.events){
+    const defSide=ev.atk==='A'?'B':'A';
+    setTimeout(()=>{
+      // attacker animation
+      document.getElementById('fighter'+ev.atk).classList.add('attacking');
+      setTimeout(()=>document.getElementById('fighter'+ev.atk).classList.remove('attacking'),350);
+      // hit animation
+      setTimeout(()=>{
+        document.getElementById('fighter'+defSide).classList.add('hit');
+        setTimeout(()=>document.getElementById('fighter'+defSide).classList.remove('hit'),400);
+        floatDmg(defSide,ev.dmg);
+      },180);
+      // update HP
+      updateHP('A',rd.ha,rd.maxA);
+      updateHP('B',rd.hb,rd.maxB);
+      // log
+      addLog(`<span class="log-atk">${ev.icon} ${ev.name}</span> <span class="log-miss">greift an und macht</span> <span class="log-atk">${ev.dmg} Schaden</span>`);
+    },delay);
+    delay+=SPEEDS[speed].ms/rd.events.length;
+  }
+  animTimer=setTimeout(playRound, SPEEDS[speed].ms+100);
+}
+
+function toggleSpeed(){
+  speed=speed>=3?1:speed+1;
+  document.getElementById('speedLabel').textContent=SPEEDS[speed].label;
+}
+
+function skipAll(){
+  if(animTimer) clearTimeout(animTimer);
+  running=false;
+  const last=allRounds[allRounds.length-1];
+  updateHP('A',last.ha,last.maxA);
+  updateHP('B',last.hb,last.maxB);
+  addLog('<span class="log-miss">── Kampf beendet ──</span>');
+  showResult();
+}
+
+function showResult(){
+  if(window._winner==='A'){
+    // WIN
+    document.getElementById('winText').textContent=`Du hast ${sB.name} besiegt!`;
+    document.getElementById('rewardsBox').innerHTML=`
+      <div class="ov-reward-row"><span class="ov-reward-label">✨ Erfahrung</span><span class="ov-reward-val">+${MISSION.exp} EXP</span></div>
+      <div class="ov-reward-row"><span class="ov-reward-label">💰 Gold</span><span class="ov-reward-val">+${MISSION.gold} Gold</span></div>
+      ${MISSION.item?`<div class="ov-reward-row"><span class="ov-reward-label">🎁 Gegenstand</span><span class="ov-reward-val">${MISSION.item}</span></div>`:''}`;
+    document.getElementById('winOverlay').classList.add('active');
+  } else {
+    document.getElementById('loseOverlay').classList.add('active');
+  }
+}
+
+async function acceptRewards(){
+  const btn = document.querySelector('#winOverlay .btn-ov');
+  btn.disabled = true;
+  btn.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid rgba(0,0,0,.3);border-top-color:#1a1200;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:6px"></span>Wird gespeichert...';
+
+  try {
+    const { data:{ session } } = await sb.auth.getSession();
+    if (!session) { window.location.href='menu.html'; return; }
+
+    const earnedExp  = MISSION.exp;
+    const earnedGold = MISSION.gold;
+    const earnedItem = MISSION.item;
+
+    // 1. Lade aktuellen Charakter
+    const { data: chars, error: loadErr } = await sb
+      .from('characters')
+      .select('id, level, xp, gold')
+      .eq('user_id', session.user.id)
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (loadErr || !chars || chars.length === 0) {
+      console.error('Charakter laden fehlgeschlagen:', loadErr);
+      window.location.href='menu.html';
+      return;
+    }
+
+    const char = chars[0];
+    let newXP   = (char.xp   || 0) + earnedExp;
+    let newGold = (char.gold  || 0) + earnedGold;
+    let newLevel = char.level || 1;
+    let leveledUp = false;
+    const oldLevel = newLevel;
+
+    // 2. Level-Up berechnen
+    while (true) {
+      const needed = expRequired(newLevel + 1);
+      if (newXP >= needed && newLevel < 9999) {
+        newXP -= needed;
+        newLevel++;
+        leveledUp = true;
+      } else break;
+    }
+
+    // 3. Charakter updaten
+    const { error: updateErr } = await sb
+      .from('characters')
+      .update({ xp: newXP, gold: newGold, level: newLevel })
+      .eq('id', char.id);
+
+    if (updateErr) {
+      console.error('Update fehlgeschlagen:', updateErr);
+      btn.disabled = false;
+      btn.textContent = '✅ Belohnungen annehmen';
+      alert('Fehler beim Speichern (Update): ' + updateErr.message + '\nCode: ' + updateErr.code);
+      return;
+    }
+
+    // 4. Item ins Inventar speichern
+    if (earnedItem) {
+      const { error: invErr } = await sb.from('inventory').insert([{
+        character_id: char.id,
+        item_name: earnedItem,
+        item_type: 'quest_reward',
+        item_icon: '🎁',
+        stat_bonus: { lp: 1 },
+        quantity: 1
+      }]);
+      if (invErr) console.warn('Inventar Fehler (nicht kritisch):', invErr.message);
+    }
+
+    // 5. Weiterleitung mit Feedback
+    if (leveledUp) {
+      btn.textContent = `🎉 Level ${newLevel} erreicht!`;
+      setTimeout(() => window.location.href='menu.html', 1800);
+    } else {
+      btn.textContent = '✅ Gespeichert!';
+      setTimeout(() => window.location.href='menu.html', 800);
+    }
+
+  } catch(err) {
+    console.error('Fehler:', err);
+    btn.disabled = false;
+    btn.textContent = '✅ Belohnungen annehmen';
+    alert('Technischer Fehler: ' + (err.message || JSON.stringify(err)));
+  }
+}
+function showTips(){
+  document.getElementById('loseOverlay').classList.remove('active');
+  document.getElementById('tipsOverlay').classList.add('active');
+}
+function goMenu(){
+  window.location.href='menu.html';
+}
+
+// ── Start ────────────────────────────────────────────────────
+initUI();
+</script>
+</body>
+</html>

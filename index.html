@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FitnessRPG – Dein Abenteuer beginnt</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@400;600&family=Crimson+Pro:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --gold:        #c9a84c;
+      --gold-light:  #e8c97a;
+      --gold-dark:   #7a5c1e;
+      --bg-deep:     #0a0c10;
+      --bg-card:     #10141c;
+      --bg-card2:    #141820;
+      --border:      rgba(201,168,76,0.25);
+      --text:        #e8dcc8;
+      --text-dim:    #8a7a60;
+      --red:         #c0392b;
+      --green:       #27ae60;
+    }
+
+    body {
+      font-family: 'Crimson Pro', Georgia, serif;
+      background: var(--bg-deep);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* ── animated star background ── */
+    .stars {
+      position: fixed; inset: 0; pointer-events: none; z-index: 0;
+      background:
+        radial-gradient(ellipse at 20% 30%, rgba(201,168,76,0.06) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 70%, rgba(80,60,140,0.08) 0%, transparent 60%);
+    }
+    .stars::before, .stars::after {
+      content: '';
+      position: absolute; inset: 0;
+      background-image:
+        radial-gradient(1px 1px at 10% 15%, rgba(255,255,255,0.6) 0%, transparent 100%),
+        radial-gradient(1px 1px at 25% 40%, rgba(255,255,255,0.4) 0%, transparent 100%),
+        radial-gradient(1px 1px at 40% 8%,  rgba(255,255,255,0.5) 0%, transparent 100%),
+        radial-gradient(1px 1px at 55% 55%, rgba(255,255,255,0.3) 0%, transparent 100%),
+        radial-gradient(1px 1px at 70% 25%, rgba(255,255,255,0.5) 0%, transparent 100%),
+        radial-gradient(1px 1px at 85% 80%, rgba(255,255,255,0.4) 0%, transparent 100%),
+        radial-gradient(1px 1px at 92% 10%, rgba(255,255,255,0.6) 0%, transparent 100%),
+        radial-gradient(1px 1px at 5%  90%, rgba(255,255,255,0.3) 0%, transparent 100%),
+        radial-gradient(1px 1px at 60% 90%, rgba(255,255,255,0.4) 0%, transparent 100%),
+        radial-gradient(1px 1px at 33% 70%, rgba(255,255,255,0.5) 0%, transparent 100%);
+    }
+    .stars::after { opacity: .5; transform: rotate(45deg) scale(1.4); }
+
+    /* ── runic border decoration ── */
+    .rune-corner {
+      position: fixed; width: 80px; height: 80px;
+      pointer-events: none; z-index: 1; opacity: .35;
+    }
+    .rune-corner svg { width: 100%; height: 100%; }
+    .rune-tl { top: 16px; left: 16px; }
+    .rune-tr { top: 16px; right: 16px; transform: scaleX(-1); }
+    .rune-bl { bottom: 16px; left: 16px; transform: scaleY(-1); }
+    .rune-br { bottom: 16px; right: 16px; transform: scale(-1); }
+
+    /* ── card ── */
+    .card {
+      position: relative; z-index: 2;
+      width: min(440px, 94vw);
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 40px 36px 36px;
+      box-shadow:
+        0 0 0 1px rgba(201,168,76,0.08),
+        0 8px 60px rgba(0,0,0,0.7),
+        inset 0 1px 0 rgba(201,168,76,0.15);
+      animation: cardIn .7s cubic-bezier(.22,1,.36,1) both;
+    }
+    @keyframes cardIn {
+      from { opacity:0; transform: translateY(28px) scale(.97); }
+      to   { opacity:1; transform: translateY(0)    scale(1); }
+    }
+
+    /* top emblem */
+    .emblem {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .emblem-icon {
+      display: inline-block;
+      width: 56px; height: 56px;
+      background: radial-gradient(circle at 40% 35%, var(--gold-light), var(--gold-dark));
+      clip-path: polygon(50% 0%,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%);
+      margin-bottom: 14px;
+      animation: pulse 3s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%,100% { filter: drop-shadow(0 0 6px rgba(201,168,76,.5)); }
+      50%      { filter: drop-shadow(0 0 16px rgba(201,168,76,.9)); }
+    }
+    .emblem h1 {
+      font-family: 'Cinzel Decorative', serif;
+      font-size: 1.5rem;
+      font-weight: 900;
+      letter-spacing: .05em;
+      background: linear-gradient(135deg, var(--gold-light) 0%, var(--gold) 50%, var(--gold-dark) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1.15;
+    }
+    .emblem p {
+      font-family: 'Cinzel', serif;
+      font-size: .72rem;
+      letter-spacing: .2em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-top: 4px;
+    }
+
+    /* divider */
+    .divider {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 24px;
+    }
+    .divider span { flex:1; height:1px; background: var(--border); }
+    .divider em {
+      font-family: 'Cinzel', serif;
+      font-size: .65rem;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      font-style: normal;
+    }
+
+    /* tabs */
+    .tabs {
+      display: flex; gap: 0;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-bottom: 28px;
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 10px;
+      background: transparent;
+      border: none; cursor: pointer;
+      font-family: 'Cinzel', serif;
+      font-size: .75rem;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      transition: all .25s;
+      position: relative;
+    }
+    .tab-btn.active {
+      background: rgba(201,168,76,0.12);
+      color: var(--gold-light);
+    }
+    .tab-btn.active::after {
+      content: '';
+      position: absolute; bottom: 0; left: 10%; right: 10%; height: 1px;
+      background: var(--gold);
+    }
+    .tab-btn:hover:not(.active) { color: var(--text); background: rgba(255,255,255,.03); }
+
+    /* forms */
+    .form-panel { display: none; }
+    .form-panel.active { display: block; animation: fadeIn .3s ease; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+
+    .field { margin-bottom: 18px; }
+    .field label {
+      display: block;
+      font-family: 'Cinzel', serif;
+      font-size: .65rem;
+      letter-spacing: .15em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: 7px;
+    }
+    .field input {
+      width: 100%;
+      padding: 11px 14px;
+      background: var(--bg-card2);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      color: var(--text);
+      font-family: 'Crimson Pro', serif;
+      font-size: 1rem;
+      outline: none;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .field input:focus {
+      border-color: var(--gold);
+      box-shadow: 0 0 0 2px rgba(201,168,76,0.15);
+    }
+    .field input::placeholder { color: var(--text-dim); opacity: .7; }
+
+    /* primary button */
+    .btn-primary {
+      width: 100%;
+      padding: 13px;
+      margin-top: 6px;
+      background: linear-gradient(135deg, var(--gold-dark) 0%, var(--gold) 50%, var(--gold-light) 100%);
+      background-size: 200% 200%;
+      border: none; border-radius: 3px;
+      color: #1a1200;
+      font-family: 'Cinzel', serif;
+      font-size: .8rem;
+      font-weight: 600;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: background-position .4s, transform .15s, box-shadow .2s;
+      box-shadow: 0 2px 16px rgba(201,168,76,0.25);
+    }
+    .btn-primary:hover {
+      background-position: 100% 0;
+      box-shadow: 0 4px 24px rgba(201,168,76,0.45);
+      transform: translateY(-1px);
+    }
+    .btn-primary:active { transform: translateY(0); }
+    .btn-primary:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+    /* message box */
+    .message {
+      margin-top: 16px;
+      padding: 11px 14px;
+      border-radius: 3px;
+      font-size: .9rem;
+      display: none;
+      animation: fadeIn .3s ease;
+    }
+    .message.error   { display:block; background:rgba(192,57,43,.15); border:1px solid rgba(192,57,43,.4); color:#e87070; }
+    .message.success { display:block; background:rgba(39,174,96,.12); border:1px solid rgba(39,174,96,.35); color:#6dcf95; }
+
+    /* logged-in screen */
+    .hero-screen {
+      display: none;
+      text-align: center;
+      animation: fadeIn .5s ease;
+    }
+    .hero-screen.active { display: block; }
+    .hero-avatar {
+      width: 72px; height: 72px; margin: 0 auto 18px;
+      background: linear-gradient(135deg, var(--gold-dark), var(--gold-light));
+      clip-path: polygon(50% 0%,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%);
+      animation: pulse 3s ease-in-out infinite;
+    }
+    .hero-screen h2 {
+      font-family: 'Cinzel Decorative', serif;
+      font-size: 1.15rem;
+      color: var(--gold-light);
+      margin-bottom: 8px;
+    }
+    .hero-screen p { color: var(--text-dim); font-size: 1rem; margin-bottom: 24px; }
+    .btn-logout {
+      padding: 10px 28px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      color: var(--text-dim);
+      font-family: 'Cinzel', serif;
+      font-size: .7rem;
+      letter-spacing: .15em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all .2s;
+    }
+    .btn-logout:hover { border-color: var(--gold); color: var(--gold-light); }
+
+    /* spinner */
+    .spinner {
+      display: inline-block; width:14px; height:14px;
+      border: 2px solid rgba(0,0,0,.3);
+      border-top-color: #1a1200;
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+      vertical-align: middle; margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<!-- star bg -->
+<div class="stars"></div>
+
+<!-- rune corners -->
+<div class="rune-corner rune-tl">
+  <svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M4 76 L4 4 L76 4" stroke="#c9a84c" stroke-width="1.5" fill="none"/>
+    <path d="M4 40 L20 40" stroke="#c9a84c" stroke-width="1" opacity=".6"/>
+    <path d="M40 4 L40 20" stroke="#c9a84c" stroke-width="1" opacity=".6"/>
+    <circle cx="4" cy="4" r="3" fill="#c9a84c"/>
+  </svg>
+</div>
+<div class="rune-corner rune-tr">
+  <svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M4 76 L4 4 L76 4" stroke="#c9a84c" stroke-width="1.5" fill="none"/>
+    <path d="M4 40 L20 40" stroke="#c9a84c" stroke-width="1" opacity=".6"/>
+    <path d="M40 4 L40 20" stroke="#c9a84c" stroke-width="1" opacity=".6"/>
+    <circle cx="4" cy="4" r="3" fill="#c9a84c"/>
+  </svg>
+</div>
+<div class="rune-corner rune-bl">
+  <svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M4 76 L4 4 L76 4" stroke="#c9a84c" stroke-width="1.5" fill="none"/>
+    <path d="M4 40 L20 40" stroke="#c9a84c" stroke-width="1" opacity=".6"/>
+    <path d="M40 4 L40 20" stroke="#c9a84c" stroke-width="1" opacity=".6"/>
+    <circle cx="4" cy="4" r="3" fill="#c9a84c"/>
+  </svg>
+</div>
+<div class="rune-corner rune-br">
+  <svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M4 76 L4 4 L76 4" stroke="#c9a84c" stroke-width="1.5" fill="none"/>
+    <path d="M4 40 L20 40" stroke="#c9a84c" stroke-width="1" opacity=".6"/>
+    <path d="M40 4 L40 20" stroke="#c9a84c" stroke-width="1" opacity=".6"/>
+    <circle cx="4" cy="4" r="3" fill="#c9a84c"/>
+  </svg>
+</div>
+
+<!-- main card -->
+<div class="card" id="authCard">
+
+  <!-- emblem -->
+  <div class="emblem">
+    <div class="emblem-icon"></div>
+    <h1>FitnessRPG</h1>
+    <p>Dein Abenteuer beginnt hier</p>
+  </div>
+
+  <div class="divider"><span></span><em>Held werden</em><span></span></div>
+
+  <!-- auth forms (hidden when logged in) -->
+  <div id="authForms">
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('login')">Einloggen</button>
+      <button class="tab-btn" onclick="switchTab('register')">Registrieren</button>
+    </div>
+
+    <!-- LOGIN -->
+    <div class="form-panel active" id="loginPanel">
+      <div class="field">
+        <label>E-Mail Adresse</label>
+        <input type="email" id="loginEmail" placeholder="held@abenteuer.de" />
+      </div>
+      <div class="field">
+        <label>Passwort</label>
+        <input type="password" id="loginPassword" placeholder="••••••••" />
+      </div>
+      <button class="btn-primary" id="loginBtn" onclick="handleLogin()">
+        Einloggen
+      </button>
+      <div style="text-align:center;margin-top:12px">
+        <button onclick="switchTab('forgot')" style="background:none;border:none;color:var(--text-dim);font-family:'Cinzel',serif;font-size:.65rem;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;text-decoration:underline">Passwort vergessen?</button>
+      </div>
+      <div class="message" id="loginMsg"></div>
+    </div>
+
+    <!-- FORGOT PASSWORD -->
+    <div class="form-panel" id="forgotPanel">
+      <p style="color:var(--text-dim);font-size:.95rem;margin-bottom:18px;line-height:1.5">Gib deine E-Mail ein – wir schicken dir einen Link zum Zurücksetzen deines Passworts.</p>
+      <div class="field">
+        <label>E-Mail Adresse</label>
+        <input type="email" id="forgotEmail" placeholder="held@abenteuer.de" />
+      </div>
+      <button class="btn-primary" id="forgotBtn" onclick="handleForgot()">Link senden</button>
+      <div style="text-align:center;margin-top:12px">
+        <button onclick="switchTab('login')" style="background:none;border:none;color:var(--text-dim);font-family:'Cinzel',serif;font-size:.65rem;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;text-decoration:underline">← Zurück zum Login</button>
+      </div>
+      <div class="message" id="forgotMsg"></div>
+    </div>
+
+    <!-- REGISTER -->
+    <div class="form-panel" id="registerPanel">
+      <div class="field">
+        <label>Helden-Name</label>
+        <input type="text" id="regName" placeholder="Dein Name im Spiel" />
+      </div>
+      <div class="field">
+        <label>E-Mail Adresse</label>
+        <input type="email" id="regEmail" placeholder="held@abenteuer.de" />
+      </div>
+      <div class="field">
+        <label>Passwort</label>
+        <input type="password" id="regPassword" placeholder="Mindestens 6 Zeichen" />
+      </div>
+      <button class="btn-primary" id="registerBtn" onclick="handleRegister()">
+        Abenteuer starten
+      </button>
+      <div class="message" id="registerMsg"></div>
+    </div>
+  </div>
+
+  <!-- LOGGED IN screen -->
+  <div class="hero-screen" id="heroScreen">
+    <div class="hero-avatar"></div>
+    <h2>Willkommen, Held!</h2>
+    <p id="heroEmail"></p>
+    <button class="btn-logout" onclick="handleLogout()">Ausloggen</button>
+  </div>
+
+</div>
+
+<script>
+  // ── Supabase Init ──────────────────────────────────────────
+  const SUPABASE_URL = 'https://zjykfbfsrmdsllrbblmz.supabase.co';
+  const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpqeWtmYmZzcm1kc2xscmJibG16Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk4NTUwOTksImV4cCI6MjA5NTQzMTA5OX0.I8mFhiKo-Fv_GpF-ATWXXYXUUKxu6OzxZdkJr4COGIE';
+  const { createClient } = supabase;
+  const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  // ── Tab switching ──────────────────────────────────────────
+  function switchTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach((b,i) =>
+      b.classList.toggle('active', (i===0) === (tab==='login') || (i===1) === (tab==='register'))
+    );
+    document.getElementById('loginPanel').classList.toggle('active', tab==='login');
+    document.getElementById('registerPanel').classList.toggle('active', tab==='register');
+    document.getElementById('forgotPanel').classList.toggle('active', tab==='forgot');
+    clearMessages();
+  }
+
+  function clearMessages() {
+    ['loginMsg','registerMsg'].forEach(id => {
+      const el = document.getElementById(id);
+      el.className = 'message'; el.textContent = '';
+    });
+  }
+
+  function showMsg(id, text, type) {
+    const el = document.getElementById(id);
+    el.textContent = text;
+    el.className = 'message ' + type;
+  }
+
+  function setLoading(btnId, loading) {
+    const btn = document.getElementById(btnId);
+    btn.disabled = loading;
+    btn.innerHTML = loading
+      ? '<span class="spinner"></span>Einen Moment...'
+      : (btnId === 'loginBtn' ? 'Einloggen' : 'Abenteuer starten');
+  }
+
+  // ── Login ──────────────────────────────────────────────────
+  async function handleLogin() {
+    const email    = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    if (!email || !password) { showMsg('loginMsg','Bitte alle Felder ausfüllen.','error'); return; }
+
+    setLoading('loginBtn', true);
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    setLoading('loginBtn', false);
+
+    if (error) {
+      showMsg('loginMsg', fehlerText(error.message), 'error');
+    } else {
+      showLoggedIn(data.user);
+    }
+  }
+
+  // ── Register ───────────────────────────────────────────────
+  async function handleRegister() {
+    const name     = document.getElementById('regName').value.trim();
+    const email    = document.getElementById('regEmail').value.trim();
+    const password = document.getElementById('regPassword').value;
+
+    if (!name || !email || !password) { showMsg('registerMsg','Bitte alle Felder ausfüllen.','error'); return; }
+    if (password.length < 6)          { showMsg('registerMsg','Passwort muss mindestens 6 Zeichen haben.','error'); return; }
+
+    setLoading('registerBtn', true);
+    const { data, error } = await sb.auth.signUp({
+      email, password,
+      options: { data: { display_name: name } }
+    });
+    setLoading('registerBtn', false);
+
+    if (error) {
+      showMsg('registerMsg', fehlerText(error.message), 'error');
+    } else {
+      showMsg('registerMsg',
+        '✉️ Bestätigungs-E-Mail gesendet! Bitte prüfe dein Postfach und klicke auf den Link.',
+        'success');
+    }
+  }
+
+  // ── Forgot password ───────────────────────────────────────
+  async function handleForgot() {
+    const email = document.getElementById('forgotEmail').value.trim();
+    if (!email) { showMsg('forgotMsg','Bitte gib deine E-Mail ein.','error'); return; }
+    const btn = document.getElementById('forgotBtn');
+    btn.disabled = true; btn.textContent = 'Wird gesendet...';
+    const { error } = await sb.auth.resetPasswordForEmail(email, {
+      redirectTo: 'https://programmierhorst.github.io/FitnessRPG/reset.html'
+    });
+    btn.disabled = false; btn.textContent = 'Link senden';
+    if (error) {
+      showMsg('forgotMsg', 'Fehler: ' + error.message, 'error');
+    } else {
+      showMsg('forgotMsg', '✉️ E-Mail gesendet! Bitte prüfe dein Postfach.', 'success');
+    }
+  }
+
+  // ── Logout ─────────────────────────────────────────────────
+  async function handleLogout() {
+    await sb.auth.signOut();
+    document.getElementById('heroScreen').classList.remove('active');
+    document.getElementById('authForms').style.display = '';
+  }
+
+  // ── Show logged-in state → redirect correctly ──────────────
+  async function showLoggedIn(user) {
+    const { data: chars } = await sb.from('characters').select('id').eq('user_id', user.id).limit(1);
+    if (chars && chars.length > 0) {
+      window.location.href = 'menu.html';
+    } else {
+      window.location.href = 'charakter.html';
+    }
+  }
+
+  // ── Check session on load ──────────────────────────────────
+  sb.auth.getSession().then(({ data }) => {
+    if (data.session) showLoggedIn(data.session.user);
+  });
+
+  // ── German error messages ──────────────────────────────────
+  function fehlerText(msg) {
+    if (msg.includes('Invalid login'))        return 'E-Mail oder Passwort ist falsch.';
+    if (msg.includes('Email not confirmed'))  return 'Bitte bestätige zuerst deine E-Mail.';
+    if (msg.includes('already registered'))   return 'Diese E-Mail ist bereits registriert.';
+    if (msg.includes('Password should'))      return 'Passwort muss mindestens 6 Zeichen haben.';
+    return 'Ein Fehler ist aufgetreten. Bitte versuche es erneut.';
+  }
+
+  // ── Enter key support ──────────────────────────────────────
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    if (document.getElementById('loginPanel').classList.contains('active')) handleLogin();
+    else handleRegister();
+  });
+</script>
+</body>
+</html>

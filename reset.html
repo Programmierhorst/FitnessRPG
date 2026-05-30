@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>FitnessRPG – Neues Passwort</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@400;600&family=Crimson+Pro:wght@300;400&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--gold:#c9a84c;--gold-l:#e8c97a;--gold-d:#7a5c1e;--bg:#0a0c10;--card:#10141c;--card2:#141820;--border:rgba(201,168,76,.25);--text:#e8dcc8;--dim:#8a7a60}
+body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.stars{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at 20% 30%,rgba(201,168,76,.06) 0%,transparent 60%)}
+.stars::before{content:'';position:absolute;inset:0;background-image:radial-gradient(1px 1px at 15% 20%,rgba(255,255,255,.5) 0%,transparent 100%),radial-gradient(1px 1px at 70% 60%,rgba(255,255,255,.4) 0%,transparent 100%),radial-gradient(1px 1px at 40% 80%,rgba(255,255,255,.3) 0%,transparent 100%),radial-gradient(1px 1px at 85% 15%,rgba(255,255,255,.5) 0%,transparent 100%)}
+.card{position:relative;z-index:1;width:min(420px,94vw);background:var(--card);border:1px solid var(--border);border-radius:4px;padding:40px 36px;box-shadow:0 8px 60px rgba(0,0,0,.7),inset 0 1px 0 rgba(201,168,76,.12);animation:fadeUp .6s ease both}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:none}}
+.emblem{text-align:center;margin-bottom:28px}
+.star-icon{display:inline-block;width:48px;height:48px;background:radial-gradient(circle at 40% 35%,var(--gold-l),var(--gold-d));clip-path:polygon(50% 0%,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%);margin-bottom:12px;animation:pulse 3s ease-in-out infinite}
+@keyframes pulse{0%,100%{filter:drop-shadow(0 0 6px rgba(201,168,76,.5))}50%{filter:drop-shadow(0 0 16px rgba(201,168,76,.9))}}
+h1{font-family:'Cinzel Decorative',serif;font-size:1.3rem;background:linear-gradient(135deg,var(--gold-l),var(--gold),var(--gold-d));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.subtitle{font-family:'Cinzel',serif;font-size:.65rem;letter-spacing:.2em;text-transform:uppercase;color:var(--dim);margin-top:4px}
+.divider{display:flex;align-items:center;gap:10px;margin-bottom:24px}
+.divider span{flex:1;height:1px;background:var(--border)}
+.divider em{font-family:'Cinzel',serif;font-size:.65rem;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);font-style:normal}
+.field{margin-bottom:18px}
+.field label{display:block;font-family:'Cinzel',serif;font-size:.65rem;letter-spacing:.15em;text-transform:uppercase;color:var(--dim);margin-bottom:7px}
+.field input{width:100%;padding:11px 14px;background:var(--card2);border:1px solid var(--border);border-radius:3px;color:var(--text);font-family:'Crimson Pro',serif;font-size:1rem;outline:none;transition:border-color .2s,box-shadow .2s}
+.field input:focus{border-color:var(--gold);box-shadow:0 0 0 2px rgba(201,168,76,.15)}
+.field input::placeholder{color:var(--dim);opacity:.7}
+.btn{width:100%;padding:13px;background:linear-gradient(135deg,var(--gold-d),var(--gold),var(--gold-l));border:none;border-radius:3px;color:#1a1200;font-family:'Cinzel',serif;font-size:.78rem;font-weight:600;letter-spacing:.15em;text-transform:uppercase;cursor:pointer;transition:all .2s;box-shadow:0 2px 16px rgba(201,168,76,.25);margin-top:4px}
+.btn:hover{box-shadow:0 4px 24px rgba(201,168,76,.45);transform:translateY(-1px)}
+.btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.msg{margin-top:14px;padding:10px 14px;border-radius:3px;font-size:.9rem;display:none}
+.msg.error{display:block;background:rgba(192,57,43,.15);border:1px solid rgba(192,57,43,.4);color:#e87070}
+.msg.success{display:block;background:rgba(39,174,96,.12);border:1px solid rgba(39,174,96,.35);color:#6dcf95}
+.spinner{display:inline-block;width:13px;height:13px;border:2px solid rgba(0,0,0,.3);border-top-color:#1a1200;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:5px}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="stars"></div>
+<div class="card">
+  <div class="emblem">
+    <div class="star-icon"></div>
+    <h1>FitnessRPG</h1>
+    <div class="subtitle">Neues Passwort festlegen</div>
+  </div>
+  <div class="divider"><span></span><em>Passwort ändern</em><span></span></div>
+  <div class="field">
+    <label>Neues Passwort</label>
+    <input type="password" id="newPassword" placeholder="Mindestens 6 Zeichen"/>
+  </div>
+  <div class="field">
+    <label>Passwort bestätigen</label>
+    <input type="password" id="confirmPassword" placeholder="Passwort wiederholen"/>
+  </div>
+  <button class="btn" id="saveBtn" onclick="savePassword()">Passwort speichern</button>
+  <div class="msg" id="msg"></div>
+</div>
+<script>
+const sb = supabase.createClient(
+  'https://zjykfbfsrmdsllrbblmz.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpqeWtmYmZzcm1kc2xscmJibG16Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk4NTUwOTksImV4cCI6MjA5NTQzMTA5OX0.I8mFhiKo-Fv_GpF-ATWXXYXUUKxu6OzxZdkJr4COGIE'
+);
+
+async function savePassword() {
+  const pw  = document.getElementById('newPassword').value;
+  const pw2 = document.getElementById('confirmPassword').value;
+  const msg = document.getElementById('msg');
+  const btn = document.getElementById('saveBtn');
+
+  if (!pw || !pw2) { showMsg('Bitte beide Felder ausfüllen.','error'); return; }
+  if (pw.length < 6) { showMsg('Passwort muss mindestens 6 Zeichen haben.','error'); return; }
+  if (pw !== pw2) { showMsg('Die Passwörter stimmen nicht überein.','error'); return; }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Wird gespeichert...';
+
+  const { error } = await sb.auth.updateUser({ password: pw });
+  btn.disabled = false;
+  btn.innerHTML = 'Passwort speichern';
+
+  if (error) {
+    showMsg('Fehler: ' + error.message, 'error');
+  } else {
+    showMsg('✅ Passwort erfolgreich geändert! Du wirst weitergeleitet...', 'success');
+    setTimeout(() => window.location.href = 'https://programmierhorst.github.io/FitnessRPG/index.html', 2500);
+  }
+}
+
+function showMsg(text, type) {
+  const el = document.getElementById('msg');
+  el.textContent = text;
+  el.className = 'msg ' + type;
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>FitnessRPG – Charakter erstellen</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@400;600&family=Crimson+Pro:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --gold:#c9a84c;--gold-l:#e8c97a;--gold-d:#7a5c1e;
+  --bg:#0a0c10;--card:#10141c;--card2:#141820;
+  --border:rgba(201,168,76,.25);--text:#e8dcc8;--dim:#8a7a60;
+  --warrior:#e05c2a;--archer:#3aad6e;--mage:#5b7fe8;
+}
+body{font-family:'Crimson Pro',Georgia,serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:32px 16px 60px;overflow-x:hidden}
+
+/* stars */
+.stars{position:fixed;inset:0;pointer-events:none;z-index:0;background:radial-gradient(ellipse at 20% 30%,rgba(201,168,76,.06) 0%,transparent 60%),radial-gradient(ellipse at 80% 70%,rgba(80,60,140,.08) 0%,transparent 60%)}
+.stars::before{content:'';position:absolute;inset:0;background-image:radial-gradient(1px 1px at 10% 15%,rgba(255,255,255,.6) 0%,transparent 100%),radial-gradient(1px 1px at 25% 40%,rgba(255,255,255,.4) 0%,transparent 100%),radial-gradient(1px 1px at 40% 8%,rgba(255,255,255,.5) 0%,transparent 100%),radial-gradient(1px 1px at 70% 25%,rgba(255,255,255,.5) 0%,transparent 100%),radial-gradient(1px 1px at 85% 80%,rgba(255,255,255,.4) 0%,transparent 100%),radial-gradient(1px 1px at 5% 90%,rgba(255,255,255,.3) 0%,transparent 100%)}
+
+/* layout */
+.wrap{position:relative;z-index:1;width:min(700px,98vw)}
+
+/* header */
+.hdr{text-align:center;margin-bottom:36px;animation:fadeUp .6s ease both}
+.hdr-star{display:inline-block;width:44px;height:44px;background:radial-gradient(circle at 40% 35%,var(--gold-l),var(--gold-d));clip-path:polygon(50% 0%,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%);margin-bottom:10px;animation:pulse 3s ease-in-out infinite}
+@keyframes pulse{0%,100%{filter:drop-shadow(0 0 6px rgba(201,168,76,.5))}50%{filter:drop-shadow(0 0 16px rgba(201,168,76,.9))}}
+.hdr h1{font-family:'Cinzel Decorative',serif;font-size:clamp(1.1rem,4vw,1.6rem);background:linear-gradient(135deg,var(--gold-l),var(--gold),var(--gold-d));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.hdr p{font-family:'Cinzel',serif;font-size:.65rem;letter-spacing:.2em;text-transform:uppercase;color:var(--dim);margin-top:4px}
+
+/* progress bar */
+.progress{display:flex;gap:6px;justify-content:center;margin-bottom:32px;animation:fadeUp .6s .1s ease both}
+.prog-step{height:3px;flex:1;max-width:80px;background:rgba(201,168,76,.15);border-radius:2px;transition:background .4s}
+.prog-step.done{background:var(--gold)}
+.prog-step.active{background:linear-gradient(90deg,var(--gold),var(--gold-l));animation:shimmer 1.5s ease infinite}
+@keyframes shimmer{0%,100%{opacity:1}50%{opacity:.6}}
+
+/* card */
+.card{background:var(--card);border:1px solid var(--border);border-radius:4px;padding:clamp(20px,5vw,36px);box-shadow:0 8px 60px rgba(0,0,0,.7),inset 0 1px 0 rgba(201,168,76,.12);animation:fadeUp .5s .15s ease both}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:none}}
+
+.step{display:none}.step.active{display:block;animation:fadeUp .35s ease both}
+
+/* section title */
+.sec-title{font-family:'Cinzel',serif;font-size:.7rem;letter-spacing:.2em;text-transform:uppercase;color:var(--dim);margin-bottom:16px;display:flex;align-items:center;gap:10px}
+.sec-title::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* field */
+.field{margin-bottom:20px}
+.field label{display:block;font-family:'Cinzel',serif;font-size:.65rem;letter-spacing:.15em;text-transform:uppercase;color:var(--dim);margin-bottom:7px}
+.field input,.field select{width:100%;padding:11px 14px;background:var(--card2);border:1px solid var(--border);border-radius:3px;color:var(--text);font-family:'Crimson Pro',serif;font-size:1rem;outline:none;transition:border-color .2s,box-shadow .2s}
+.field input:focus,.field select:focus{border-color:var(--gold);box-shadow:0 0 0 2px rgba(201,168,76,.15)}
+.field input::placeholder{color:var(--dim);opacity:.7}
+.field select option{background:#1a1f2e}
+
+/* class cards */
+.class-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:8px}
+@media(max-width:480px){.class-grid{grid-template-columns:1fr}}
+.class-card{border:1px solid var(--border);border-radius:4px;padding:18px 12px;text-align:center;cursor:pointer;transition:all .25s;background:var(--card2);position:relative;overflow:hidden}
+.class-card::before{content:'';position:absolute;inset:0;opacity:0;transition:opacity .3s}
+.class-card:hover{transform:translateY(-2px)}
+.class-card.selected{transform:translateY(-3px)}
+.class-card[data-class="warrior"]{--accent:var(--warrior)}
+.class-card[data-class="archer"]{--accent:var(--archer)}
+.class-card[data-class="mage"]{--accent:var(--mage)}
+.class-card.selected{border-color:var(--accent);box-shadow:0 0 20px rgba(var(--accent-rgb),.3)}
+.class-card[data-class="warrior"].selected{box-shadow:0 0 20px rgba(224,92,42,.3)}
+.class-card[data-class="archer"].selected{box-shadow:0 0 20px rgba(58,173,110,.3)}
+.class-card[data-class="mage"].selected{box-shadow:0 0 20px rgba(91,127,232,.3)}
+.class-icon{font-size:2.4rem;margin-bottom:10px;display:block}
+.class-name{font-family:'Cinzel',serif;font-size:.85rem;letter-spacing:.1em;margin-bottom:6px}
+.class-card[data-class="warrior"] .class-name{color:var(--warrior)}
+.class-card[data-class="archer"] .class-name{color:var(--archer)}
+.class-card[data-class="mage"] .class-name{color:var(--mage)}
+.class-desc{font-size:.82rem;color:var(--dim);line-height:1.4}
+
+/* stats preview */
+.stats-preview{margin-top:16px;padding:14px;background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:3px;display:none}
+.stats-preview.visible{display:block;animation:fadeUp .3s ease}
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;margin-top:8px}
+.stat-row{display:flex;align-items:center;justify-content:space-between;font-size:.88rem}
+.stat-name{color:var(--dim)}
+.stat-bar-wrap{display:flex;align-items:center;gap:6px}
+.stat-val{font-family:'Cinzel',serif;font-size:.75rem;color:var(--gold-l);min-width:12px;text-align:right}
+.stat-pips{display:flex;gap:2px}
+.pip{width:8px;height:8px;border-radius:1px;background:rgba(201,168,76,.15);border:1px solid rgba(201,168,76,.2)}
+.pip.filled{background:var(--gold);border-color:var(--gold-l)}
+
+/* avatar builder */
+.avatar-preview{display:flex;flex-direction:column;align-items:center;margin-bottom:24px}
+.avatar-canvas{width:120px;height:160px;position:relative;margin-bottom:12px}
+/* SVG avatar drawn by JS */
+.avatar-label{font-family:'Cinzel',serif;font-size:.65rem;letter-spacing:.15em;text-transform:uppercase;color:var(--dim)}
+
+.color-section{margin-bottom:18px}
+.color-section label{display:block;font-family:'Cinzel',serif;font-size:.65rem;letter-spacing:.15em;text-transform:uppercase;color:var(--dim);margin-bottom:8px}
+.color-row{display:flex;gap:8px;flex-wrap:wrap}
+.color-swatch{width:28px;height:28px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:all .2s;flex-shrink:0}
+.color-swatch.active{border-color:var(--gold);transform:scale(1.2)}
+
+/* fitness questions */
+.fitness-group{margin-bottom:22px}
+.fitness-group label{display:block;font-family:'Cinzel',serif;font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);margin-bottom:10px}
+.option-cards{display:flex;flex-direction:column;gap:8px}
+.option-card{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;background:var(--card2);border:1px solid var(--border);border-radius:3px;cursor:pointer;transition:all .2s}
+.option-card:hover{border-color:rgba(201,168,76,.5)}
+.option-card.selected{border-color:var(--gold);background:rgba(201,168,76,.08)}
+.option-card input[type=radio]{display:none}
+.option-radio{width:16px;height:16px;border-radius:50%;border:1px solid var(--border);flex-shrink:0;margin-top:2px;transition:all .2s;background:var(--card2)}
+.option-card.selected .option-radio{background:var(--gold);border-color:var(--gold-l);box-shadow:0 0 6px rgba(201,168,76,.5)}
+.option-text strong{display:block;font-family:'Cinzel',serif;font-size:.78rem;letter-spacing:.05em;color:var(--text);margin-bottom:2px}
+.option-text span{font-size:.85rem;color:var(--dim)}
+
+/* summary */
+.summary-hero{display:flex;gap:24px;align-items:flex-start;margin-bottom:24px;flex-wrap:wrap}
+.summary-avatar{flex-shrink:0}
+.summary-info{flex:1;min-width:180px}
+.summary-name{font-family:'Cinzel Decorative',serif;font-size:1.2rem;color:var(--gold-l);margin-bottom:4px}
+.summary-class{font-family:'Cinzel',serif;font-size:.7rem;letter-spacing:.15em;text-transform:uppercase;margin-bottom:12px}
+.summary-class.warrior{color:var(--warrior)}
+.summary-class.archer{color:var(--archer)}
+.summary-class.mage{color:var(--mage)}
+.summary-badges{display:flex;gap:8px;flex-wrap:wrap}
+.badge{padding:4px 10px;border-radius:2px;font-family:'Cinzel',serif;font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;background:rgba(201,168,76,.1);border:1px solid var(--border);color:var(--dim)}
+
+.full-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:400px){.full-stats{grid-template-columns:1fr}}
+.full-stat{padding:10px 12px;background:var(--card2);border:1px solid var(--border);border-radius:3px}
+.full-stat-name{font-family:'Cinzel',serif;font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin-bottom:4px}
+.full-stat-val{font-size:1.3rem;font-weight:300;color:var(--gold-l)}
+
+/* buttons */
+.btn-row{display:flex;gap:10px;margin-top:28px}
+.btn-primary{flex:1;padding:13px;background:linear-gradient(135deg,var(--gold-d),var(--gold),var(--gold-l));border:none;border-radius:3px;color:#1a1200;font-family:'Cinzel',serif;font-size:.78rem;font-weight:600;letter-spacing:.15em;text-transform:uppercase;cursor:pointer;transition:all .2s;box-shadow:0 2px 16px rgba(201,168,76,.25)}
+.btn-primary:hover{box-shadow:0 4px 24px rgba(201,168,76,.45);transform:translateY(-1px)}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.btn-secondary{padding:13px 20px;background:transparent;border:1px solid var(--border);border-radius:3px;color:var(--dim);font-family:'Cinzel',serif;font-size:.75rem;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;transition:all .2s}
+.btn-secondary:hover{border-color:var(--gold);color:var(--gold-l)}
+
+.msg{margin-top:14px;padding:10px 14px;border-radius:3px;font-size:.9rem;display:none}
+.msg.error{display:block;background:rgba(192,57,43,.15);border:1px solid rgba(192,57,43,.4);color:#e87070}
+.msg.success{display:block;background:rgba(39,174,96,.12);border:1px solid rgba(39,174,96,.35);color:#6dcf95}
+
+.spinner{display:inline-block;width:13px;height:13px;border:2px solid rgba(0,0,0,.3);border-top-color:#1a1200;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:5px}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="stars"></div>
+<div class="wrap">
+
+  <!-- header -->
+  <div class="hdr">
+    <div class="hdr-star"></div>
+    <h1>FitnessRPG</h1>
+    <p>Erschaffe deinen Helden</p>
+  </div>
+
+  <!-- progress -->
+  <div class="progress" id="progressBar">
+    <div class="prog-step active" id="ps1"></div>
+    <div class="prog-step" id="ps2"></div>
+    <div class="prog-step" id="ps3"></div>
+    <div class="prog-step" id="ps4"></div>
+    <div class="prog-step" id="ps5"></div>
+    <div class="prog-step" id="ps6"></div>
+  </div>
+
+  <div class="card">
+
+    <!-- STEP 1: Name -->
+    <div class="step" id="step2">
+      <div class="sec-title">Schritt 2 — Dein Heldenname</div>
+      <div class="field">
+        <label>Wie soll dein Held heißen?</label>
+        <input type="text" id="heroName" placeholder="Gib deinem Helden einen Namen..." maxlength="24"/>
+      </div>
+      <div class="btn-row">
+        <button class="btn-primary" onclick="goStep(3)">Weiter →</button>
+      </div>
+    </div>
+
+    <!-- STEP 2: Class -->
+    <div class="step" id="step3">
+      <div class="sec-title">Schritt 3 — Wähle deine Klasse</div>
+      <div class="class-grid">
+        <div class="class-card" data-class="warrior" onclick="selectClass('warrior',this)">
+          <span class="class-icon">⚔️</span>
+          <div class="class-name">Krieger</div>
+          <div class="class-desc">Stark und unerschütterlich. Meistert Krafttraining.</div>
+        </div>
+        <div class="class-card" data-class="archer" onclick="selectClass('archer',this)">
+          <span class="class-icon">🏹</span>
+          <div class="class-name">Bogenschütze</div>
+          <div class="class-desc">Flink und ausdauernd. Liebt Cardio und Ausdauer.</div>
+        </div>
+        <div class="class-card" data-class="mage" onclick="selectClass('mage',this)">
+          <span class="class-icon">🔮</span>
+          <div class="class-name">Magier</div>
+          <div class="class-desc">Klug und zielstrebig. Stärkt Geist und Körper.</div>
+        </div>
+      </div>
+      <div class="stats-preview" id="statsPreview">
+        <div class="sec-title" style="margin-bottom:10px">Startwerte</div>
+        <div class="stats-grid" id="statsGrid"></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn-secondary" onclick="goStep(2)">← Zurück</button>
+        <button class="btn-primary" onclick="goStep(4)">Weiter →</button>
+      </div>
+    </div>
+
+    <!-- STEP 3: Avatar -->
+    <div class="step" id="step4">
+      <div class="sec-title">Schritt 4 — Gestalte deinen Avatar</div>
+      <div class="avatar-preview">
+        <div class="avatar-canvas"><svg id="avatarSvg" viewBox="0 0 120 160" width="120" height="160"></svg></div>
+        <div class="avatar-label">Dein Held</div>
+      </div>
+
+      <div class="color-section">
+        <label>Hautfarbe</label>
+        <div class="color-row" id="skinColors"></div>
+      </div>
+      <div class="color-section">
+        <label>Haarfarbe</label>
+        <div class="color-row" id="hairColors"></div>
+      </div>
+      <div class="color-section">
+        <label>Rüstungsfarbe</label>
+        <div class="color-row" id="armorColors"></div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn-secondary" onclick="goStep(3)">← Zurück</button>
+        <button class="btn-primary" onclick="goStep(5)">Weiter →</button>
+      </div>
+    </div>
+
+    <!-- STEP 4: Fitness -->
+    <div class="step" id="step5">
+      <div class="sec-title">Schritt 5 — Dein Fitnessstand</div>
+
+      <div class="fitness-group">
+        <label>1. Wann wurdest du geboren?</label>
+        <div class="field" style="margin-bottom:0">
+          <input type="date" id="birthdate" max="" style="color:var(--text)"/>
+        </div>
+      </div>
+
+      <div class="fitness-group">
+        <label>2. Wie oft trainierst du aktuell?</label>
+        <div class="option-cards">
+          <div class="option-card" onclick="selectOption(this,'level','profi')">
+            <div class="option-radio"></div>
+            <div class="option-text">
+              <strong>🏆 Sport-Profi</strong>
+              <span>5 Mal oder mehr Training pro Woche</span>
+            </div>
+          </div>
+          <div class="option-card" onclick="selectOption(this,'level','fortgeschritten')">
+            <div class="option-radio"></div>
+            <div class="option-text">
+              <strong>💪 Fortgeschrittener Athlet</strong>
+              <span>3 bis 4 Mal Training pro Woche</span>
+            </div>
+          </div>
+          <div class="option-card" onclick="selectOption(this,'level','frischling')">
+            <div class="option-radio"></div>
+            <div class="option-text">
+              <strong>🌱 Frischling</strong>
+              <span>Kein bis 2 Mal Training pro Woche</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="fitness-group">
+        <label>3. Was ist dein Ziel?</label>
+        <div class="option-cards">
+          <div class="option-card" onclick="selectOption(this,'goal','muskeln')">
+            <div class="option-radio"></div>
+            <div class="option-text">
+              <strong>🏋️ Muskeln aufbauen</strong>
+              <span>Kraft und Masse gewinnen</span>
+            </div>
+          </div>
+          <div class="option-card" onclick="selectOption(this,'goal','ausdauer')">
+            <div class="option-radio"></div>
+            <div class="option-text">
+              <strong>🏃 Ausdauer verbessern</strong>
+              <span>Länger und weiter durchhalten</span>
+            </div>
+          </div>
+          <div class="option-card" onclick="selectOption(this,'goal','gewicht')">
+            <div class="option-radio"></div>
+            <div class="option-text">
+              <strong>⚖️ Gewicht verlieren</strong>
+              <span>Fett abbauen und schlanker werden</span>
+            </div>
+          </div>
+          <div class="option-card" onclick="selectOption(this,'goal','allgemein')">
+            <div class="option-radio"></div>
+            <div class="option-text">
+              <strong>🧘 Allgemein fitter werden</strong>
+              <span>Gesünder und aktiver leben</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn-secondary" onclick="goStep(4)">← Zurück</button>
+        <button class="btn-primary" onclick="goStep(6)">Weiter →</button>
+      </div>
+    </div>
+
+    <!-- STEP 5: Summary -->
+    <div class="step" id="step6">
+      <div class="sec-title">Schritt 6 — Dein Held ist bereit</div>
+      <div class="summary-hero">
+        <div class="summary-avatar">
+          <svg id="summaryAvatarSvg" viewBox="0 0 120 160" width="100" height="133"></svg>
+        </div>
+        <div class="summary-info">
+          <div class="summary-name" id="sumName">-</div>
+        <div style="font-family:Cinzel,serif;font-size:.6rem;letter-spacing:.15em;text-transform:uppercase;color:var(--dim);margin-bottom:6px" id="heroTitleLabel">Held – Level 1</div>
+          <div class="summary-class" id="sumClass">-</div>
+          <div class="summary-badges" id="sumBadges"></div>
+        </div>
+      </div>
+      <div class="sec-title">Startwerte – Level 1</div>
+      <div class="full-stats" id="fullStats"></div>
+      <div class="btn-row">
+        <button class="btn-secondary" onclick="goStep(5)">← Zurück</button>
+        <button class="btn-primary" id="saveBtn" onclick="saveCharacter()">⚔️ Abenteuer beginnen!</button>
+      </div>
+      <div class="msg" id="saveMsg"></div>
+    </div>
+
+  </div><!-- /card -->
+</div><!-- /wrap -->
+
+<script>
+// ── Supabase ────────────────────────────────────────────────
+const SUPABASE_URL = 'https://zjykfbfsrmdsllrbblmz.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpqeWtmYmZzcm1kc2xscmJibG16Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk4NTUwOTksImV4cCI6MjA5NTQzMTA5OX0.I8mFhiKo-Fv_GpF-ATWXXYXUUKxu6OzxZdkJr4COGIE';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ── State ───────────────────────────────────────────────────
+const state = {
+  name:'', heroClass:'',
+  skin:'#f4c58a', hair:'#3d2b1f', armor:'#8b6914',
+  birthdate:'', fitnessLevel:'', goal:''
+};
+
+// ── Class stats ─────────────────────────────────────────────
+const CLASS_STATS = {
+  warrior:{lp:3,staerke:3,gewandheit:1,intelligenz:1,schnelligkeit:1,ausdauer:1},
+  archer: {lp:1,staerke:1,gewandheit:3,intelligenz:1,schnelligkeit:2,ausdauer:2},
+  mage:   {lp:2,staerke:1,gewandheit:1,intelligenz:3,schnelligkeit:1,ausdauer:2}
+};
+const STAT_LABELS = {lp:'Lebenspunkte',staerke:'Stärke',gewandheit:'Gewandheit',intelligenz:'Intelligenz',schnelligkeit:'Schnelligkeit',ausdauer:'Ausdauer'};
+const STAT_ICONS  = {lp:'❤️',staerke:'⚔️',gewandheit:'🌿',intelligenz:'🔮',schnelligkeit:'⚡',ausdauer:'🛡️'};
+
+// ── Colors ──────────────────────────────────────────────────
+const SKIN_COLORS  = ['#fddbb4','#f4c58a','#d4956a','#b5703a','#8d4a2a','#4a2c17'];
+const HAIR_COLORS  = ['#f5e6c8','#d4a843','#8b4513','#3d2b1f','#1a1a1a','#c0392b','#2980b9','#8e44ad'];
+const ARMOR_COLORS = {
+  warrior:['#8b4513','#c0392b','#2c3e50','#7f8c8d','#d4a843','#1a472a'],
+  archer: ['#1a472a','#2d5a27','#8b6914','#4a7c59','#2c3e50','#7f8c8d'],
+  mage:   ['#2980b9','#8e44ad','#1a1a2e','#16213e','#c0392b','#d4a843']
+};
+
+// ── Progress steps ──────────────────────────────────────────
+function updateProgress(step){
+  for(let i=1;i<=6;i++){
+    const el=document.getElementById('ps'+i);
+    el.className='prog-step'+(i<step?' done':i===step?' active':'');
+  }
+}
+
+// ── Step navigation ─────────────────────────────────────────
+function goStep(n){
+  // validate
+  if(n===2 && !state.gender){ alert('Bitte wähle dein Geschlecht!'); return; }
+  if(n===2 && !state.gender){ alert('Bitte wähle dein Geschlecht!'); return; }
+    if(n===3 && !document.getElementById('heroName').value.trim()){
+    alert('Bitte gib deinem Helden einen Namen!'); return;
+  }
+  if(n===3 && !state.heroClass){
+    alert('Bitte wähle eine Klasse!'); return;
+  }
+  if(n===5){
+    if(!document.getElementById('birthdate').value){ alert('Bitte gib dein Geburtsdatum an!'); return; }
+    if(!state.fitnessLevel){ alert('Bitte wähle deinen Trainingsstand!'); return; }
+    if(!state.goal){ alert('Bitte wähle dein Ziel!'); return; }
+    buildSummary();
+  }
+  if(n===1) state.name = document.getElementById('heroName').value.trim();
+  document.querySelectorAll('.step').forEach(s=>s.classList.remove('active'));
+  document.getElementById('step'+n).classList.add('active');
+  updateProgress(n);
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+// ── Class selection ─────────────────────────────────────────
+function selectClass(cls, el){
+  state.heroClass = cls;
+  document.querySelectorAll('.class-card').forEach(c=>c.classList.remove('selected'));
+  el.classList.add('selected');
+  renderStatsPreview(cls);
+  // update armor colors
+  renderColors('armorColors', ARMOR_COLORS[cls], 'armor');
+}
+
+function renderStatsPreview(cls){
+  const stats = CLASS_STATS[cls];
+  const grid  = document.getElementById('statsGrid');
+  grid.innerHTML = Object.entries(stats).map(([k,v])=>`
+    <div class="stat-row">
+      <span class="stat-name">${STAT_ICONS[k]} ${STAT_LABELS[k]}</span>
+      <div class="stat-bar-wrap">
+        <div class="stat-pips">${Array.from({length:3},(_,i)=>`<div class="pip${i<v?' filled':''}"></div>`).join('')}</div>
+        <span class="stat-val">${v}</span>
+      </div>
+    </div>`).join('');
+  document.getElementById('statsPreview').classList.add('visible');
+}
+
+// ── Color pickers ───────────────────────────────────────────
+function renderColors(containerId, colors, prop){
+  const cont = document.getElementById(containerId);
+  cont.innerHTML = colors.map(c=>`
+    <div class="color-swatch${state[prop]===c?' active':''}"
+         style="background:${c}"
+         onclick="pickColor('${prop}','${c}',this,document.getElementById('${containerId}'))">
+    </div>`).join('');
+}
+
+function pickColor(prop, color, el, container){
+  state[prop] = color;
+  container.querySelectorAll('.color-swatch').forEach(s=>s.classList.remove('active'));
+  el.classList.add('active');
+  drawAvatar('avatarSvg');
+}
+
+function initColors(){
+  renderColors('skinColors',  SKIN_COLORS,  'skin');
+  renderColors('hairColors',  HAIR_COLORS,  'hair');
+  renderColors('armorColors', ARMOR_COLORS[state.heroClass||'warrior'], 'armor');
+}
+
+// ── SVG Avatar ──────────────────────────────────────────────
+function drawAvatar(svgId){
+  const svg = document.getElementById(svgId);
+  if(!svg) return;
+  const s=state.skin, h=state.hair, a=state.armor;
+  const cls = state.heroClass||'warrior';
+  // weapon indicator
+  const weapon = cls==='warrior'?'⚔️':cls==='archer'?'🏹':'🔮';
+  svg.innerHTML=`
+    <!-- body/torso -->
+    <ellipse cx="60" cy="115" rx="22" ry="28" fill="${a}" opacity=".95"/>
+    <!-- legs -->
+    <rect x="42" y="130" width="15" height="25" rx="4" fill="${darken(a,.15)}"/>
+    <rect x="63" y="130" width="15" height="25" rx="4" fill="${darken(a,.15)}"/>
+    <!-- feet -->
+    <ellipse cx="49" cy="155" rx="9" ry="5" fill="#2c1f0e"/>
+    <ellipse cx="71" cy="155" rx="9" ry="5" fill="#2c1f0e"/>
+    <!-- arms -->
+    <ellipse cx="34" cy="110" rx="8" ry="18" fill="${s}" transform="rotate(-8,34,110)"/>
+    <ellipse cx="86" cy="110" rx="8" ry="18" fill="${s}" transform="rotate(8,86,110)"/>
+    <!-- armor detail -->
+    <ellipse cx="60" cy="105" rx="16" ry="10" fill="${lighten(a,.1)}" opacity=".6"/>
+    <!-- neck -->
+    <rect x="53" y="73" width="14" height="12" rx="3" fill="${s}"/>
+    <!-- head -->
+    <ellipse cx="60" cy="62" rx="24" ry="26" fill="${s}"/>
+    <!-- hair -->
+    <ellipse cx="60" cy="42" rx="24" ry="14" fill="${h}"/>
+    <ellipse cx="36" cy="58" rx="6" ry="14" fill="${h}"/>
+    <ellipse cx="84" cy="58" rx="6" ry="14" fill="${h}"/>
+    <!-- eyes -->
+    <ellipse cx="51" cy="62" rx="4" ry="4.5" fill="white"/>
+    <ellipse cx="69" cy="62" rx="4" ry="4.5" fill="white"/>
+    <ellipse cx="52" cy="63" rx="2.5" ry="3" fill="#2c1f0e"/>
+    <ellipse cx="70" cy="63" rx="2.5" ry="3" fill="#2c1f0e"/>
+    <circle cx="53" cy="62" r="1" fill="white"/>
+    <circle cx="71" cy="62" r="1" fill="white"/>
+    <!-- eyebrows -->
+    <path d="M46 55 Q51 52 56 55" stroke="${h}" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+    <path d="M64 55 Q69 52 74 55" stroke="${h}" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+    <!-- mouth -->
+    <path d="M53 72 Q60 77 67 72" stroke="#a0604a" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+    <!-- class badge -->
+    <text x="60" y="148" text-anchor="middle" font-size="11" dy="-110">${weapon}</text>
+  `;
+}
+
+function darken(hex,amt){
+  let r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  r=Math.max(0,r-Math.round(255*amt));g=Math.max(0,g-Math.round(255*amt));b=Math.max(0,b-Math.round(255*amt));
+  return '#'+[r,g,b].map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+function lighten(hex,amt){
+  let r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  r=Math.min(255,r+Math.round(255*amt));g=Math.min(255,g+Math.round(255*amt));b=Math.min(255,b+Math.round(255*amt));
+  return '#'+[r,g,b].map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+
+// Re-draw avatar when step 3 becomes visible
+const origGoStep = goStep;
+
+// ── Option cards ────────────────────────────────────────────
+function selectOption(el, group, value){
+  document.querySelectorAll(`[onclick*="'${group}'"]`).forEach(c=>c.classList.remove('selected'));
+  el.classList.add('selected');
+  state[group==='level'?'fitnessLevel':'goal'] = value;
+}
+
+// ── Summary ─────────────────────────────────────────────────
+function buildSummary(){
+  state.name = document.getElementById('heroName').value.trim();
+  state.birthdate = document.getElementById('birthdate').value;
+
+  document.getElementById('sumName').textContent = state.name;
+  const clsEl = document.getElementById('sumClass');
+  const clsNames = {warrior:'⚔️ Krieger',archer:'🏹 Bogenschütze',mage:'🔮 Magier'};
+  clsEl.textContent = clsNames[state.heroClass]||'';
+  clsEl.className = 'summary-class '+state.heroClass;
+
+  // badges
+  const levelLabels={profi:'Sport-Profi',fortgeschritten:'Fortgeschrittener Athlet',frischling:'Frischling'};
+  const goalLabels={muskeln:'Muskeln aufbauen',ausdauer:'Ausdauer verbessern',gewicht:'Gewicht verlieren',allgemein:'Allgemein fitter'};
+  document.getElementById('sumBadges').innerHTML=
+    `<div class="badge">${levelLabels[state.fitnessLevel]||''}</div><div class="badge">${goalLabels[state.goal]||''}</div>`;
+
+  // draw avatar copy
+  setTimeout(()=>{
+    const orig = document.getElementById('avatarSvg');
+    const sumSvg = document.getElementById('summaryAvatarSvg');
+    if(orig && sumSvg) sumSvg.innerHTML = orig.innerHTML;
+  },50);
+
+  // full stats
+  const stats = CLASS_STATS[state.heroClass]||CLASS_STATS.warrior;
+  document.getElementById('fullStats').innerHTML = Object.entries(stats).map(([k,v])=>`
+    <div class="full-stat">
+      <div class="full-stat-name">${STAT_ICONS[k]} ${STAT_LABELS[k]}</div>
+      <div class="full-stat-val">${v}</div>
+    </div>`).join('');
+}
+
+// ── Save to Supabase ────────────────────────────────────────
+async function saveCharacter(){
+  const btn = document.getElementById('saveBtn');
+  const msg = document.getElementById('saveMsg');
+  btn.disabled=true;
+  btn.innerHTML='<span class="spinner"></span>Wird gespeichert...';
+
+  const { data:{ session } } = await sb.auth.getSession();
+  if(!session){
+    msg.className='msg error'; msg.textContent='Du bist nicht eingeloggt. Bitte zuerst einloggen.';
+    btn.disabled=false; btn.innerHTML='⚔️ Abenteuer beginnen!'; return;
+  }
+
+  const stats = CLASS_STATS[state.heroClass];
+  const charData = {
+    user_id:    session.user.id,
+    name:       state.name,
+    class:      state.heroClass,
+    skin_color: state.skin,
+    hair_color: state.hair,
+    armor_color:state.armor,
+    birthdate:  state.birthdate,
+    fitness_level: state.fitnessLevel,
+    goal:       state.goal,
+    level:      1,
+    xp:         0,
+    lp:         stats.lp,
+    staerke:    stats.staerke,
+    gewandheit: stats.gewandheit,
+    intelligenz:stats.intelligenz,
+    schnelligkeit:stats.schnelligkeit,
+    ausdauer:   stats.ausdauer,
+    weapon:     state.heroClass==='warrior'?'Schwert':state.heroClass==='archer'?'Bogen':'Holzstab',
+    gender:     state.gender,
+    pronoun:    state.pronoun,
+    fem_scale:  state.femScale,
+    created_at: new Date().toISOString()
+  };
+
+  const { error } = await sb.from('characters').insert([charData]);
+  btn.disabled=false;
+  btn.innerHTML='⚔️ Abenteuer beginnen!';
+
+  if(error){
+    // table may not exist yet – show friendly message
+    if(error.code==='42P01'){
+      msg.className='msg error';
+      msg.textContent='Die Datenbanktabelle fehlt noch. Bitte die Anleitung im Chat befolgen!';
+    } else {
+      msg.className='msg error'; msg.textContent='Fehler: '+error.message;
+    }
+  } else {
+    msg.className='msg success';
+    msg.textContent='🎉 Dein Held wurde erschaffen! Das Abenteuer beginnt...';
+    setTimeout(()=>{ window.location.href='index.html'; },2000);
+  }
+}
+
+// ── Init ────────────────────────────────────────────────────
+document.getElementById('birthdate').max = new Date().toISOString().split('T')[0];
+initColors();
+drawAvatar('avatarSvg');
+
+// redraw avatar whenever step3 is shown
+const _goStep = window.goStep;
+window.goStep = function(n){
+  _goStep(n);
+  if(n===3) setTimeout(()=>drawAvatar('avatarSvg'),50);
+};
+
+// live redraw on color change
+setInterval(()=>drawAvatar('avatarSvg'),300);
+</script>
+</body>
+</html>
