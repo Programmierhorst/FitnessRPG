@@ -473,98 +473,104 @@ body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text)}
 
 <!-- ── HERO OVERLAY ── -->
 <div class="overlay" id="heroOverlay">
-  <div class="hero-panel" style="width:min(560px,98vw)">
+  <div class="hero-panel" style="width:min(580px,98vw);max-height:95vh;overflow-y:auto">
     <div class="hp-hdr">
       <div class="hp-hdr-title" id="heroPanelTitle">⚔️ Heldenmenü</div>
       <button class="btn-close" onclick="closeOverlay('heroOverlay')">✕</button>
     </div>
 
     <!-- Level + XP Bar -->
-    <div style="padding:12px 20px;border-bottom:1px solid var(--border);background:rgba(201,168,76,.04)">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <span style="font-family:Cinzel,serif;font-size:.65rem;letter-spacing:.12em;text-transform:uppercase;color:var(--gold)">⭐ Level <span id="heroLevelBig">1</span></span>
+    <div style="padding:10px 16px;border-bottom:1px solid var(--border);background:rgba(201,168,76,.04)">
+      <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+        <span style="font-family:Cinzel,serif;font-size:.65rem;letter-spacing:.1em;color:var(--gold)">⭐ Level <span id="heroLevelBig">1</span></span>
         <span style="font-family:Cinzel,serif;font-size:.6rem;color:var(--dim)"><span id="heroXPCur">0</span> / <span id="heroXPNext">0</span> EXP</span>
       </div>
-      <div style="height:8px;background:rgba(255,255,255,.08);border-radius:4px;overflow:hidden;border:1px solid rgba(201,168,76,.1)">
-        <div id="heroXPBar" style="height:100%;background:linear-gradient(90deg,var(--gold-d),var(--gold-l));width:0%;transition:width .6s ease;border-radius:4px"></div>
+      <div style="height:7px;background:rgba(255,255,255,.08);border-radius:4px;overflow:hidden">
+        <div id="heroXPBar" style="height:100%;background:linear-gradient(90deg,var(--gold-d),var(--gold-l));width:0%;transition:width .5s"></div>
       </div>
     </div>
 
-    <!-- Hero summary -->
-    <div class="hero-summary">
-      <div class="hero-avatar-big" id="heroAvatarBig">⚔️</div>
-      <div class="hero-meta">
-        <div class="hero-meta-name" id="heroMetaName">Held</div>
-        <div class="hero-meta-class" id="heroMetaClass">Krieger • Level 1</div>
-        <div class="hero-res">
-          <div class="res-badge">💰 <span id="heroGold">0</span> Gold</div>
-          <div class="res-badge">✨ <span id="heroXP">0</span> XP</div>
-        </div>
+    <!-- Name + Gold -->
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;border-bottom:1px solid var(--border)">
+      <div>
+        <div style="font-family:'Cinzel Decorative',serif;font-size:.95rem;color:var(--gold-l)" id="heroMetaName">Held</div>
+        <div style="font-family:Cinzel,serif;font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin-top:2px" id="heroMetaClass">Krieger • Level 1</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <div class="res-badge">💰 <span id="heroGold">0</span></div>
+        <div class="res-badge">✨ <span id="heroXP">0</span> XP</div>
       </div>
     </div>
 
-    <!-- Equipment + Stats layout -->
-    <div style="display:flex;gap:0;border-top:1px solid var(--border)">
+    <!-- Equipment layout: Left | Center char | Right -->
+    <div style="display:flex;border-bottom:1px solid var(--border)">
 
-      <!-- Left equipment column -->
-      <div style="padding:12px;border-right:1px solid var(--border);display:flex;flex-direction:column;gap:6px;min-width:80px">
-        <div style="font-family:Cinzel,serif;font-size:.55rem;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);text-align:center;margin-bottom:2px">Links</div>
-        <div class="equip-slot" id="slot_weapon1" data-slot="weapon1" onclick="equipSlotClick('weapon1')" title="Hauptwaffe">⚔️<div class="equip-label">Waffe 1</div></div>
-        <div class="equip-slot" id="slot_helmet"  data-slot="helmet"  onclick="equipSlotClick('helmet')"  title="Helm">🪖<div class="equip-label">Helm</div></div>
-        <div class="equip-slot" id="slot_chest"   data-slot="chest"   onclick="equipSlotClick('chest')"   title="Brust">🛡️<div class="equip-label">Brust</div></div>
-        <div class="equip-slot" id="slot_gloves"  data-slot="gloves"  onclick="equipSlotClick('gloves')"  title="Handschuhe">🧤<div class="equip-label">Handsch.</div></div>
-        <div class="equip-slot" id="slot_potion"  data-slot="potion"  onclick="equipSlotClick('potion')"  title="Trank" style="border-color:rgba(91,127,232,.4)">🧪<div class="equip-label">Trank</div></div>
+      <!-- Left slots -->
+      <div style="display:flex;flex-direction:column;gap:4px;padding:10px 8px;border-right:1px solid var(--border)">
+        <div class="equip-slot" id="slot_weapon1"  onclick="equipSlotClick('weapon1')"  data-accepts="weapon">⚔️<div class="equip-label">Waffe 1</div></div>
+        <div class="equip-slot" id="slot_helmet"   onclick="equipSlotClick('helmet')"   data-accepts="helmet">🪖<div class="equip-label">Helm</div></div>
+        <div class="equip-slot" id="slot_chest"    onclick="equipSlotClick('chest')"    data-accepts="chest">🛡️<div class="equip-label">Brust</div></div>
+        <div class="equip-slot" id="slot_gloves"   onclick="equipSlotClick('gloves')"   data-accepts="gloves">🧤<div class="equip-label">Handsch.</div></div>
+        <div class="equip-slot" id="slot_ring"     onclick="equipSlotClick('ring')"     data-accepts="ring">💍<div class="equip-label">Ring</div></div>
       </div>
 
-      <!-- Center: character visual -->
-      <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:12px;min-height:200px;position:relative">
-        <svg id="heroEquipSvg" viewBox="0 0 100 140" width="90" height="126">
-          <!-- body -->
+      <!-- Center character -->
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 4px;gap:6px">
+        <svg viewBox="0 0 100 140" width="80" height="112">
           <ellipse cx="50" cy="90" rx="18" ry="22" fill="#8b6914" opacity=".9"/>
           <ellipse cx="50" cy="84" rx="13" ry="9" fill="#c9a84c" opacity=".5"/>
-          <!-- legs -->
           <rect x="37" y="104" width="11" height="20" rx="3" fill="#5a3e20"/>
           <rect x="52" y="104" width="11" height="20" rx="3" fill="#5a3e20"/>
-          <!-- arms -->
           <ellipse cx="30" cy="88" rx="6" ry="14" fill="#d4956a" transform="rotate(-8,30,88)"/>
           <ellipse cx="70" cy="88" rx="6" ry="14" fill="#d4956a" transform="rotate(8,70,88)"/>
-          <!-- neck + head -->
           <rect x="45" y="62" width="10" height="9" rx="2" fill="#d4956a"/>
           <circle cx="50" cy="54" r="14" fill="#d4956a"/>
-          <!-- hair -->
           <ellipse cx="50" cy="43" rx="14" ry="8" fill="#3d2b1f"/>
-          <!-- eyes -->
           <circle cx="45" cy="54" r="2" fill="#2c1f0e"/>
           <circle cx="55" cy="54" r="2" fill="#2c1f0e"/>
-          <!-- smile -->
           <path d="M45 60 Q50 64 55 60" stroke="#8b4513" stroke-width="1.2" fill="none"/>
         </svg>
-        <div style="position:absolute;bottom:6px;font-family:Cinzel,serif;font-size:.55rem;letter-spacing:.1em;color:var(--dim);text-align:center">Tippe Slot für Details</div>
+        <!-- Trank slot under character -->
+        <div class="equip-slot" id="slot_potion" onclick="equipSlotClick('potion')" data-accepts="potion" style="border-color:rgba(91,127,232,.4);width:52px;height:52px">🧪<div class="equip-label">Trank</div></div>
+        <div style="font-family:Cinzel,serif;font-size:.45rem;letter-spacing:.08em;color:var(--dim)">Tippe Slot für Details</div>
       </div>
 
-      <!-- Right equipment column -->
-      <div style="padding:12px;border-left:1px solid var(--border);display:flex;flex-direction:column;gap:6px;min-width:80px">
-        <div style="font-family:Cinzel,serif;font-size:.55rem;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);text-align:center;margin-bottom:2px">Rechts</div>
-        <div class="equip-slot" id="slot_weapon2" data-slot="weapon2" onclick="equipSlotClick('weapon2')" title="Nebenwaffe">🗡️<div class="equip-label">Waffe 2</div></div>
-        <div class="equip-slot" id="slot_pants"   data-slot="pants"   onclick="equipSlotClick('pants')"   title="Hose">👖<div class="equip-label">Hose</div></div>
-        <div class="equip-slot" id="slot_belt"    data-slot="belt"    onclick="equipSlotClick('belt')"    title="Gürtel">🟫<div class="equip-label">Gürtel</div></div>
-        <div class="equip-slot" id="slot_boots"   data-slot="boots"   onclick="equipSlotClick('boots')"   title="Stiefel">👢<div class="equip-label">Stiefel</div></div>
-        <div class="equip-slot" id="slot_ring"    data-slot="ring"    onclick="equipSlotClick('ring')"    title="Ring">💍<div class="equip-label">Ring</div></div>
-        <div class="equip-slot" id="slot_necklace" data-slot="necklace" onclick="equipSlotClick('necklace')" title="Halskette">📿<div class="equip-label">Kette</div></div>
+      <!-- Right slots -->
+      <div style="display:flex;flex-direction:column;gap:4px;padding:10px 8px;border-left:1px solid var(--border)">
+        <div class="equip-slot" id="slot_weapon2"  onclick="equipSlotClick('weapon2')"  data-accepts="weapon">🗡️<div class="equip-label">Waffe 2</div></div>
+        <div class="equip-slot" id="slot_pants"    onclick="equipSlotClick('pants')"    data-accepts="pants">👖<div class="equip-label">Hose</div></div>
+        <div class="equip-slot" id="slot_belt"     onclick="equipSlotClick('belt')"     data-accepts="belt">🟫<div class="equip-label">Gürtel</div></div>
+        <div class="equip-slot" id="slot_boots"    onclick="equipSlotClick('boots')"    data-accepts="boots">👢<div class="equip-label">Stiefel</div></div>
+        <div class="equip-slot" id="slot_necklace" onclick="equipSlotClick('necklace')" data-accepts="necklace">📿<div class="equip-label">Kette</div></div>
       </div>
     </div>
 
     <!-- Stats -->
-    <div class="stats-section" style="border-top:1px solid var(--border)">
+    <div style="padding:10px 16px;border-bottom:1px solid var(--border)">
       <div class="sec-hdr">Stats</div>
       <div class="stats-grid" id="heroStatsGrid"></div>
     </div>
 
-    <!-- Bag/Inventory -->
-    <div class="bag-section">
+    <!-- Beutel -->
+    <div style="padding:10px 16px">
       <div class="sec-hdr">Beutel</div>
-      <div class="bag-grid" id="bagGrid"></div>
+      <div class="bag-grid" id="bagGrid" style="margin-top:8px"></div>
     </div>
+  </div>
+</div>
+
+<!-- ── ITEM INFO OVERLAY ── -->
+<div class="overlay" id="itemOverlay">
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:4px;width:min(340px,92vw);padding:24px;box-shadow:0 0 40px rgba(0,0,0,.8)">
+    <div style="text-align:center;margin-bottom:16px">
+      <div style="font-size:2.8rem;margin-bottom:8px" id="itemOverlayIcon">🎒</div>
+      <div style="font-family:'Cinzel Decorative',serif;font-size:1rem;color:var(--gold-l);margin-bottom:4px" id="itemOverlayName">Item</div>
+      <div style="font-family:Cinzel,serif;font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)" id="itemOverlayType">Typ</div>
+    </div>
+    <div style="background:var(--card2);border:1px solid var(--border);border-radius:3px;padding:10px 14px;margin-bottom:14px" id="itemOverlayStats"></div>
+    <div style="font-size:.88rem;color:var(--dim);margin-bottom:16px;line-height:1.5" id="itemOverlayDesc"></div>
+    <div style="display:flex;flex-direction:column;gap:8px" id="itemOverlayBtns"></div>
+    <button onclick="closeOverlay('itemOverlay')" style="width:100%;margin-top:8px;padding:9px;background:transparent;border:1px solid var(--border);border-radius:3px;color:var(--dim);font-family:Cinzel,serif;font-size:.65rem;letter-spacing:.12em;text-transform:uppercase;cursor:pointer">Schließen</button>
   </div>
 </div>
 
@@ -729,106 +735,210 @@ function openMissions(){
   document.getElementById('missionOverlay').classList.add('active');
 }
 
+
+// ── Item System ───────────────────────────────────────────────
+
+// Welcher Item-Typ passt in welchen Slot
+const SLOT_ACCEPTS = {
+  weapon1:'weapon', weapon2:'weapon', helmet:'helmet',
+  chest:'chest', gloves:'gloves', pants:'pants',
+  belt:'belt', boots:'boots', ring:'ring',
+  necklace:'necklace', potion:'potion'
+};
+
+const SLOT_LABELS = {
+  weapon1:'Waffe 1', weapon2:'Waffe 2', helmet:'Helm',
+  chest:'Brust', gloves:'Handschuhe', pants:'Hose',
+  belt:'Gürtel', boots:'Stiefel', ring:'Ring',
+  necklace:'Halskette', potion:'Trank'
+};
+
+const TYPE_LABELS = {
+  weapon:'Waffe', helmet:'Helm', chest:'Brustpanzer',
+  gloves:'Handschuhe', pants:'Hose', belt:'Gürtel',
+  boots:'Stiefel', ring:'Ring', necklace:'Halskette',
+  potion:'Trank', quest_reward:'Missionsbelohnung', shop:'Gekauft'
+};
+
+// Aktuell geladene Inventar-Items
+let _invItems = [];
+let _currentSlotClicked = null;
+
 async function openHero(){
   if(!character){ await loadCharacter(); }
-  // XP bar
-  const lvl    = character.level || 1;
-  const curXP  = character.xp    || 0;
-  const needed = expRequired(lvl + 1);
-  const pct    = needed > 0 ? Math.min(100, (curXP/needed)*100) : 100;
+
+  // XP Bar
+  const lvl   = character.level||1;
+  const curXP = character.xp||0;
+  const needed = expRequired(lvl+1);
+  const pct = needed>0 ? Math.min(100,(curXP/needed)*100) : 100;
   document.getElementById('heroLevelBig').textContent = lvl;
   document.getElementById('heroXPCur').textContent    = curXP;
   document.getElementById('heroXPNext').textContent   = needed;
   document.getElementById('heroXPBar').style.width    = pct+'%';
   document.getElementById('heroXP').textContent       = curXP;
-  const cls = character.class||'warrior';
-  document.getElementById('heroAvatarBig').textContent  = CLASS_ICONS[cls]||'⚔️';
-  document.getElementById('heroMetaName').textContent   = character.name||'Held';
-  document.getElementById('heroMetaClass').textContent  = `${CLASS_NAMES[cls]||'Held'} • Level ${character.level||1}`;
-  document.getElementById('heroGold').textContent       = character.gold||0;
-  document.getElementById('heroXP').textContent         = character.xp||0;
+  document.getElementById('heroGold').textContent     = character.gold||0;
+  document.getElementById('heroMetaName').textContent = character.name||'Held';
+  const clsNames={warrior:'Krieger',archer:'Bogenschütze',mage:'Magier'};
+  document.getElementById('heroMetaClass').textContent= `${clsNames[character.class]||'Held'} • Level ${lvl}`;
   document.getElementById('heroPanelTitle').textContent = character.pronoun==='heldin'?'👑 Heldinnenmenü':'⚔️ Heldenmenü';
 
-  const stats = ['lp','staerke','gewandheit','intelligenz','schnelligkeit','ausdauer'];
-  const labels= {lp:'Lebenspunkte',staerke:'Stärke',gewandheit:'Gewandheit',intelligenz:'Intelligenz',schnelligkeit:'Schnelligkeit',ausdauer:'Ausdauer'};
-  document.getElementById('heroStatsGrid').innerHTML = stats.map(s=>`
-    <div class="stat-item">
-      <div class="stat-item-name">${STAT_ICONS[s]||''} ${labels[s]}</div>
-      <div class="stat-item-val">${character[s]||1}</div>
-    </div>`).join('');
+  // Stats
+  const statLabels={lp:'Lebenspunkte',staerke:'Stärke',gewandheit:'Gewandheit',
+    intelligenz:'Intelligenz',schnelligkeit:'Schnelligkeit',ausdauer:'Ausdauer'};
+  const statIcons={lp:'❤️',staerke:'⚔️',gewandheit:'🌿',intelligenz:'🔮',schnelligkeit:'⚡',ausdauer:'🛡️'};
+  document.getElementById('heroStatsGrid').innerHTML =
+    Object.entries(statLabels).map(([k,l])=>`
+      <div class="stat-item">
+        <div class="stat-item-name">${statIcons[k]} ${l}</div>
+        <div class="stat-item-val">${character[k]||1}</div>
+      </div>`).join('');
 
-  // Inventar aus Supabase laden
-  const weaponIcon = {Schwert:'⚔️',Bogen:'🏹',Holzstab:'🪄'}[character.weapon]||'🗡️';
-  let invItems = [];
+  // Inventar laden
+  _invItems = [];
   try {
-    const { data: inv } = await sb
-      .from('inventory').select('*')
-      .eq('character_id', character.id)
-      .order('created_at', {ascending:false});
-    if (inv) invItems = inv;
-  } catch(e) { console.log('Inventar Fehler:', e); }
+    const {data:inv} = await sb.from('inventory').select('*')
+      .eq('character_id',character.id).order('created_at',{ascending:false});
+    if(inv) _invItems = inv;
+  } catch(e){ console.log('Inventar Fehler:',e); }
 
-  // Ausrüstungs-Slots befüllen
-  const SLOTS = ['weapon1','weapon2','helmet','chest','gloves','pants','belt','boots','ring','necklace','potion'];
-  const DEFAULT_ICONS = {
-    weapon1: weaponIcon, weapon2:'🗡️', helmet:'🪖', chest:'🛡️',
-    gloves:'🧤', pants:'👖', belt:'🟫', boots:'👢',
-    ring:'💍', necklace:'📿', potion:'🧪'
-  };
-  const DEFAULT_LABELS = {
-    weapon1: character.weapon||'Waffe 1', weapon2:'Waffe 2',
-    helmet:'Helm', chest:'Brust', gloves:'Handsch.',
-    pants:'Hose', belt:'Gürtel', boots:'Stiefel',
-    ring:'Ring', necklace:'Kette', potion:'Trank'
-  };
-
-  // Startwaffe in weapon1 slot
-  const equippedItems = { weapon1: {icon: weaponIcon, label: character.weapon||'Waffe'} };
-
-  // Equipped items aus Inventar
-  invItems.filter(i=>i.equipped_slot).forEach(i=>{
-    equippedItems[i.equipped_slot] = {icon: i.item_icon||'🎒', label: i.item_name};
-  });
-
-  SLOTS.forEach(slot=>{
-    const el = document.getElementById('slot_'+slot);
-    if(!el) return;
-    const item = equippedItems[slot];
-    if(item){
-      el.innerHTML = `${item.icon}<div class="equip-label">${item.label}</div>`;
-      el.classList.add('equipped');
-      el.classList.remove('empty');
-    } else {
-      el.innerHTML = `${DEFAULT_ICONS[slot]}<div class="equip-label">${DEFAULT_LABELS[slot]}</div>`;
-      el.classList.remove('equipped');
-      el.classList.add('empty');
-    }
-  });
-
-  // Beutel: nicht ausgerüstete Items
-  const bagItems = invItems.filter(i=>!i.equipped_slot);
-  while(bagItems.length < 12) bagItems.push(null);
-  document.getElementById('bagGrid').innerHTML = bagItems.slice(0,12).map(s=>s ? `
-    <div class="bag-slot" onclick="equipItem('${s.id}','${s.item_name}')">
-      ${s.item_icon||'🎒'}
-      <div class="bag-slot-label">${s.item_name}</div>
-    </div>` : '<div class="bag-slot empty"></div>').join('');
-
+  renderEquipSlots();
+  renderBag();
   document.getElementById('heroOverlay').classList.add('active');
 }
 
-function equipSlotClick(slot){
-  // Zeige Info über den Slot
-  const el = document.getElementById('slot_'+slot);
-  if(el && el.classList.contains('equipped')){
-    const label = el.querySelector('.equip-label')?.textContent || slot;
-    if(confirm(`"${label}" ablegen?`)){
-      el.classList.remove('equipped');
-      el.classList.add('empty');
-      // TODO: in Supabase unequip
+function renderEquipSlots(){
+  const weaponIcon={Schwert:'⚔️',Bogen:'🏹',Holzstab:'🪄'}[character.weapon]||'⚔️';
+  const defaults={
+    weapon1:{icon:weaponIcon,label:character.weapon||'Startwaffe',builtin:true},
+    weapon2:{icon:'🗡️',label:'Leer',empty:true},
+    helmet:{icon:'🪖',label:'Leer',empty:true}, chest:{icon:'🛡️',label:'Leer',empty:true},
+    gloves:{icon:'🧤',label:'Leer',empty:true}, pants:{icon:'👖',label:'Leer',empty:true},
+    belt:{icon:'🟫',label:'Leer',empty:true},   boots:{icon:'👢',label:'Leer',empty:true},
+    ring:{icon:'💍',label:'Leer',empty:true},   necklace:{icon:'📿',label:'Leer',empty:true},
+    potion:{icon:'🧪',label:'Leer',empty:true}
+  };
+
+  // Ausgerüstete Items aus Inventar
+  _invItems.filter(i=>i.equipped_slot).forEach(i=>{
+    defaults[i.equipped_slot] = {icon:i.item_icon||'🎒',label:i.item_name,id:i.id,item:i};
+  });
+
+  Object.entries(defaults).forEach(([slot,data])=>{
+    const el = document.getElementById('slot_'+slot);
+    if(!el) return;
+    el.innerHTML = `${data.icon}<div class="equip-label">${data.label}</div>`;
+    if(data.empty){
+      el.classList.add('empty'); el.classList.remove('equipped');
+    } else {
+      el.classList.remove('empty'); el.classList.add('equipped');
     }
+    el._slotData = data;
+  });
+}
+
+function renderBag(){
+  const bagItems = _invItems.filter(i=>!i.equipped_slot);
+  const slots = [...bagItems, ...Array(Math.max(0,12-bagItems.length)).fill(null)];
+  document.getElementById('bagGrid').innerHTML = slots.slice(0,12).map((item,idx)=>
+    item ? `<div class="bag-slot" onclick="showItemInfo('${item.id}')">
+      ${item.item_icon||'🎒'}
+      <div class="bag-slot-label">${item.item_name}</div>
+    </div>` : '<div class="bag-slot empty"></div>'
+  ).join('');
+}
+
+function showItemInfo(itemId){
+  const item = _invItems.find(i=>i.id===itemId);
+  if(!item) return;
+
+  const typeLabel = TYPE_LABELS[item.item_type]||item.item_type||'Item';
+  const slotFor   = item.item_slot || guessSlot(item);
+
+  document.getElementById('itemOverlayIcon').textContent = item.item_icon||'🎒';
+  document.getElementById('itemOverlayName').textContent = item.item_name;
+  document.getElementById('itemOverlayType').textContent = typeLabel + (slotFor?' • Slot: '+SLOT_LABELS[slotFor]:'');
+
+  // Stats anzeigen
+  const bonus = item.stat_bonus || {};
+  const statNames={lp:'Lebenspunkte',staerke:'Stärke',gewandheit:'Gewandheit',
+    intelligenz:'Intelligenz',schnelligkeit:'Schnelligkeit',ausdauer:'Ausdauer'};
+  const statsHtml = Object.entries(bonus).length > 0
+    ? Object.entries(bonus).map(([k,v])=>`
+        <div style="display:flex;justify-content:space-between;font-size:.88rem;padding:3px 0">
+          <span style="color:var(--dim)">${statNames[k]||k}</span>
+          <span style="color:var(--gold-l);font-family:Cinzel,serif">+${v}</span>
+        </div>`).join('')
+    : '<div style="color:var(--dim);font-size:.85rem">Keine Stat-Boni</div>';
+  document.getElementById('itemOverlayStats').innerHTML = statsHtml;
+  document.getElementById('itemOverlayDesc').textContent = item.description||'';
+
+  // Buttons
+  const btns = document.getElementById('itemOverlayBtns');
+  if(item.equipped_slot){
+    btns.innerHTML = `<button onclick="unequipItem('${item.id}')" style="width:100%;padding:11px;background:transparent;border:1px solid var(--border);border-radius:3px;color:var(--text);font-family:Cinzel,serif;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;cursor:pointer">📦 Ablegen → Beutel</button>`;
+  } else if(slotFor){
+    btns.innerHTML = `<button onclick="equipItem('${item.id}','${slotFor}')" style="width:100%;padding:11px;background:linear-gradient(135deg,var(--gold-d),var(--gold));border:none;border-radius:3px;color:#1a1200;font-family:Cinzel,serif;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;cursor:pointer">⚔️ Ausrüsten</button>`;
+  }
+
+  closeOverlay('heroOverlay');
+  document.getElementById('itemOverlay').classList.add('active');
+}
+
+function showEquipSlotDetail(slot, data){
+  if(!data || data.empty || data.builtin) return;
+  showItemInfo(data.id);
+}
+
+function equipSlotClick(slot){
+  const el = document.getElementById('slot_'+slot);
+  const data = el?._slotData;
+  if(data && !data.empty && !data.builtin && data.id){
+    showItemInfo(data.id);
   }
 }
+
+function guessSlot(item){
+  // Versuche Slot aus item_type oder item_slot zu ermitteln
+  if(item.item_slot) return item.item_slot;
+  const t = item.item_type||'';
+  if(t==='shop'||t==='quest_reward'){
+    // Anhand Name raten
+    const n = (item.item_name||'').toLowerCase();
+    if(n.includes('schwert')||n.includes('bogen')||n.includes('stab')||n.includes('ring'+'er')||n.includes('waffe')) return 'weapon1';
+    if(n.includes('helm')||n.includes('haube')||n.includes('krone')) return 'helmet';
+    if(n.includes('ring')) return 'ring';
+    if(n.includes('halskette')||n.includes('kette')||n.includes('amulett')) return 'necklace';
+    if(n.includes('trank')||n.includes('heiltrank')) return 'potion';
+    if(n.includes('stiefel')||n.includes('schuh')) return 'boots';
+    if(n.includes('handsch')||n.includes('handschuh')) return 'gloves';
+    if(n.includes('hose')||n.includes('beink')) return 'pants';
+    if(n.includes('gürtel')) return 'belt';
+    if(n.includes('rüstung')||n.includes('brust')||n.includes('panzer')) return 'chest';
+  }
+  return null;
+}
+
+async function equipItem(itemId, slot){
+  // Prüfe ob bereits etwas im Slot ist
+  const existing = _invItems.find(i=>i.equipped_slot===slot);
+  if(existing){
+    // Altes Item in Beutel legen
+    await sb.from('inventory').update({equipped_slot:null}).eq('id',existing.id);
+  }
+  // Neues Item ausrüsten
+  await sb.from('inventory').update({equipped_slot:slot}).eq('id',itemId);
+  closeOverlay('itemOverlay');
+  await openHero();
+}
+
+async function unequipItem(itemId){
+  await sb.from('inventory').update({equipped_slot:null}).eq('id',itemId);
+  closeOverlay('itemOverlay');
+  await openHero();
+}
+
+
 
 async function equipItem(itemId, itemName){
   const slot = prompt(`In welchen Slot möchtest du "${itemName}" anlegen?\nMögliche Slots: weapon1, weapon2, helmet, chest, gloves, pants, belt, boots, ring, necklace, potion`);

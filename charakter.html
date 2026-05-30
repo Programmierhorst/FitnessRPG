@@ -469,13 +469,13 @@ function goStep(n){
   if(n===4 && !state.heroClass){
     alert('Bitte wähle eine Klasse!'); return;
   }
-  if(n===5){
+  if(n===6){
     if(!document.getElementById('birthdate').value){ alert('Bitte gib dein Geburtsdatum an!'); return; }
     if(!state.fitnessLevel){ alert('Bitte wähle deinen Trainingsstand!'); return; }
     if(!state.goal){ alert('Bitte wähle dein Ziel!'); return; }
     buildSummary();
   }
-  if(n===1) state.name = document.getElementById('heroName').value.trim();
+  if(n===3) state.name = document.getElementById('heroName').value.trim();
   document.querySelectorAll('.step').forEach(s=>s.classList.remove('active'));
   document.getElementById('step'+n).classList.add('active');
   updateProgress(n);
