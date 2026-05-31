@@ -992,9 +992,11 @@ async function equipItem(itemId, slot){
   // Altes Item im Slot in Beutel legen
   const existing = _invItems.find(i=>i.equipped_slot===slot);
   if(existing){
-    await sb.from('inventory').update({equipped_slot:null}).eq('id',existing.id);
+    const {error:e1} = await sb.from('inventory').update({equipped_slot:null}).eq('id',existing.id);
+    if(e1) { alert('Fehler beim Ablegen: '+e1.message+' Code:'+e1.code); return; }
   }
-  await sb.from('inventory').update({equipped_slot:slot}).eq('id',itemId);
+  const {error:e2} = await sb.from('inventory').update({equipped_slot:slot}).eq('id',itemId);
+  if(e2) { alert('Fehler beim Ausrüsten: '+e2.message+' Code:'+e2.code); return; }
   closeOverlay('itemOverlay');
   await openHero();
 }
