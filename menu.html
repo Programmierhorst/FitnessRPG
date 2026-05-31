@@ -815,6 +815,133 @@ const TYPE_LABELS = {
   potion:'Trank', quest_reward:'Missionsbelohnung', shop:'Gekauft'
 };
 
+// ══════════════════════════════════════════════════════════════
+// KOMPLETTES AUSRÜSTUNGSSYSTEM
+// ══════════════════════════════════════════════════════════════
+
+const ITEM_DATABASE = {
+
+  // ── KRIEGER WAFFEN (Slot: weapon1 oder weapon2) ───────────────
+  'schwert_holz':    { name:'Holzschwert',     icon:'🗡️', type:'weapon', slot:'weapon1', classes:['warrior'], damage:[2,4],   stats:{staerke:1}, price:5,   desc:'Ein einfaches Übungsschwert.' },
+  'schwert_eisen':   { name:'Eisenschwert',    icon:'⚔️', type:'weapon', slot:'weapon1', classes:['warrior'], damage:[4,7],   stats:{staerke:2}, price:15,  desc:'Solide Waffe für Anfänger.' },
+  'schwert_stahl':   { name:'Stahlschwert',    icon:'⚔️', type:'weapon', slot:'weapon1', classes:['warrior'], damage:[7,11],  stats:{staerke:3}, price:40,  desc:'Gut ausbalanciert und scharf.' },
+  'schwert_ritter':  { name:'Ritterschwert',   icon:'⚔️', type:'weapon', slot:'weapon1', classes:['warrior'], damage:[11,16], stats:{staerke:4, ausdauer:1}, price:90, desc:'Schwert der königlichen Garde.' },
+  'axt_eisen':       { name:'Eisenaxt',        icon:'🪓', type:'weapon', slot:'weapon1', classes:['warrior'], damage:[5,9],   stats:{staerke:3}, price:18,  desc:'Wuchtig aber langsam.' },
+  'keule_eisen':     { name:'Eisenkeule',      icon:'🏏', type:'weapon', slot:'weapon1', classes:['warrior'], damage:[4,8],   stats:{staerke:2, lp:1}, price:14, desc:'Bricht Rüstungen leicht.' },
+
+  // Krieger Slot 2: Zweitwaffe oder Schild
+  'dolch_eisen':     { name:'Eisendolch',      icon:'🔪', type:'weapon', slot:'weapon2', classes:['warrior'], damage:[2,4],   stats:{schnelligkeit:1}, price:10, desc:'Schnelle Zweitwaffe.' },
+  'schild_holz':     { name:'Holzschild',      icon:'🛡️', type:'shield', slot:'weapon2', classes:['warrior'], damage:[0,0],   stats:{ausdauer:2, lp:1}, price:12, desc:'Einfacher Schutz.' },
+  'schild_eisen':    { name:'Eisenschild',     icon:'🛡️', type:'shield', slot:'weapon2', classes:['warrior'], damage:[0,0],   stats:{ausdauer:3, lp:2}, price:30, desc:'Solider Metallschild.' },
+  'schild_turm':     { name:'Turmschild',      icon:'🛡️', type:'shield', slot:'weapon2', classes:['warrior'], damage:[0,0],   stats:{ausdauer:5, lp:3}, price:70, desc:'Maximaler Schutz, schwer.' },
+
+  // ── BOGENSCHÜTZE WAFFEN ────────────────────────────────────────
+  'bogen_holz':      { name:'Holzbogen',       icon:'🏹', type:'weapon', slot:'weapon1', classes:['archer'],  damage:[2,5],   stats:{gewandheit:1}, price:5,   desc:'Ein einfacher Jagdbogen.' },
+  'bogen_elfenbein': { name:'Elfenbogen',      icon:'🏹', type:'weapon', slot:'weapon1', classes:['archer'],  damage:[5,9],   stats:{gewandheit:3}, price:30,  desc:'Leicht und präzise.' },
+  'bogen_kompound':  { name:'Kompoundbogen',   icon:'🏹', type:'weapon', slot:'weapon1', classes:['archer'],  damage:[8,13],  stats:{gewandheit:4, schnelligkeit:1}, price:65, desc:'Maximale Durchschlagskraft.' },
+  'bogen_elfen':     { name:'Elfenbogen',      icon:'🏹', type:'weapon', slot:'weapon1', classes:['archer'],  damage:[12,18], stats:{gewandheit:5, schnelligkeit:2}, price:120, desc:'Von Elfen gefertigt.' },
+
+  // Bogenschütze Slot 2: Pfeile
+  'pfeile_normal':   { name:'Normalpfeile',    icon:'🪃', type:'arrows', slot:'weapon2', classes:['archer'],  damage:[1,2],   stats:{}, price:5,   desc:'Standard Holzpfeile (20 Stück).' },
+  'pfeile_eisen':    { name:'Eisenpfeile',     icon:'🪃', type:'arrows', slot:'weapon2', classes:['archer'],  damage:[2,4],   stats:{}, price:12,  desc:'Eisenspitzen Pfeile (20 Stück).' },
+  'pfeile_feuer':    { name:'Feuerpfeile',     icon:'🔥', type:'arrows', slot:'weapon2', classes:['archer'],  damage:[3,6],   stats:{intelligenz:1}, price:25, desc:'Brennende Pfeilspitzen.' },
+  'pfeile_vergiftet':{ name:'Giftpfeile',      icon:'☠️', type:'arrows', slot:'weapon2', classes:['archer'],  damage:[2,5],   stats:{gewandheit:1}, price:20, desc:'Vergiftete Spitzen.' },
+
+  // ── MAGIER WAFFEN ──────────────────────────────────────────────
+  'stab_holz':       { name:'Holzstab',        icon:'🪄', type:'weapon', slot:'weapon1', classes:['mage'],    damage:[1,3],   stats:{intelligenz:1}, price:5,   desc:'Ein einfacher Zauberstab.' },
+  'stab_eiche':      { name:'Eichenstab',      icon:'🪄', type:'weapon', slot:'weapon1', classes:['mage'],    damage:[3,6],   stats:{intelligenz:2}, price:15,  desc:'Aus altem Eichenholz.' },
+  'stab_kristall':   { name:'Kristallstab',    icon:'💎', type:'weapon', slot:'weapon1', classes:['mage'],    damage:[6,10],  stats:{intelligenz:3, ausdauer:1}, price:45, desc:'Mit Kristall besetzt.' },
+  'stab_drachen':    { name:'Drachenstab',     icon:'🐉', type:'weapon', slot:'weapon1', classes:['mage'],    damage:[10,16], stats:{intelligenz:5}, price:110, desc:'Von einem Drachen erbeutet.' },
+
+  // Magier Slot 2: Elementrollen
+  'rolle_feuer':     { name:'Feuerrolle',      icon:'🔥', type:'scroll', slot:'weapon2', classes:['mage'],    damage:[3,7],   stats:{intelligenz:1}, price:10,  desc:'Entfacht Feuerbälle.' },
+  'rolle_wasser':    { name:'Wasserrolle',     icon:'💧', type:'scroll', slot:'weapon2', classes:['mage'],    damage:[2,6],   stats:{ausdauer:1}, price:10,    desc:'Beschwört Wasserwellen.' },
+  'rolle_blitz':     { name:'Blitzrolle',      icon:'⚡', type:'scroll', slot:'weapon2', classes:['mage'],    damage:[4,8],   stats:{schnelligkeit:1}, price:18, desc:'Schleudert Blitze.' },
+  'rolle_eis':       { name:'Eisrolle',        icon:'❄️', type:'scroll', slot:'weapon2', classes:['mage'],    damage:[3,6],   stats:{intelligenz:1, gewandheit:1}, price:15, desc:'Gefriert den Feind.' },
+  'rolle_erde':      { name:'Erdrolle',        icon:'🪨', type:'scroll', slot:'weapon2', classes:['mage'],    damage:[2,5],   stats:{lp:1}, price:12, desc:'Erschüttert den Boden.' },
+
+  // ── HELME (alle Klassen, aber verschiedene Stile) ──────────────
+  'helm_leder':      { name:'Lederkappe',      icon:'🪖', type:'helmet', slot:'helmet', classes:['warrior','archer','mage'], stats:{lp:1}, price:8,   desc:'Leichter Kopfschutz.' },
+  'helm_kette':      { name:'Kettenhaube',     icon:'🪖', type:'helmet', slot:'helmet', classes:['warrior','archer'],       stats:{lp:2, ausdauer:1}, price:20, desc:'Guter Schutz, mittelschwer.' },
+  'helm_eisen':      { name:'Eisenhelm',       icon:'🪖', type:'helmet', slot:'helmet', classes:['warrior'],                stats:{lp:3, ausdauer:2}, price:40, desc:'Schwerer Stahlhelm.' },
+  'kapuze_magier':   { name:'Magierkapuze',    icon:'🎩', type:'helmet', slot:'helmet', classes:['mage'],                   stats:{intelligenz:2, lp:1}, price:25, desc:'Mit Runen bestickt.' },
+  'hut_waldläufer':  { name:'Waldläuferhut',   icon:'👒', type:'helmet', slot:'helmet', classes:['archer'],                 stats:{gewandheit:2, schnelligkeit:1}, price:22, desc:'Leicht und praktisch.' },
+
+  // ── BRUST ──────────────────────────────────────────────────────
+  'brust_leder':     { name:'Lederrüstung',    icon:'🥋', type:'chest', slot:'chest', classes:['warrior','archer','mage'],  stats:{lp:2}, price:10,  desc:'Einfacher Körperschutz.' },
+  'brust_kette':     { name:'Kettenhemd',      icon:'🥋', type:'chest', slot:'chest', classes:['warrior','archer'],         stats:{lp:3, ausdauer:1}, price:28, desc:'Flexibel und schützend.' },
+  'brust_platten':   { name:'Plattenrüstung',  icon:'🛡️', type:'chest', slot:'chest', classes:['warrior'],                 stats:{lp:5, ausdauer:3}, price:70, desc:'Maximaler Schutz.' },
+  'robe_magier':     { name:'Magiererrobe',    icon:'👘', type:'chest', slot:'chest', classes:['mage'],                    stats:{intelligenz:2, lp:2}, price:35, desc:'Magisch verstärkt.' },
+  'weste_waldläufer':{ name:'Waldläuferweste', icon:'🥋', type:'chest', slot:'chest', classes:['archer'],                  stats:{gewandheit:2, schnelligkeit:1}, price:30, desc:'Leicht und beweglich.' },
+
+  // ── HANDSCHUHE ─────────────────────────────────────────────────
+  'handsch_leder':   { name:'Lederhandschuhe', icon:'🧤', type:'gloves', slot:'gloves', classes:['warrior','archer','mage'], stats:{staerke:1}, price:8, desc:'Einfache Lederhandschuhe.' },
+  'handsch_eisen':   { name:'Eisenhandschuhe', icon:'🧤', type:'gloves', slot:'gloves', classes:['warrior'],                 stats:{staerke:2, lp:1}, price:22, desc:'Schützende Metallhandschuhe.' },
+  'handsch_bogner':  { name:'Bognerhandschuh', icon:'🧤', type:'gloves', slot:'gloves', classes:['archer'],                  stats:{gewandheit:2, schnelligkeit:1}, price:18, desc:'Für präzises Schießen.' },
+  'handsch_magier':  { name:'Magierhandschuhe',icon:'🧤', type:'gloves', slot:'gloves', classes:['mage'],                   stats:{intelligenz:2}, price:20, desc:'Kanalisieren Magie.' },
+
+  // ── HOSEN ──────────────────────────────────────────────────────
+  'hose_leder':      { name:'Lederhose',       icon:'👖', type:'pants', slot:'pants', classes:['warrior','archer','mage'],   stats:{schnelligkeit:1}, price:8, desc:'Strapazierfähige Lederhose.' },
+  'hose_kette':      { name:'Kettenhose',      icon:'👖', type:'pants', slot:'pants', classes:['warrior'],                   stats:{lp:2, ausdauer:1}, price:25, desc:'Schützende Kettenhose.' },
+  'hose_waldläufer': { name:'Waldläuferhose',  icon:'👖', type:'pants', slot:'pants', classes:['archer'],                    stats:{schnelligkeit:2, gewandheit:1}, price:22, desc:'Leicht und flexibel.' },
+  'hose_magier':     { name:'Magiergewand',    icon:'👘', type:'pants', slot:'pants', classes:['mage'],                      stats:{intelligenz:1, ausdauer:1}, price:20, desc:'Langes Magiergewand.' },
+
+  // ── GÜRTEL ─────────────────────────────────────────────────────
+  'guertel_leder':   { name:'Ledergürtel',     icon:'📿', type:'belt', slot:'belt', classes:['warrior','archer','mage'],     stats:{lp:1}, price:6,  desc:'Einfacher Ledergürtel.' },
+  'guertel_krieger': { name:'Kriegergürtel',   icon:'📿', type:'belt', slot:'belt', classes:['warrior'],                     stats:{staerke:1, lp:1}, price:15, desc:'Breiter Kampfgürtel.' },
+  'guertel_magier':  { name:'Magiergürtel',    icon:'📿', type:'belt', slot:'belt', classes:['mage'],                        stats:{intelligenz:1, lp:1}, price:15, desc:'Mit Zaubertaschen.' },
+
+  // ── STIEFEL ────────────────────────────────────────────────────
+  'stiefel_leder':   { name:'Lederstiefel',    icon:'👢', type:'boots', slot:'boots', classes:['warrior','archer','mage'],   stats:{schnelligkeit:1}, price:8,  desc:'Bequeme Lederstiefel.' },
+  'stiefel_eisen':   { name:'Eisenstiefel',    icon:'👢', type:'boots', slot:'boots', classes:['warrior'],                   stats:{lp:1, ausdauer:1}, price:22, desc:'Schwere Stahlstiefel.' },
+  'stiefel_fllink':  { name:'Flinke Stiefel',  icon:'👢', type:'boots', slot:'boots', classes:['archer'],                    stats:{schnelligkeit:3}, price:30, desc:'Für schnelle Bewegungen.' },
+  'stiefel_magier':  { name:'Magierslippers',  icon:'👟', type:'boots', slot:'boots', classes:['mage'],                      stats:{intelligenz:1, schnelligkeit:1}, price:18, desc:'Leise und magisch.' },
+
+  // ── RINGE ──────────────────────────────────────────────────────
+  'ring_einfach':    { name:'Eisenring',       icon:'💍', type:'ring', slot:'ring', classes:['warrior','archer','mage'],      stats:{lp:1}, price:10, desc:'Einfacher Metallring.' },
+  'ring_geflochten': { name:'Geflochtener Ring',icon:'💍', type:'ring', slot:'ring', classes:['warrior','archer','mage'],     stats:{lp:1}, price:0,  desc:'Von einem kleinen Mädchen gefertigt.' },
+  'ring_staerke':    { name:'Ring der Stärke', icon:'💍', type:'ring', slot:'ring', classes:['warrior'],                      stats:{staerke:2}, price:35, desc:'Stärkt die Muskeln.' },
+  'ring_praezision': { name:'Ring der Präzision',icon:'💍',type:'ring', slot:'ring', classes:['archer'],                      stats:{gewandheit:2}, price:35, desc:'Verbessert die Zielgenauigkeit.' },
+  'ring_weisheit':   { name:'Ring der Weisheit',icon:'💍', type:'ring', slot:'ring', classes:['mage'],                       stats:{intelligenz:2}, price:35, desc:'Verstärkt die Magie.' },
+
+  // ── HALSKETTEN ─────────────────────────────────────────────────
+  'kette_leder':     { name:'Lederkordel',     icon:'📿', type:'necklace', slot:'necklace', classes:['warrior','archer','mage'], stats:{lp:1}, price:8, desc:'Einfache Lederkordel.' },
+  'amulett_tapfer':  { name:'Amulett der Tapferkeit',icon:'📿',type:'necklace',slot:'necklace',classes:['warrior'],           stats:{staerke:1, ausdauer:1}, price:30, desc:'Für mutige Krieger.' },
+  'amulett_wachsam': { name:'Amulett der Wachsamkeit',icon:'📿',type:'necklace',slot:'necklace',classes:['archer'],           stats:{gewandheit:1, schnelligkeit:1}, price:30, desc:'Schärft die Sinne.' },
+  'amulett_weisheit':{ name:'Amulett der Weisheit',icon:'📿',type:'necklace',slot:'necklace',classes:['mage'],               stats:{intelligenz:1, ausdauer:1}, price:30, desc:'Bündelt magische Energie.' },
+
+  // ── TRÄNKE (alle Klassen) ──────────────────────────────────────
+  'trank_klein':     { name:'Kleiner Heiltrank',icon:'🧪', type:'potion', slot:'potion', classes:['warrior','archer','mage'], stats:{}, heal:15, price:5,  desc:'Stellt 15 LP wieder her.' },
+  'trank_mittel':    { name:'Heiltrank',        icon:'🧪', type:'potion', slot:'potion', classes:['warrior','archer','mage'], stats:{}, heal:30, price:12, desc:'Stellt 30 LP wieder her.' },
+  'trank_gross':     { name:'Großer Heiltrank', icon:'🧪', type:'potion', slot:'potion', classes:['warrior','archer','mage'], stats:{}, heal:60, price:25, desc:'Stellt 60 LP wieder her.' },
+  'trank_staerke':   { name:'Stärketrank',      icon:'💪', type:'potion', slot:'potion', classes:['warrior'],                stats:{}, buff:'staerke', price:15, desc:'+3 Stärke für 1 Kampf.' },
+  'trank_gewandheit':{ name:'Gewandheitstrank', icon:'🌿', type:'potion', slot:'potion', classes:['archer'],                 stats:{}, buff:'gewandheit', price:15, desc:'+3 Gewandheit für 1 Kampf.' },
+  'trank_intelligenz':{ name:'Manatrank',       icon:'🔵', type:'potion', slot:'potion', classes:['mage'],                   stats:{}, buff:'intelligenz', price:15, desc:'+3 Intelligenz für 1 Kampf.' },
+};
+
+// Shop-Sortiment nach Klasse
+function getShopItems(shopType, characterClass) {
+  return Object.entries(ITEM_DATABASE)
+    .filter(([key, item]) => {
+      if(!item.classes.includes(characterClass)) return false;
+      if(shopType === 'weapons') return ['weapon','shield','arrows','scroll'].includes(item.type);
+      if(shopType === 'potions') return item.type === 'potion';
+      return false;
+    })
+    .map(([key, item]) => ({...item, key}));
+}
+
+// Ausrüstungs-Shop (getrennt)
+function getArmorShopItems(characterClass) {
+  return Object.entries(ITEM_DATABASE)
+    .filter(([key, item]) => 
+      item.classes.includes(characterClass) &&
+      ['helmet','chest','gloves','pants','belt','boots','ring','necklace'].includes(item.type)
+    )
+    .map(([key, item]) => ({...item, key}));
+}
+
+
 // Aktuell geladene Inventar-Items
 let _invItems = [];
 let _currentSlotClicked = null;
@@ -918,13 +1045,26 @@ function showItemInfo(itemId){
   const bonus = item.stat_bonus || {};
   const statNames={lp:'Lebenspunkte',staerke:'Stärke',gewandheit:'Gewandheit',
     intelligenz:'Intelligenz',schnelligkeit:'Schnelligkeit',ausdauer:'Ausdauer'};
-  const statsHtml = Object.entries(bonus).length > 0
+  // Damage range aus ITEM_DATABASE holen
+  const dbItem = Object.values(ITEM_DATABASE).find(d=>d.name===item.item_name);
+  const dmgRow = dbItem?.damage ? `
+    <div style="display:flex;justify-content:space-between;font-size:.88rem;padding:3px 0;border-bottom:1px solid rgba(201,168,76,.1)">
+      <span style="color:var(--dim)">⚔️ Schaden</span>
+      <span style="color:var(--gold-l);font-family:Cinzel,serif">${dbItem.damage[0]}-${dbItem.damage[1]}</span>
+    </div>` : '';
+  const healRow = dbItem?.heal ? `
+    <div style="display:flex;justify-content:space-between;font-size:.88rem;padding:3px 0;border-bottom:1px solid rgba(201,168,76,.1)">
+      <span style="color:var(--dim)">❤️ Heilung</span>
+      <span style="color:var(--gold-l);font-family:Cinzel,serif">+${dbItem.heal} LP</span>
+    </div>` : '';
+
+  const statsHtml = dmgRow + healRow + (Object.entries(bonus).length > 0
     ? Object.entries(bonus).map(([k,v])=>`
         <div style="display:flex;justify-content:space-between;font-size:.88rem;padding:3px 0">
           <span style="color:var(--dim)">${statNames[k]||k}</span>
           <span style="color:var(--gold-l);font-family:Cinzel,serif">+${v}</span>
         </div>`).join('')
-    : '<div style="color:var(--dim);font-size:.85rem">Keine Stat-Boni</div>';
+    : '<div style="color:var(--dim);font-size:.85rem">Keine Stat-Boni</div>');
   document.getElementById('itemOverlayStats').innerHTML = statsHtml;
   document.getElementById('itemOverlayDesc').textContent = item.description||'';
 
@@ -1033,86 +1173,103 @@ function showConfirmDialog(icon, message, yesLabel, noLabel){
 
 
 
-const SHOPS = {
-  weapons:{
-    title:'⚔️ Waffen &amp; Rüstungen',
-    items:[
-      {icon:'⚔️',name:'Eisenschwert',desc:'+3 Stärke',price:10},
-      {icon:'🏹',name:'Elfenbogen',desc:'+3 Gewandheit',price:10},
-      {icon:'🪄',name:'Eichenstab',desc:'+3 Intelligenz',price:10},
-      {icon:'🛡️',name:'Holzschild',desc:'+2 Ausdauer',price:6},
-      {icon:'🪖',name:'Lederhelm',desc:'+1 LP',price:5},
-    ]
-  },
-  potions:{
-    title:'🧪 Tränke &amp; Rollen',
-    items:[
-      {icon:'🧪',name:'Heiltrank',desc:'Stellt 10 LP wieder her',price:3},
-      {icon:'💪',name:'Stärketrank',desc:'+1 Stärke für 1 Kampf',price:4},
-      {icon:'📜',name:'Feuerrolle',desc:'Magieschaden +2',price:5},
-      {icon:'⚡',name:'Windrolle',desc:'+2 Schnelligkeit für 1 Kampf',price:4},
-    ]
-  }
-};
 function openShop(type){
-  const shop=SHOPS[type];
-  document.getElementById('shopTitle').innerHTML=shop.title;
-  document.getElementById('shopItems').innerHTML=shop.items.map(i=>`
-    <div class="shop-item">
-      <div class="si-icon">${i.icon}</div>
-      <div class="si-info">
-        <div class="si-name">${i.name}</div>
-        <div class="si-desc">${i.desc}</div>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px">
-        <div class="si-price">💰 ${i.price}</div>
-        <button class="btn-buy" onclick="buyItem('${i.name}',${i.price},'${i.icon}','${i.desc}')">Kaufen</button>
-      </div>
-    </div>`).join('');
+  const cls = character?.class || 'warrior';
+  const titles = {
+    weapons: '⚔️ Waffen & Rüstungen',
+    potions: '🧪 Tränke & Rollen'
+  };
+  document.getElementById('shopTitle').innerHTML = titles[type] || 'Shop';
+
+  let items = [];
+  if(type === 'weapons') {
+    items = [...getShopItems('weapons', cls), ...getArmorShopItems(cls)];
+  } else {
+    items = getShopItems('potions', cls);
+  }
+
+  if(items.length === 0){
+    document.getElementById('shopItems').innerHTML =
+      '<div style="color:var(--dim);text-align:center;padding:20px">Keine Items verfügbar.</div>';
+  } else {
+    const statNames={lp:'LP',staerke:'STR',gewandheit:'GEW',intelligenz:'INT',schnelligkeit:'SCH',ausdauer:'AUS'};
+    document.getElementById('shopItems').innerHTML = items.map(item => {
+      const statDesc = Object.entries(item.stats||{})
+        .map(([k,v])=>`+${v} ${statNames[k]||k}`).join(', ') || item.desc;
+      const dmgDesc = item.damage ? ` | Schaden: ${item.damage[0]}-${item.damage[1]}` : '';
+      const healDesc = item.heal ? ` | Heilt: ${item.heal} LP` : '';
+      return `
+      <div class="shop-item">
+        <div class="si-icon">${item.icon}</div>
+        <div class="si-info">
+          <div class="si-name">${item.name}</div>
+          <div class="si-desc">${statDesc}${dmgDesc}${healDesc}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+          <div class="si-price">💰 ${item.price}</div>
+          <button class="btn-buy" onclick="buyShopItem('${item.key}')">Kaufen</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
   document.getElementById('shopOverlay').classList.add('active');
 }
-async function buyItem(itemName, price, icon, desc) {
-  if (!character) return;
+async function buyShopItem(itemKey) {
+  const item = ITEM_DATABASE[itemKey];
+  if(!item || !character) return;
+
   const currentGold = character.gold || 0;
-  if (currentGold < price) {
-    alert(`Du hast nicht genug Gold! Du hast ${currentGold} Gold, brauchst aber ${price}.`);
+  if(currentGold < item.price){
+    await showConfirmDialog('💰', `Du hast nicht genug Gold!<br>Du hast <strong>${currentGold}</strong> Gold, brauchst aber <strong>${item.price}</strong>.`, 'OK', '');
     return;
   }
 
-  const confirmed = confirm(`"${itemName}" für ${price} Gold kaufen?`);
-  if (!confirmed) return;
+  const statNames={lp:'LP',staerke:'STR',gewandheit:'GEW',intelligenz:'INT',schnelligkeit:'SCH',ausdauer:'AUS'};
+  const statStr = Object.entries(item.stats||{}).map(([k,v])=>`+${v} ${statNames[k]}`).join(', ');
+  const dmgStr  = item.damage ? `Schaden: ${item.damage[0]}-${item.damage[1]}` : '';
+  const desc    = [statStr, dmgStr].filter(Boolean).join(' | ') || item.desc;
+
+  const confirmed = await showConfirmDialog(
+    item.icon,
+    `Möchtest du <strong>${item.name}</strong> für <strong>${item.price} Gold</strong> kaufen?<br><small style="color:var(--dim)">${desc}</small>`,
+    'Kaufen', 'Abbrechen'
+  );
+  if(!confirmed) return;
 
   try {
-    const { data:{session} } = await sb.auth.getSession();
-    if (!session) return;
+    const {data:{session}} = await sb.auth.getSession();
+    if(!session) return;
 
-    // Gold abziehen
-    const newGold = currentGold - price;
-    const { error: goldErr } = await sb
-      .from('characters')
-      .update({ gold: newGold })
-      .eq('id', character.id);
+    const newGold = currentGold - item.price;
+    const {error:goldErr} = await sb.from('characters')
+      .update({gold: newGold}).eq('id', character.id);
+    if(goldErr){ alert('Fehler beim Kauf: '+goldErr.message); return; }
 
-    if (goldErr) { alert('Fehler beim Kauf.'); return; }
-
-    // Item ins Inventar
-    await sb.from('inventory').insert([{
+    // Stat-Bonus als JSONB speichern
+    const {error:invErr} = await sb.from('inventory').insert([{
       character_id: character.id,
-      item_name: itemName,
-      item_type: 'shop',
-      item_icon: icon || '🎒',
-      stat_bonus: {},
-      quantity: 1
+      item_name:    item.name,
+      item_type:    item.type,
+      item_icon:    item.icon,
+      item_slot:    item.slot,
+      stat_bonus:   item.stats || {},
+      description:  item.desc,
+      quantity:     1
     }]);
+    if(invErr){ alert('Fehler beim Hinzufügen: '+invErr.message); return; }
 
     character.gold = newGold;
     updateHUD();
-    alert(`✅ "${itemName}" gekauft!`);
     closeOverlay('shopOverlay');
-  } catch(err) {
-    console.error(err);
-    alert('Fehler beim Kauf. Bitte versuche es erneut.');
+    showLevelUpBanner('✅ '+item.name+' gekauft!');
+  } catch(err){
+    alert('Fehler: '+err.message);
   }
+}
+
+// Legacy wrapper
+async function buyItem(itemName, price, icon, desc) {
+  alert('Bitte nutze den Shop-Button.');
 }
 
 function startMission(type){
