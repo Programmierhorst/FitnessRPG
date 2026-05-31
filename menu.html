@@ -385,10 +385,23 @@ body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text)}
       <ellipse cx="580" cy="422" rx="12" ry="8" id="heroArmorGlow" fill="#c9a84c" opacity=".6"/>
       <rect x="575" y="400" width="10" height="10" rx="2" id="heroSkinNeck" fill="#d4956a"/>
       <circle cx="580" cy="393" r="16" id="heroSkinHead" fill="#d4956a"/>
+      <!-- hair back + sides -->
       <ellipse cx="580" cy="380" rx="16" ry="9" id="heroHairColor" fill="#3d2b1f"/>
-      <circle cx="575" cy="393" r="2.5" fill="#2c1f0e"/>
-      <circle cx="585" cy="393" r="2.5" fill="#2c1f0e"/>
-      <path d="M575 399 Q580 403 585 399" stroke="#8b4513" stroke-width="1.5" fill="none"/>
+      <ellipse cx="564" cy="389" rx="5" ry="10" id="heroHairSideL" fill="#3d2b1f"/>
+      <ellipse cx="596" cy="389" rx="5" ry="10" id="heroHairSideR" fill="#3d2b1f"/>
+      <!-- eyes -->
+      <ellipse cx="576" cy="393" rx="3" ry="3.5" fill="white"/>
+      <ellipse cx="584" cy="393" rx="3" ry="3.5" fill="white"/>
+      <circle cx="577" cy="394" r="2" fill="#2c1f0e"/>
+      <circle cx="585" cy="394" r="2" fill="#2c1f0e"/>
+      <circle cx="578" cy="393" r=".7" fill="white"/>
+      <circle cx="586" cy="393" r=".7" fill="white"/>
+      <!-- mouth -->
+      <path d="M575 399 Q580 403 585 399" stroke="#a05040" stroke-width="1.5" fill="none"/>
+      <!-- female forehead jewel (hidden by default) -->
+      <circle cx="580" cy="384" r="2.5" id="sceneForeheadJewel" fill="#c9a84c" opacity="0"/>
+      <circle cx="580" cy="384" r="1.2" fill="white" id="sceneForeheadJewelInner" opacity="0"/>
+      <!-- weapon -->
       <rect x="598" y="408" width="4" height="36" rx="1" fill="#8b6914"/>
       <polygon points="600,406 597,414 603,414" fill="#c0c0c0"/>
     </g>
@@ -507,18 +520,38 @@ body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text)}
       <!-- Center character -->
       <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 4px;gap:6px">
         <svg id="heroPanelAvatar" viewBox="0 0 100 140" width="80" height="112">
+          <!-- body -->
           <ellipse cx="50" cy="90" rx="18" ry="22" data-armor fill="#8b6914" opacity=".9"/>
           <ellipse cx="50" cy="84" rx="13" ry="9" fill="#c9a84c" opacity=".5"/>
+          <!-- legs -->
           <rect x="37" y="104" width="11" height="20" rx="3" data-armor fill="#5a3e20"/>
           <rect x="52" y="104" width="11" height="20" rx="3" data-armor fill="#5a3e20"/>
+          <!-- arms -->
           <ellipse cx="30" cy="88" rx="6" ry="14" data-skin fill="#d4956a" transform="rotate(-8,30,88)"/>
           <ellipse cx="70" cy="88" rx="6" ry="14" data-skin fill="#d4956a" transform="rotate(8,70,88)"/>
+          <!-- neck -->
           <rect x="45" y="62" width="10" height="9" rx="2" data-skin fill="#d4956a"/>
+          <!-- head -->
           <circle cx="50" cy="54" r="14" data-skin fill="#d4956a"/>
-          <ellipse cx="50" cy="43" rx="14" ry="8" data-hair fill="#3d2b1f"/>
-          <circle cx="45" cy="54" r="2" fill="#2c1f0e"/>
-          <circle cx="55" cy="54" r="2" fill="#2c1f0e"/>
-          <path d="M45 60 Q50 64 55 60" stroke="#8b4513" stroke-width="1.2" fill="none"/>
+          <!-- hair back -->
+          <ellipse cx="50" cy="43" rx="14" ry="9" data-hair fill="#3d2b1f"/>
+          <ellipse cx="36" cy="52" rx="5" ry="10" data-hair fill="#3d2b1f" id="panelHairSideL"/>
+          <ellipse cx="64" cy="52" rx="5" ry="10" data-hair fill="#3d2b1f" id="panelHairSideR"/>
+          <!-- eyes -->
+          <ellipse cx="45" cy="54" rx="3.5" ry="4" fill="white"/>
+          <ellipse cx="55" cy="54" rx="3.5" ry="4" fill="white"/>
+          <circle cx="46" cy="55" r="2.2" fill="#2c1f0e"/>
+          <circle cx="56" cy="55" r="2.2" fill="#2c1f0e"/>
+          <circle cx="47" cy="54" r=".8" fill="white"/>
+          <circle cx="57" cy="54" r=".8" fill="white"/>
+          <!-- eyebrows -->
+          <path d="M41 49 Q45 47 49 49" data-hair stroke="#3d2b1f" stroke-width="1.2" fill="none"/>
+          <path d="M51 49 Q55 47 59 49" data-hair stroke="#3d2b1f" stroke-width="1.2" fill="none"/>
+          <!-- mouth -->
+          <path d="M45 61 Q50 65 55 61" stroke="#a05040" stroke-width="1.2" fill="none"/>
+          <!-- female jewelry (hidden by default, shown via JS) -->
+          <circle cx="50" cy="47" r="2.5" id="panelForeheadJewel" fill="#c9a84c" opacity="0"/>
+          <circle cx="50" cy="47" r="1.2" fill="white" id="panelForeheadJewelInner" opacity="0"/>
         </svg>
         <!-- Trank slot under character -->
         <div class="equip-slot" id="slot_potion" onclick="equipSlotClick('potion')" data-accepts="potion" style="border-color:rgba(91,127,232,.4);width:52px;height:52px">🧪<div class="equip-label">Trank</div></div>
@@ -997,13 +1030,6 @@ function showConfirmDialog(icon, message, yesLabel, noLabel){
 }
 
 
-
-async function equipItem(itemId, itemName){
-  const slot = prompt(`In welchen Slot möchtest du "${itemName}" anlegen?\nMögliche Slots: weapon1, weapon2, helmet, chest, gloves, pants, belt, boots, ring, necklace, potion`);
-  if(!slot) return;
-  const { error } = await sb.from('inventory').update({equipped_slot: slot}).eq('id', itemId);
-  if(!error){ alert(`✅ "${itemName}" in Slot "${slot}" angelegt!`); openHero(); }
-}
 
 const SHOPS = {
   weapons:{
