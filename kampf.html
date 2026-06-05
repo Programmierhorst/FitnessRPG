@@ -230,26 +230,26 @@ const sb = supabase.createClient(
 // ── LEVELSYSTEM ──────────────────────────────────────────────
 
 function expRequired(level) {
-  if (level <= 1)    return 0;
-  if (level <= 25)   return Math.max(1, Math.round(12 + (level-2)*0.681));
-  if (level <= 100)  return Math.max(expRequired(level-1), Math.round(0.04303*(level-25)**2 + 20));
-  if (level <= 300)  return Math.max(expRequired(level-1), Math.round(0.00622*(level-100)**2 + 100));
-  if (level <= 500)  return Math.max(expRequired(level-1), Math.round(0.00070*(level-300)**2 + 447));
-  if (level <= 1000) return Math.max(expRequired(level-1), Math.round(0.00417*(level-500)**2 + 495));
-  return 3332;
+  if (level <= 1) return 0;
+  // Kalibriert: L25=7Tage, L100=90Tage, L300=365Tage, L500=730Tage, L1000=1825Tage
+  // Basis: 100 EXP/Mission, 10 Gold/Mission (Level 1)
+  if (level <= 25)   return Math.max(1, Math.round(100 + (level-2)*2.64));
+  if (level <= 100)  return Math.max(expRequired(level-1), Math.round(0.4527*(level-25)**2 + 171));
+  if (level <= 300)  return Math.max(expRequired(level-1), Math.round(0.1952*(level-100)**2 + 2765));
+  if (level <= 500)  return Math.max(expRequired(level-1), Math.round(0.4551*(level-300)**2 + 3150));
+  if (level <= 1000) return Math.max(expRequired(level-1), Math.round(0.2048*(level-500)**2 + 13403));
+  return 33320;
 }
 
-// Belohnungsmultiplikator basierend auf Level
 function rewardMultiplier(level) {
-  if (level <= 25)   return 1.0;
-  if (level <= 100)  return 1 + (level-25)/75 * 2;
-  if (level <= 300)  return 3 + (level-100)/200 * 4;
-  if (level <= 500)  return 7 + (level-300)/200 * 5;
-  if (level <= 1000) return 12 + (level-500)/500 * 8;
+  if (level <= 25)    return 1.0;
+  if (level <= 100)   return 1 + (level-25)/75 * 2;
+  if (level <= 300)   return 3 + (level-100)/200 * 4;
+  if (level <= 500)   return 7 + (level-300)/200 * 5;
+  if (level <= 1000)  return 12 + (level-500)/500 * 8;
   return 20;
 }
 
-// Missionsbelohnungen skaliert nach Level
 function getMissionRewards(missionBase, playerLevel) {
   const mult = rewardMultiplier(playerLevel);
   return {
@@ -259,7 +259,6 @@ function getMissionRewards(missionBase, playerLevel) {
   };
 }
 
-// Tägliche Aufgaben Belohnungen
 function getQuestRewards(questBase, playerLevel) {
   const mult = rewardMultiplier(playerLevel);
   return {
@@ -268,64 +267,43 @@ function getQuestRewards(questBase, playerLevel) {
   };
 }
 
-// Gegnerlevel basierend auf Spielerlevel
 function getEnemyLevel(playerLevel) {
   return Math.max(1, Math.round(playerLevel * 0.9));
 }
 
-// XP nach Kampf/Quest gutschreiben und Level-Up prüfen
-async function awardXP(supabaseClient, userId, earnedExp, earnedGold) {
-  // Aktuellen Stand laden
-  const { data: chars } = await supabaseClient
-    .from('characters')
-    .select('id, level, xp, gold')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .limit(1);
-  
-  if (!chars || chars.length === 0) return null;
-  
-  const char = chars[0];
-  let newXP    = (char.xp    || 0) + earnedExp;
-  let newGold  = (char.gold  || 0) + earnedGold;
-  let newLevel = char.level  || 1;
-  let leveledUp = false;
-  const oldLevel = newLevel;
 
-  // Level-Up Schleife
-  while (true) {
-    const needed = expRequired(newLevel + 1);
-    if (newXP >= needed && newLevel < 9999) {
-      newXP -= needed;
-      newLevel++;
-      leveledUp = true;
-    } else {
-      break;
-    }
-  }
-
-  // In Supabase speichern
-  const { error } = await supabaseClient
-    .from('characters')
-    .update({ xp: newXP, gold: newGold, level: newLevel })
-    .eq('id', char.id);
-
-  return { error, newLevel, newXP, newGold, leveledUp, oldLevel };
-}
 
 
 // ── Combat engine ────────────────────────────────────────────
 const CLASSES = {
-  warrior:{name:'Krieger',     icon:'⚔️', color:'var(--warrior)',lebenskraft:3,staerke:3,gewandheit:1,intelligenz:1,schnelligkeit:1,ausdauer:1},
-  archer: {name:'Bogenschütze',icon:'🏹', color:'var(--archer)', lebenskraft:1,staerke:1,gewandheit:3,intelligenz:1,schnelligkeit:2,ausdauer:2},
-  mage:   {name:'Magier',      icon:'🔮', color:'var(--mage)',   lebenskraft:2,staerke:1,gewandheit:1,intelligenz:3,schnelligkeit:1,ausdauer:2},
+  warrior:{name:'Krieger',     icon:'⚔️', color:'var(--warrior)',lebenskraft:3,staerke:3,gewandheit:1,intelligenz:1,schnelligkeit:1,ausdauer:1,krit_chance:2,krit_schaden:2},
+  archer: {name:'Bogenschütze',icon:'🏹', color:'var(--archer)', lebenskraft:1,staerke:1,gewandheit:3,intelligenz:1,schnelligkeit:2,ausdauer:2,krit_chance:4,krit_schaden:1},
+  mage:   {name:'Magier',      icon:'🔮', color:'var(--mage)',   lebenskraft:2,staerke:1,gewandheit:1,intelligenz:3,schnelligkeit:1,ausdauer:2,krit_chance:1,krit_schaden:3},
 };
+
+// Krit-Formeln (90% bei Stat=800, max 2× Schaden)
+function critChance(stat)   { return 1 - 1/(1 + stat*0.01125); }
+function critDmgMult(stat)  { return 1 + 1*(1 - 1/(1 + stat*0.05)); }
+
+// Item-Skalierung nach Level
+function itemMult(level) {
+  if(level <= 25)   return 1.0;
+  if(level <= 100)  return 1 + (level-25)/75*1.5;
+  if(level <= 300)  return 2.5 + (level-100)/200*2.5;
+  if(level <= 500)  return 5.0 + (level-300)/200*5.0;
+  if(level <= 1000) return 10.0 + (level-500)/500*10.0;
+  return 20.0;
+}
+
+function itemStat(base, level)  { return Math.max(1, Math.round(base * itemMult(level))); }
+function itemDmg(min, max, level) { const m=itemMult(level); return [Math.round(min*m), Math.round(max*m)]; }
+function itemPrice(base, level) { return Math.round(base * itemMult(level)); }
 
 // Spezielle Gegner-Definitionen (überschreiben Name+Icon wenn gesetzt)
 const ENEMIES = {
-  goblin:  {name:'Goblin',   icon:'👺', color:'var(--warrior)', lebenskraft:1,staerke:1,gewandheit:1,intelligenz:1,schnelligkeit:1,ausdauer:1},
-  bandit:  {name:'Bandit',   icon:'🗡️', color:'var(--archer)',  lebenskraft:1,staerke:1,gewandheit:1,intelligenz:1,schnelligkeit:1,ausdauer:1},
-  wichtel: {name:'Wichtel',  icon:'🧙', color:'var(--mage)',    lebenskraft:1,staerke:1,gewandheit:1,intelligenz:1,schnelligkeit:1,ausdauer:1},
+  goblin:  {name:'Goblin',   icon:'👺', color:'var(--warrior)', lebenskraft:1,staerke:1,gewandheit:1,intelligenz:1,schnelligkeit:1,ausdauer:1,krit_chance:1,krit_schaden:1},
+  bandit:  {name:'Bandit',   icon:'🗡️', color:'var(--archer)',  lebenskraft:1,staerke:1,gewandheit:1,intelligenz:1,schnelligkeit:1,ausdauer:1,krit_chance:2,krit_schaden:1},
+  wichtel: {name:'Wichtel',  icon:'🧙', color:'var(--mage)',    lebenskraft:1,staerke:1,gewandheit:1,intelligenz:1,schnelligkeit:1,ausdauer:1,krit_chance:1,krit_schaden:2},
 };
 
 // Get mission + fighter info from URL params (default: warrior vs archer demo)
@@ -348,28 +326,37 @@ const sA = CLASSES[clsA];
 // Wenn ein spezieller Gegner definiert ist, nutze dessen Stats
 const sB = enemyKey && ENEMIES[enemyKey] ? ENEMIES[enemyKey] : CLASSES[clsB];
 
-function maxLP(lk,lv){ return 30+lk*2+lv*4; }
+function maxLP(lk,lv,lpBonus){ return 70+lk*6+lv*9+(lpBonus||0); }
 function gmain(cls,s){ return {warrior:s.staerke,archer:s.gewandheit,mage:s.intelligenz}[cls]; }
 
 function calcDmg(cls,s,r,lv,vsCls){
   const m=gmain(cls,s);
   const b=(r<=5?s.schnelligkeit:s.ausdauer)*0.5;
   let d=(m*2.2+b+lv*0.5);
-  if(cls==='warrior'&&vsCls==='mage')    d*=1.25;
-  if(cls==='archer' &&vsCls==='warrior') d*=1.20;
-  return d;
+  if(cls==='warrior'&&vsCls==='mage')    d*=1.12;
+  if(cls==='archer' &&vsCls==='warrior') d*=1.12;
+  if(cls==='mage'   &&vsCls==='archer')  d*=1.12;
+  // Kritischer Treffer
+  const cc = critChance(s.krit_chance||0);
+  const cm = critDmgMult(s.krit_schaden||0);
+  const isCrit = Math.random() < cc;
+  return {dmg: isCrit ? d*cm : d, isCrit};
 }
 function calcDef(ac,dc,dst,r,lv){
-  const dv=gmain(ac,dst);
-  const ds=r<=5?dst.schnelligkeit:dst.ausdauer;
-  let base=dv*1.8+ds*0.4+lv*0.3;
-  if(dc==='mage'&&ac==='archer') base+=dst.intelligenz*0.6;
-  return Math.max(0,base);
+  // Proportionale Verteidigung: Reduktion in Prozent, skaliert mit jedem Level gleich
+  const defStat = gmain(ac,dst);  // Verteidiger nutzt Angreifer-Stat-Typ
+  const spdStat = r<=5 ? dst.schnelligkeit : dst.ausdauer;
+  const defRed  = defStat / (defStat + 15);   // 50% bei Stat=15, max ~90%
+  const spdRed  = spdStat / (spdStat + 45);   // kleiner Bonus
+  const totalRed = Math.min(0.90, 1-(1-defRed)*(1-spdRed));
+  return totalRed; // Gibt Prozentsatz zurück, wird in simulateFull genutzt
 }
 
 // ── Pre-compute all rounds ───────────────────────────────────
 function simulateFull(){
-  let ha=maxLP(sA.lebenskraft,lvA), hb=maxLP(sB.lebenskraft,lvB);
+  const lpBonusA = (sA.lp_bonus||0)*8;
+  const lpBonusB = (sB.lp_bonus||0)*8;
+  let ha=maxLP(sA.lebenskraft,lvA,lpBonusA), hb=maxLP(sB.lebenskraft,lvB,lpBonusB);
   const maxA=ha, maxB=hb;
   const rounds=[];
   for(let r=1;r<=100&&ha>0&&hb>0;r++){
@@ -380,11 +367,11 @@ function simulateFull(){
     const pairs=fa?[[clsA,sA,'A',clsB,sB],[clsB,sB,'B',clsA,sA]]
                   :[[clsB,sB,'B',clsA,sA],[clsA,sA,'A',clsB,sB]];
     for(const[ac,ast,aid,dc,dst] of pairs){
-      const d=calcDmg(ac,ast,r,aid==='A'?lvA:lvB,dc);
+      const {dmg:rawDmg,isCrit}=calcDmg(ac,ast,r,aid==='A'?lvA:lvB,dc);
       const df=calcDef(ac,dc,dst,r,aid==='B'?lvA:lvB);
-      const net=Math.max(1,Math.round((d-df)*10)/10);
+      const net=Math.max(1,Math.round(rawDmg*(1-df)*10)/10);
       if(aid==='A'){hb-=net;}else{ha-=net;}
-      events.push({atk:aid,name:CLASSES[ac].name,icon:CLASSES[ac].icon,dmg:net,def:Math.round(df*10)/10});
+      events.push({atk:aid,name:CLASSES[ac].name,icon:CLASSES[ac].icon,dmg:net,def:df,isCrit});
       if(ha<=0||hb<=0)break;
     }
     rounds.push({r,events,ha:Math.max(0,ha),hb:Math.max(0,hb),maxA,maxB});
@@ -486,7 +473,9 @@ function playRound(){
       updateHP('A',rd.ha,rd.maxA);
       updateHP('B',rd.hb,rd.maxB);
       // log
-      addLog(`<span class="log-atk">${ev.icon} ${ev.name}</span> <span class="log-miss">greift an und macht</span> <span class="log-atk">${ev.dmg} Schaden</span>`);
+      const critTxt = ev.isCrit ? ' <span style="color:#f39c12;font-weight:bold">✨ KRITISCH!</span>' : '';
+      const defTxt = ` <span class="log-def">(${Math.round(ev.def*100)}% abgewehrt)</span>`;
+      addLog(`<span class="log-atk">${ev.icon} ${ev.name}</span> <span class="log-miss">greift an und macht</span> <span class="log-atk">${ev.dmg} Schaden</span>${defTxt}${critTxt}`);
     },delay);
     delay+=SPEEDS[speed].ms/rd.events.length;
   }

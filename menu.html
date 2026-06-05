@@ -612,26 +612,26 @@ body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text)}
 // ── LEVELSYSTEM ──────────────────────────────────────────────
 
 function expRequired(level) {
-  if (level <= 1)    return 0;
-  if (level <= 25)   return Math.max(1, Math.round(12 + (level-2)*0.681));
-  if (level <= 100)  return Math.max(expRequired(level-1), Math.round(0.04303*(level-25)**2 + 20));
-  if (level <= 300)  return Math.max(expRequired(level-1), Math.round(0.00622*(level-100)**2 + 100));
-  if (level <= 500)  return Math.max(expRequired(level-1), Math.round(0.00070*(level-300)**2 + 447));
-  if (level <= 1000) return Math.max(expRequired(level-1), Math.round(0.00417*(level-500)**2 + 495));
-  return 3332;
+  if (level <= 1) return 0;
+  // Kalibriert: L25=7Tage, L100=90Tage, L300=365Tage, L500=730Tage, L1000=1825Tage
+  // Basis: 100 EXP/Mission, 10 Gold/Mission (Level 1)
+  if (level <= 25)   return Math.max(1, Math.round(100 + (level-2)*2.64));
+  if (level <= 100)  return Math.max(expRequired(level-1), Math.round(0.4527*(level-25)**2 + 171));
+  if (level <= 300)  return Math.max(expRequired(level-1), Math.round(0.1952*(level-100)**2 + 2765));
+  if (level <= 500)  return Math.max(expRequired(level-1), Math.round(0.4551*(level-300)**2 + 3150));
+  if (level <= 1000) return Math.max(expRequired(level-1), Math.round(0.2048*(level-500)**2 + 13403));
+  return 33320;
 }
 
-// Belohnungsmultiplikator basierend auf Level
 function rewardMultiplier(level) {
-  if (level <= 25)   return 1.0;
-  if (level <= 100)  return 1 + (level-25)/75 * 2;
-  if (level <= 300)  return 3 + (level-100)/200 * 4;
-  if (level <= 500)  return 7 + (level-300)/200 * 5;
-  if (level <= 1000) return 12 + (level-500)/500 * 8;
+  if (level <= 25)    return 1.0;
+  if (level <= 100)   return 1 + (level-25)/75 * 2;
+  if (level <= 300)   return 3 + (level-100)/200 * 4;
+  if (level <= 500)   return 7 + (level-300)/200 * 5;
+  if (level <= 1000)  return 12 + (level-500)/500 * 8;
   return 20;
 }
 
-// Missionsbelohnungen skaliert nach Level
 function getMissionRewards(missionBase, playerLevel) {
   const mult = rewardMultiplier(playerLevel);
   return {
@@ -641,7 +641,6 @@ function getMissionRewards(missionBase, playerLevel) {
   };
 }
 
-// Tägliche Aufgaben Belohnungen
 function getQuestRewards(questBase, playerLevel) {
   const mult = rewardMultiplier(playerLevel);
   return {
@@ -650,50 +649,11 @@ function getQuestRewards(questBase, playerLevel) {
   };
 }
 
-// Gegnerlevel basierend auf Spielerlevel
 function getEnemyLevel(playerLevel) {
   return Math.max(1, Math.round(playerLevel * 0.9));
 }
 
-// XP nach Kampf/Quest gutschreiben und Level-Up prüfen
-async function awardXP(supabaseClient, userId, earnedExp, earnedGold) {
-  // Aktuellen Stand laden
-  const { data: chars } = await supabaseClient
-    .from('characters')
-    .select('id, level, xp, gold')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .limit(1);
-  
-  if (!chars || chars.length === 0) return null;
-  
-  const char = chars[0];
-  let newXP    = (char.xp    || 0) + earnedExp;
-  let newGold  = (char.gold  || 0) + earnedGold;
-  let newLevel = char.level  || 1;
-  let leveledUp = false;
-  const oldLevel = newLevel;
 
-  // Level-Up Schleife
-  while (true) {
-    const needed = expRequired(newLevel + 1);
-    if (newXP >= needed && newLevel < 9999) {
-      newXP -= needed;
-      newLevel++;
-      leveledUp = true;
-    } else {
-      break;
-    }
-  }
-
-  // In Supabase speichern
-  const { error } = await supabaseClient
-    .from('characters')
-    .update({ xp: newXP, gold: newGold, level: newLevel })
-    .eq('id', char.id);
-
-  return { error, newLevel, newXP, newGold, leveledUp, oldLevel };
-}
 
 const sb = supabase.createClient(
   'https://zjykfbfsrmdsllrbblmz.supabase.co',
@@ -966,15 +926,27 @@ async function openHero(){
   document.getElementById('heroPanelTitle').textContent = character.pronoun==='heldin'?'👑 Heldinnenmenü':'⚔️ Heldenmenü';
 
   // Stats
-  const statLabels={lp:'Lebenspunkte',staerke:'Stärke',gewandheit:'Gewandheit',
-    intelligenz:'Intelligenz',schnelligkeit:'Schnelligkeit',ausdauer:'Ausdauer'};
-  const statIcons={lp:'❤️',staerke:'⚔️',gewandheit:'🌿',intelligenz:'🔮',schnelligkeit:'⚡',ausdauer:'🛡️'};
+  const statLabels={lp:'Lebenskraft',staerke:'Stärke',gewandheit:'Gewandheit',
+    intelligenz:'Intelligenz',schnelligkeit:'Schnelligkeit',ausdauer:'Ausdauer',
+    krit_chance:'Krit-Chance',krit_schaden:'Krit-Schaden'};
+  const statIcons={lp:'❤️',staerke:'⚔️',gewandheit:'🌿',intelligenz:'🔮',schnelligkeit:'⚡',ausdauer:'🛡️',
+    krit_chance:'🎯',krit_schaden:'💥'};
+  // Krit-Formeln für Anzeige
+  function critChanceDisplay(stat){ return Math.round((1 - 1/(1+stat*0.01125))*100); }
+  function critDmgDisplay(stat)   { return (1 + 1*(1 - 1/(1+stat*0.05))).toFixed(2); }
+
   document.getElementById('heroStatsGrid').innerHTML =
-    Object.entries(statLabels).map(([k,l])=>`
-      <div class="stat-item">
+    Object.entries(statLabels).map(([k,l])=>{
+      let val = character[k]||0;
+      let extra = '';
+      if(k==='krit_chance')  extra = `<div style="font-size:.6rem;color:var(--gold);margin-top:1px">${critChanceDisplay(val)}% Chance</div>`;
+      if(k==='krit_schaden') extra = `<div style="font-size:.6rem;color:var(--gold);margin-top:1px">${critDmgDisplay(val)}× Schaden</div>`;
+      return `<div class="stat-item">
         <div class="stat-item-name">${statIcons[k]} ${l}</div>
-        <div class="stat-item-val">${character[k]||1}</div>
-      </div>`).join('');
+        <div class="stat-item-val">${val}</div>
+        ${extra}
+      </div>`;
+    }).join('');
 
   // Inventar laden
   _invItems = [];
@@ -1173,92 +1145,197 @@ function showConfirmDialog(icon, message, yesLabel, noLabel){
 
 
 
+
+// ── Item-Skalierung ───────────────────────────────────────────
+function itemMult(level) {
+  if(level <= 25)   return 1.0;
+  if(level <= 100)  return 1 + (level-25)/75*1.5;
+  if(level <= 300)  return 2.5 + (level-100)/200*2.5;
+  if(level <= 500)  return 5.0 + (level-300)/200*5.0;
+  if(level <= 1000) return 10.0 + (level-500)/500*10.0;
+  return 20.0;
+}
+function scaledStat(base, level)  { return Math.max(1, Math.round(base * itemMult(level))); }
+function scaledPrice(base, level) { return Math.round(base * itemMult(level)); }
+function scaledDmg(min, max, level) {
+  const m = itemMult(level);
+  return [Math.round(min*m), Math.round(max*m)];
+}
+
+// ── Shop Refresh System ───────────────────────────────────────
+const SHOP_SIZE = 5; // Items pro Shop-Kategorie
+
+function getShopSeed() {
+  // Täglich um Mitternacht neuer Seed basierend auf Datum
+  const now = new Date();
+  return now.getFullYear()*10000 + (now.getMonth()+1)*100 + now.getDate();
+}
+
+function seededRandom(seed, index) {
+  // Einfacher deterministischer Zufallsgenerator
+  const x = Math.sin(seed * 9301 + index * 49297 + 233) * 233280;
+  return x - Math.floor(x);
+}
+
+function getShopItemsForToday(shopType, characterClass, level) {
+  const seed = getShopSeed();
+  let pool = [];
+  if(shopType === 'weapons') {
+    pool = Object.entries(ITEM_DATABASE)
+      .filter(([k,i]) => i.classes.includes(characterClass) &&
+        ['weapon','shield','arrows','scroll'].includes(i.type))
+      .map(([k,i]) => ({...i, key:k}));
+  } else {
+    pool = Object.entries(ITEM_DATABASE)
+      .filter(([k,i]) => i.classes.includes(characterClass) &&
+        (['helmet','chest','gloves','pants','belt','boots','ring','necklace'].includes(i.type)
+        || i.type==='potion'))
+      .map(([k,i]) => ({...i, key:k}));
+  }
+  // Mische mit täglichem Seed
+  const shuffled = [...pool].sort((a,b) =>
+    seededRandom(seed, pool.indexOf(a)) - seededRandom(seed, pool.indexOf(b))
+  );
+  return shuffled.slice(0, SHOP_SIZE);
+}
+
+function getNextRefreshTime() {
+  const now = new Date();
+  const midnight = new Date(now);
+  midnight.setHours(24,0,0,0);
+  const diff = midnight - now;
+  const h = Math.floor(diff/3600000);
+  const min = Math.floor((diff%3600000)/60000);
+  return `${h}h ${min}m`;
+}
+
+let _shopRefreshCost = 1; // Gold zum manuellen Erneuern
+
+let _currentShopType = 'weapons';
+
 function openShop(type){
-  const cls = character?.class || 'warrior';
-  const titles = {
-    weapons: '⚔️ Waffen & Rüstungen',
-    potions: '🧪 Tränke & Rollen'
-  };
-  document.getElementById('shopTitle').innerHTML = titles[type] || 'Shop';
-
-  let items = [];
-  if(type === 'weapons') {
-    items = [...getShopItems('weapons', cls), ...getArmorShopItems(cls)];
-  } else {
-    items = getShopItems('potions', cls);
-  }
-
-  if(items.length === 0){
-    document.getElementById('shopItems').innerHTML =
-      '<div style="color:var(--dim);text-align:center;padding:20px">Keine Items verfügbar.</div>';
-  } else {
-    const statNames={lp:'LP',staerke:'STR',gewandheit:'GEW',intelligenz:'INT',schnelligkeit:'SCH',ausdauer:'AUS'};
-    document.getElementById('shopItems').innerHTML = items.map(item => {
-      const statDesc = Object.entries(item.stats||{})
-        .map(([k,v])=>`+${v} ${statNames[k]||k}`).join(', ') || item.desc;
-      const dmgDesc = item.damage ? ` | Schaden: ${item.damage[0]}-${item.damage[1]}` : '';
-      const healDesc = item.heal ? ` | Heilt: ${item.heal} LP` : '';
-      return `
-      <div class="shop-item">
-        <div class="si-icon">${item.icon}</div>
-        <div class="si-info">
-          <div class="si-name">${item.name}</div>
-          <div class="si-desc">${statDesc}${dmgDesc}${healDesc}</div>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
-          <div class="si-price">💰 ${item.price}</div>
-          <button class="btn-buy" onclick="buyShopItem('${item.key}')">Kaufen</button>
-        </div>
-      </div>`;
-    }).join('');
-  }
+  _currentShopType = type;
+  renderShop(type);
   document.getElementById('shopOverlay').classList.add('active');
 }
-async function buyShopItem(itemKey) {
+
+function renderShop(type, forceRefresh=false){
+  const cls   = character?.class || 'warrior';
+  const level = character?.level || 1;
+  const titles = { weapons:'⚔️ Waffen & Rüstungen', potions:'🛡️ Ausrüstung & Tränke' };
+  document.getElementById('shopTitle').innerHTML = titles[type] || 'Shop';
+
+  const items = getShopItemsForToday(type, cls, level);
+  const statNames={lp:'LP',staerke:'STR',gewandheit:'GEW',intelligenz:'INT',schnelligkeit:'SCH',ausdauer:'AUS'};
+
+  // Refresh-Leiste
+  const refreshBar = `
+    <div style="display:flex;justify-content:space-between;align-items:center;
+      padding:8px 0;margin-bottom:10px;border-bottom:1px solid var(--border)">
+      <span style="font-size:.78rem;color:var(--dim)">🔄 Erneuert in: <strong style="color:var(--text)">${getNextRefreshTime()}</strong></span>
+      <button onclick="refreshShopManual()" style="padding:5px 12px;background:rgba(201,168,76,.15);
+        border:1px solid var(--border);border-radius:3px;color:var(--gold);
+        font-family:Cinzel,serif;font-size:.6rem;letter-spacing:.1em;cursor:pointer;
+        text-transform:uppercase">💰 1 Gold erneuern</button>
+    </div>`;
+
+  document.getElementById('shopItems').innerHTML = refreshBar + items.map(item => {
+    // Skalierte Werte
+    const scaledStats = Object.fromEntries(
+      Object.entries(item.stats||{}).map(([k,v])=>[k, scaledStat(v,level)])
+    );
+    const price = scaledPrice(item.price, level);
+    const dmg   = item.damage ? scaledDmg(item.damage[0],item.damage[1],level) : null;
+    const heal  = item.heal   ? scaledStat(item.heal, level) : null;
+
+    const statDesc = Object.entries(scaledStats)
+      .map(([k,v])=>`+${v} ${statNames[k]||k}`).join(', ') || item.desc;
+    const dmgDesc  = dmg  ? ` | ⚔️ ${dmg[0]}-${dmg[1]}` : '';
+    const healDesc = heal ? ` | ❤️ +${heal} LP` : '';
+    const canAfford = (character?.gold||0) >= price;
+
+    return `
+    <div class="shop-item" style="${!canAfford?'opacity:.6':''}">
+      <div class="si-icon">${item.icon}</div>
+      <div class="si-info">
+        <div class="si-name">${item.name} <span style="font-size:.65rem;color:var(--dim)">(Lv.${level})</span></div>
+        <div class="si-desc">${statDesc}${dmgDesc}${healDesc}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+        <div class="si-price">💰 ${price}</div>
+        <button class="btn-buy" onclick="buyShopItem('${item.key}',${price},${JSON.stringify(scaledStats)},${dmg?JSON.stringify(dmg):'null'},${heal||0})"
+          ${!canAfford?'disabled style="opacity:.5;cursor:not-allowed"':''}>Kaufen</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function refreshShopManual(){
+  const gold = character?.gold||0;
+  if(gold < 1){
+    await showConfirmDialog('💰','Du hast nicht genug Gold zum Erneuern!','OK','');
+    return;
+  }
+  const confirmed = await showConfirmDialog('🔄',
+    'Shop für <strong>1 Gold</strong> erneuern?','Erneuern','Abbrechen');
+  if(!confirmed) return;
+
+  const {error} = await sb.from('characters')
+    .update({gold: gold-1}).eq('id', character.id);
+  if(error){ alert('Fehler: '+error.message); return; }
+  character.gold = gold-1;
+  updateHUD();
+  // Neuen Seed generieren (aktueller Timestamp)
+  renderShop(_currentShopType, true);
+}
+async function buyShopItem(itemKey, scaledPrice, scaledStats, scaledDmg, scaledHeal) {
   const item = ITEM_DATABASE[itemKey];
   if(!item || !character) return;
 
-  const currentGold = character.gold || 0;
-  if(currentGold < item.price){
-    await showConfirmDialog('💰', `Du hast nicht genug Gold!<br>Du hast <strong>${currentGold}</strong> Gold, brauchst aber <strong>${item.price}</strong>.`, 'OK', '');
+  const level = character.level||1;
+  const price = scaledPrice !== undefined ? scaledPrice : Math.round(item.price * itemMult(level));
+  const stats = scaledStats !== undefined ? scaledStats : Object.fromEntries(
+    Object.entries(item.stats||{}).map(([k,v])=>[k,scaledStat(v,level)])
+  );
+  const currentGold = character.gold||0;
+
+  if(currentGold < price){
+    await showConfirmDialog('💰',`Du hast nicht genug Gold!<br>Du hast <strong>${currentGold}</strong>, brauchst <strong>${price}</strong>.`,'OK','');
     return;
   }
 
   const statNames={lp:'LP',staerke:'STR',gewandheit:'GEW',intelligenz:'INT',schnelligkeit:'SCH',ausdauer:'AUS'};
-  const statStr = Object.entries(item.stats||{}).map(([k,v])=>`+${v} ${statNames[k]}`).join(', ');
-  const dmgStr  = item.damage ? `Schaden: ${item.damage[0]}-${item.damage[1]}` : '';
-  const desc    = [statStr, dmgStr].filter(Boolean).join(' | ') || item.desc;
+  const statStr = Object.entries(stats).map(([k,v])=>`+${v} ${statNames[k]||k}`).join(', ');
+  const dmgStr  = scaledDmg ? `⚔️ ${scaledDmg[0]}-${scaledDmg[1]}` : '';
+  const healStr = scaledHeal ? `❤️ +${scaledHeal} LP` : '';
+  const desc    = [statStr,dmgStr,healStr].filter(Boolean).join(' | ') || item.desc;
 
-  const confirmed = await showConfirmDialog(
-    item.icon,
-    `Möchtest du <strong>${item.name}</strong> für <strong>${item.price} Gold</strong> kaufen?<br><small style="color:var(--dim)">${desc}</small>`,
-    'Kaufen', 'Abbrechen'
-  );
+  const confirmed = await showConfirmDialog(item.icon,
+    `Möchtest du <strong>${item.name}</strong> für <strong>${price} Gold</strong> kaufen?<br>
+    <small style="color:var(--dim)">${desc}</small>`, 'Kaufen', 'Abbrechen');
   if(!confirmed) return;
 
   try {
     const {data:{session}} = await sb.auth.getSession();
     if(!session) return;
 
-    const newGold = currentGold - item.price;
     const {error:goldErr} = await sb.from('characters')
-      .update({gold: newGold}).eq('id', character.id);
-    if(goldErr){ alert('Fehler beim Kauf: '+goldErr.message); return; }
+      .update({gold: currentGold-price}).eq('id', character.id);
+    if(goldErr){ alert('Fehler: '+goldErr.message); return; }
 
-    // Stat-Bonus als JSONB speichern
     const {error:invErr} = await sb.from('inventory').insert([{
       character_id: character.id,
       item_name:    item.name,
       item_type:    item.type,
       item_icon:    item.icon,
       item_slot:    item.slot,
-      stat_bonus:   item.stats || {},
-      description:  item.desc,
+      stat_bonus:   stats,
+      description:  item.desc + (scaledDmg?` Schaden: ${scaledDmg[0]}-${scaledDmg[1]}`:'') + (scaledHeal?` Heilt: ${scaledHeal} LP`:''),
       quantity:     1
     }]);
-    if(invErr){ alert('Fehler beim Hinzufügen: '+invErr.message); return; }
+    if(invErr){ alert('Fehler: '+invErr.message); return; }
 
-    character.gold = newGold;
+    character.gold = currentGold - price;
     updateHUD();
     closeOverlay('shopOverlay');
     showLevelUpBanner('✅ '+item.name+' gekauft!');
@@ -1274,9 +1351,9 @@ async function buyItem(itemName, price, icon, desc) {
 
 function startMission(type){
   const BASE_MISSIONS={
-    goblin:{enemy:'warrior', enemykey:'goblin',  exp:10, gold:1, item:null},
-    noble: {enemy:'archer',  enemykey:'bandit',  exp:2,  gold:5, item:null},
-    ring:  {enemy:'mage',    enemykey:'wichtel', exp:4,  gold:1, item:'Geflochtener Ring'}
+    goblin:{enemy:'warrior', enemykey:'goblin',  exp:100, gold:10, item:null},
+    noble: {enemy:'archer',  enemykey:'bandit',  exp:20,  gold:50, item:null},
+    ring:  {enemy:'mage',    enemykey:'wichtel', exp:40,  gold:10, item:'Geflochtener Ring'}
   };
   const base = BASE_MISSIONS[type];
   const cls  = character?.class||'warrior';
@@ -1293,9 +1370,9 @@ function closeOverlay(id){
 
 // ── Daily quests ─────────────────────────────────────────────
 const DAILY_QUESTS = [
-  {id:'steps',    icon:'🚶', title:'1.000 Schritte gehen',       desc:'Gehe heute mindestens 1.000 Schritte.',  exp:5,  gold:1, done:false},
-  {id:'workout',  icon:'💪', title:'30 Min. Training absolvieren',desc:'Trainiere heute mindestens 30 Minuten.', exp:10, gold:2, done:false},
-  {id:'water',    icon:'💧', title:'2 Liter Wasser trinken',      desc:'Trinke heute mindestens 2 Liter Wasser.',exp:3,  gold:1, done:false},
+  {id:'steps',   icon:'🚶', title:'1.000 Schritte gehen',        desc:'Gehe heute mindestens 1.000 Schritte.',  exp:50,  gold:5,  done:false},
+  {id:'workout', icon:'💪', title:'30 Min. Training absolvieren', desc:'Trainiere heute mindestens 30 Minuten.', exp:100, gold:10, done:false},
+  {id:'water',   icon:'💧', title:'2 Liter Wasser trinken',       desc:'Trinke heute mindestens 2 Liter Wasser.',exp:30,  gold:3,  done:false},
 ];
 
 function openKnight(){
