@@ -447,8 +447,8 @@ body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text)}
         <div class="mc-title">⚔️ Goblins greifen die Bauern an!</div>
         <div class="mc-desc">Helft den Bauern dabei sich gegen die Goblins zu wehren.</div>
         <div class="mc-rewards">
-          <span class="mc-reward exp">✨ 10 EXP</span>
-          <span class="mc-reward gold">💰 1 Gold</span>
+          <span class="mc-reward exp" id="mission1Exp">✨ 100 EXP</span>
+          <span class="mc-reward gold" id="mission1Gold">💰 10 Gold</span>
         </div>
       </div>
       <div class="mission-card gold-focus" onclick="startMission('noble')">
@@ -456,8 +456,8 @@ body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text)}
         <div class="mc-title">🏰 Adliger in Not!</div>
         <div class="mc-desc">Ein Adliger wurde von Banditen entführt. Findet und rettet ihn.</div>
         <div class="mc-rewards">
-          <span class="mc-reward exp">✨ 2 EXP</span>
-          <span class="mc-reward gold">💰 5 Gold</span>
+          <span class="mc-reward exp" id="mission2Exp">✨ 20 EXP</span>
+          <span class="mc-reward gold" id="mission2Gold">💰 50 Gold</span>
         </div>
       </div>
       <div class="mission-card item-focus" onclick="startMission('ring')">
@@ -465,8 +465,8 @@ body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text)}
         <div class="mc-title">💍 Ich habe meinen Ring verloren!</div>
         <div class="mc-desc">Ein kleines Mädchen hat ihren selbstgemachten Ring verloren. Finde ihn!</div>
         <div class="mc-rewards">
-          <span class="mc-reward exp">✨ 4 EXP</span>
-          <span class="mc-reward gold">💰 1 Gold</span>
+          <span class="mc-reward exp" id="mission3Exp">✨ 40 EXP</span>
+          <span class="mc-reward gold" id="mission3Gold">💰 10 Gold</span>
           <span class="mc-reward item">💍 Geflochtener Ring (+1 LP)</span>
         </div>
       </div>
@@ -747,6 +747,23 @@ function openMissions(){
       '"Neu hier? Du scheinst noch ein Anfänger zu sein. Ich habe hier drei passende Missionen für dich. Meine Empfehlung: Sammle erst Erfahrung, dann kümmere dich um Gold und Ausrüstung!"';
     firstMissionOpen = false;
   }
+  // Update mission rewards based on current level
+  const lv = character?.level || 1;
+  const BASE_MISSIONS = {
+    goblin:{exp:100, gold:10},
+    noble: {exp:20,  gold:50},
+    ring:  {exp:40,  gold:10}
+  };
+  const r1 = getMissionRewards(BASE_MISSIONS.goblin, lv);
+  const r2 = getMissionRewards(BASE_MISSIONS.noble,  lv);
+  const r3 = getMissionRewards(BASE_MISSIONS.ring,   lv);
+  const el = (id,txt) => { const e=document.getElementById(id); if(e) e.textContent=txt; };
+  el('mission1Exp',  `✨ ${r1.exp} EXP`);
+  el('mission1Gold', `💰 ${r1.gold} Gold`);
+  el('mission2Exp',  `✨ ${r2.exp} EXP`);
+  el('mission2Gold', `💰 ${r2.gold} Gold`);
+  el('mission3Exp',  `✨ ${r3.exp} EXP`);
+  el('mission3Gold', `💰 ${r3.gold} Gold`);
   document.getElementById('missionOverlay').classList.add('active');
 }
 
@@ -1288,26 +1305,31 @@ async function refreshShopManual(){
   // Neuen Seed generieren (aktueller Timestamp)
   renderShop(_currentShopType, true);
 }
-async function buyShopItem(itemKey, scaledPrice, scaledStats, scaledDmg, scaledHeal) {
+async function buyShopItem(itemKey) {
   const item = ITEM_DATABASE[itemKey];
   if(!item || !character) return;
 
-  const level = character.level||1;
-  const price = scaledPrice !== undefined ? scaledPrice : Math.round(item.price * itemMult(level));
-  const stats = scaledStats !== undefined ? scaledStats : Object.fromEntries(
-    Object.entries(item.stats||{}).map(([k,v])=>[k,scaledStat(v,level)])
+  const level    = character.level || 1;
+  const price    = Math.round(item.price * itemMult(level));
+  const stats    = Object.fromEntries(
+    Object.entries(item.stats||{}).map(([k,v]) => [k, scaledStat(v, level)])
   );
-  const currentGold = character.gold||0;
+  const dmg      = item.damage ? [Math.round(item.damage[0]*itemMult(level)),
+                                   Math.round(item.damage[1]*itemMult(level))] : null;
+  const heal     = item.heal   ? scaledStat(item.heal, level) : 0;
+  const gold     = character.gold || 0;
 
-  if(currentGold < price){
-    await showConfirmDialog('💰',`Du hast nicht genug Gold!<br>Du hast <strong>${currentGold}</strong>, brauchst <strong>${price}</strong>.`,'OK','');
+  if(gold < price){
+    await showConfirmDialog('💰',
+      `Du hast nicht genug Gold!<br>Du hast <strong>${gold}</strong>, brauchst <strong>${price}</strong>.`,
+      'OK','');
     return;
   }
 
   const statNames={lp:'LP',staerke:'STR',gewandheit:'GEW',intelligenz:'INT',schnelligkeit:'SCH',ausdauer:'AUS'};
   const statStr = Object.entries(stats).map(([k,v])=>`+${v} ${statNames[k]||k}`).join(', ');
-  const dmgStr  = scaledDmg ? `⚔️ ${scaledDmg[0]}-${scaledDmg[1]}` : '';
-  const healStr = scaledHeal ? `❤️ +${scaledHeal} LP` : '';
+  const dmgStr  = dmg  ? `⚔️ ${dmg[0]}-${dmg[1]}` : '';
+  const healStr = heal ? `❤️ +${heal} LP` : '';
   const desc    = [statStr,dmgStr,healStr].filter(Boolean).join(' | ') || item.desc;
 
   const confirmed = await showConfirmDialog(item.icon,
@@ -1320,7 +1342,7 @@ async function buyShopItem(itemKey, scaledPrice, scaledStats, scaledDmg, scaledH
     if(!session) return;
 
     const {error:goldErr} = await sb.from('characters')
-      .update({gold: currentGold-price}).eq('id', character.id);
+      .update({gold: gold - price}).eq('id', character.id);
     if(goldErr){ alert('Fehler: '+goldErr.message); return; }
 
     const {error:invErr} = await sb.from('inventory').insert([{
@@ -1330,12 +1352,12 @@ async function buyShopItem(itemKey, scaledPrice, scaledStats, scaledDmg, scaledH
       item_icon:    item.icon,
       item_slot:    item.slot,
       stat_bonus:   stats,
-      description:  item.desc + (scaledDmg?` Schaden: ${scaledDmg[0]}-${scaledDmg[1]}`:'') + (scaledHeal?` Heilt: ${scaledHeal} LP`:''),
+      description:  item.desc + (dmg?` Schaden: ${dmg[0]}-${dmg[1]}`:'') + (heal?` Heilt: ${heal} LP`:''),
       quantity:     1
     }]);
     if(invErr){ alert('Fehler: '+invErr.message); return; }
 
-    character.gold = currentGold - price;
+    character.gold = gold - price;
     updateHUD();
     closeOverlay('shopOverlay');
     showLevelUpBanner('✅ '+item.name+' gekauft!');
@@ -1343,7 +1365,6 @@ async function buyShopItem(itemKey, scaledPrice, scaledStats, scaledDmg, scaledH
     alert('Fehler: '+err.message);
   }
 }
-
 // Legacy wrapper
 async function buyItem(itemName, price, icon, desc) {
   alert('Bitte nutze den Shop-Button.');
