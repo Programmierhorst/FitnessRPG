@@ -1280,7 +1280,7 @@ function renderShop(type, forceRefresh=false){
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
         <div class="si-price">💰 ${price}</div>
-        <button class="btn-buy" onclick="buyShopItem('${item.key}',${price},${JSON.stringify(scaledStats)},${dmg?JSON.stringify(dmg):'null'},${heal||0})"
+        <button class="btn-buy" onclick="buyShopItem('${item.key}')"
           ${!canAfford?'disabled style="opacity:.5;cursor:not-allowed"':''}>Kaufen</button>
       </div>
     </div>`;
