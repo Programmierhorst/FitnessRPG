@@ -1425,8 +1425,12 @@ async function sellItem(itemId, sellPrice, itemName) {
     if(goldErr){ alert('Fehler: '+goldErr.message); return; }
 
     character.gold = newGold;
+    // Lokal aus _invItems entfernen damit openHero korrekt rendert
+    const idx = _invItems.findIndex(i=>i.id===itemId);
+    if(idx>=0) _invItems.splice(idx,1);
     updateHUD();
     closeOverlay('itemOverlay');
+    closeOverlay('heroOverlay');
     await openHero();
     showLevelUpBanner(`💰 +${sellPrice} Gold erhalten!`);
   } catch(err) {
