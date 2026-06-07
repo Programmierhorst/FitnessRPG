@@ -1059,13 +1059,29 @@ function showItemInfo(itemId){
 
   // Buttons
   const btns = document.getElementById('itemOverlayBtns');
+  // Verkaufspreis berechnen: Hälfte des Kaufpreises, min 1 Gold
+  const dbItemForSell = Object.values(ITEM_DATABASE).find(d=>d.name===item.item_name);
+  const level = character?.level||1;
+  const buyPrice = dbItemForSell ? Math.round(dbItemForSell.price * itemMult(level)) : 2;
+  const sellPrice = Math.max(1, Math.ceil(buyPrice / 2));
+
+  const sellBtn = `<button onclick="sellItem('${item.id}',${sellPrice},'${item.item_name}')"
+    style="width:100%;padding:10px;margin-top:6px;background:transparent;
+    border:1px solid rgba(201,168,76,.4);border-radius:3px;color:var(--gold);
+    font-family:Cinzel,serif;font-size:.68rem;letter-spacing:.1em;
+    text-transform:uppercase;cursor:pointer">
+    💰 Verkaufen für ${sellPrice} Gold</button>`;
+
   if(item.equipped_slot){
-    btns.innerHTML = `<button onclick="unequipItem('${item.id}')" style="width:100%;padding:11px;background:transparent;border:1px solid var(--border);border-radius:3px;color:var(--text);font-family:Cinzel,serif;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;cursor:pointer">📦 Ablegen → Beutel</button>`;
+    btns.innerHTML = `<button onclick="unequipItem('${item.id}')" style="width:100%;padding:11px;background:transparent;border:1px solid var(--border);border-radius:3px;color:var(--text);font-family:Cinzel,serif;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;cursor:pointer">📦 Ablegen → Beutel</button>`
+      + sellBtn;
   } else if(slotFor){
     const slotLabel = SLOT_LABELS[slotFor]||slotFor;
-    btns.innerHTML = `<button onclick="equipItem('${item.id}','${slotFor}')" style="width:100%;padding:11px;background:linear-gradient(135deg,var(--gold-d),var(--gold));border:none;border-radius:3px;color:#1a1200;font-family:Cinzel,serif;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;cursor:pointer">⚔️ Ausrüsten (${slotLabel})</button>`;
+    btns.innerHTML = `<button onclick="equipItem('${item.id}','${slotFor}')" style="width:100%;padding:11px;background:linear-gradient(135deg,var(--gold-d),var(--gold));border:none;border-radius:3px;color:#1a1200;font-family:Cinzel,serif;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;cursor:pointer">⚔️ Ausrüsten (${slotLabel})</button>`
+      + sellBtn;
   } else {
-    btns.innerHTML = `<div style="color:var(--dim);font-size:.85rem;text-align:center">Dieser Gegenstand kann nicht ausgerüstet werden.</div>`;
+    btns.innerHTML = `<div style="color:var(--dim);font-size:.85rem;text-align:center;margin-bottom:8px">Dieser Gegenstand kann nicht ausgerüstet werden.</div>`
+      + sellBtn;
   }
 
   // Keep heroOverlay open in background, show item overlay on top
@@ -1382,6 +1398,40 @@ function startMission(type){
   const rewards = getMissionRewards(base, lvl);
   const elvl = getEnemyLevel(lvl);
   window.location.href=`kampf.html?player=${cls}&level=${lvl}&enemy=${base.enemy}&enemykey=${base.enemykey}&elvl=${elvl}&exp=${rewards.exp}&gold=${rewards.gold}${rewards.item?'&item='+encodeURIComponent(rewards.item):''}`;
+}
+
+
+async function sellItem(itemId, sellPrice, itemName) {
+  const confirmed = await showConfirmDialog(
+    '💰',
+    `Möchtest du <strong>${itemName}</strong> für <strong>${sellPrice} Gold</strong> verkaufen?`,
+    'Verkaufen', 'Abbrechen'
+  );
+  if(!confirmed) return;
+
+  try {
+    const {data:{session}} = await sb.auth.getSession();
+    if(!session) return;
+
+    // Item aus Inventar löschen
+    const {error:delErr} = await sb.from('inventory')
+      .delete().eq('id', itemId);
+    if(delErr){ alert('Fehler: '+delErr.message); return; }
+
+    // Gold gutschreiben
+    const newGold = (character.gold||0) + sellPrice;
+    const {error:goldErr} = await sb.from('characters')
+      .update({gold: newGold}).eq('id', character.id);
+    if(goldErr){ alert('Fehler: '+goldErr.message); return; }
+
+    character.gold = newGold;
+    updateHUD();
+    closeOverlay('itemOverlay');
+    await openHero();
+    showLevelUpBanner(`💰 +${sellPrice} Gold erhalten!`);
+  } catch(err) {
+    alert('Fehler: '+err.message);
+  }
 }
 
 function closeOverlay(id){
