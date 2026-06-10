@@ -1478,10 +1478,35 @@ function closeOverlay(id){
 
 // ── Daily quests ─────────────────────────────────────────────
 const DAILY_QUESTS = [
-  {id:'steps',   icon:'🚶', title:'1.000 Schritte gehen',        desc:'Gehe heute mindestens 1.000 Schritte.',  exp:50,  gold:5,  done:false},
+  {id:'steps',   icon:'🚶', title:'1.000 Schritte gehen',        desc:'Gehe heute mindestens 1.000 Schritte.',  exp:50,  gold:5,  done:false, goal:1000, current:0},
   {id:'workout', icon:'💪', title:'30 Min. Training absolvieren', desc:'Trainiere heute mindestens 30 Minuten.', exp:100, gold:10, done:false},
   {id:'water',   icon:'💧', title:'2 Liter Wasser trinken',       desc:'Trinke heute mindestens 2 Liter Wasser.',exp:30,  gold:3,  done:false},
 ];
+
+// ── Health Connect Bridge ─────────────────────────────────────
+// Diese Funktion wird von der Flutter-App aufgerufen
+// wenn sie Schrittdaten aus Health Connect ausliest
+function updateStepsFromApp(schritte) {
+  console.log('Health Connect: ' + schritte + ' Schritte heute');
+  
+  const stepsQuest = DAILY_QUESTS.find(q => q.id === 'steps');
+  if(!stepsQuest) return;
+  
+  // Schritte aktualisieren
+  stepsQuest.current = Math.min(schritte, stepsQuest.goal);
+  
+  // Quest automatisch abschließen wenn Ziel erreicht
+  if(schritte >= stepsQuest.goal && !stepsQuest.done){
+    completeQuest('steps');
+  } else {
+    // Nur Anzeige aktualisieren
+    renderDailyQuests();
+    // Ritter-Menü neu öffnen falls es offen ist
+    if(document.getElementById('knightOverlay').classList.contains('active')){
+      renderDailyQuests();
+    }
+  }
+}
 
 function openKnight(){
   renderDailyQuests();
@@ -1493,10 +1518,27 @@ function openKnight(){
 
 function renderDailyQuests(){
   const list = document.getElementById('dailyQuestList');
-  list.innerHTML = DAILY_QUESTS.map(q=>`
+  list.innerHTML = DAILY_QUESTS.map(q=>{
+    // Fortschrittsanzeige für Quests mit Ziel (z.B. Schritte)
+    const hasProgress = q.goal && !q.done;
+    const pct = hasProgress ? Math.min(100, Math.round((q.current||0)/q.goal*100)) : 0;
+    const progressBar = hasProgress ? `
+      <div style="margin:8px 0 4px">
+        <div style="display:flex;justify-content:space-between;
+          font-family:Cinzel,serif;font-size:.6rem;color:var(--dim);margin-bottom:4px">
+          <span>Fortschritt</span>
+          <span>${(q.current||0).toLocaleString()} / ${q.goal.toLocaleString()} Schritte</span>
+        </div>
+        <div style="height:6px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,var(--gold-d),var(--gold-l));
+            border-radius:3px;transition:width .5s ease"></div>
+        </div>
+      </div>` : '';
+    return `
     <div class="mission-card ${q.done?'':'exp-focus'}" style="${q.done?'opacity:.5':''}">
       <div class="mc-title">${q.icon} ${q.title} ${q.done?'✅':''}</div>
       <div class="mc-desc">${q.desc}</div>
+      ${progressBar}
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
         <div class="mc-rewards">
           <span class="mc-reward exp">✨ ${q.exp} EXP</span>
@@ -1504,7 +1546,8 @@ function renderDailyQuests(){
         </div>
         ${!q.done?`<button onclick="completeQuest('${q.id}')" style="padding:5px 12px;background:linear-gradient(135deg,var(--gold-d),var(--gold));border:none;border-radius:2px;color:#1a1200;font-family:Cinzel,serif;font-size:.6rem;letter-spacing:.08em;cursor:pointer">Erledigt ✓</button>`:''}
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 async function completeQuest(id){
