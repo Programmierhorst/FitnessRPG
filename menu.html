@@ -927,6 +927,73 @@ const ITEM_DATABASE = {
   'trank_staerke':   { name:'Stärketrank',      icon:'💪', type:'potion', slot:'potion', classes:['warrior'],                stats:{}, buff:'staerke', price:15, desc:'+3 Stärke für 1 Kampf.' },
   'trank_gewandheit':{ name:'Gewandheitstrank', icon:'🌿', type:'potion', slot:'potion', classes:['archer'],                 stats:{}, buff:'gewandheit', price:15, desc:'+3 Gewandheit für 1 Kampf.' },
   'trank_intelligenz':{ name:'Manatrank',       icon:'🔵', type:'potion', slot:'potion', classes:['mage'],                   stats:{}, buff:'intelligenz', price:15, desc:'+3 Intelligenz für 1 Kampf.' },
+
+  // ══════════════════════════════════════════════════════════════
+  // LEGENDÄRE ITEMS
+  // ══════════════════════════════════════════════════════════════
+
+  // ── LEGENDÄRE KRIEGER-WAFFEN ──────────────────────────────────
+  'schwert_koeniglich': { name:'Königsschwert',      icon:'⚜️', type:'weapon', slot:'weapon1', classes:['warrior'], damage:[22,32],  stats:{staerke:8, ausdauer:3}, price:270,  desc:'Das Schwert des alten Königs. Strahlt goldenes Licht.', legendary:true },
+  'axt_drachen':        { name:'Drachenschlächter',  icon:'🐲', type:'weapon', slot:'weapon1', classes:['warrior'], damage:[18,28],  stats:{staerke:10, krit_schaden:3}, price:300, desc:'Geschmiedet aus Drachenzähnen. Unvorstellbar scharf.', legendary:true },
+
+  // ── LEGENDÄRE KRIEGER-SCHILDE ─────────────────────────────────
+  'schild_goetterwall': { name:'Götterwall',          icon:'🌟', type:'shield', slot:'weapon2', classes:['warrior'], damage:[0,0],   stats:{ausdauer:10, lp:5, krit_chance:2}, price:250, desc:'Kein Angriff durchdringt diesen Schild.', legendary:true },
+
+  // ── LEGENDÄRE BOGENSCHÜTZEN-WAFFEN ───────────────────────────
+  'bogen_schicksal':    { name:'Bogen des Schicksals', icon:'🌠', type:'weapon', slot:'weapon1', classes:['archer'],  damage:[24,36],  stats:{gewandheit:8, krit_chance:5}, price:280,  desc:'Jeder Pfeil findet sein Ziel. Immer.', legendary:true },
+
+  // ── LEGENDÄRE PFEILE ─────────────────────────────────────────
+  'pfeile_schicksal':   { name:'Schicksalspfeile',    icon:'✨', type:'arrows', slot:'weapon2', classes:['archer'],  damage:[8,14],   stats:{krit_chance:3, krit_schaden:2}, price:120, desc:'Diese Pfeile kehren zu ihrem Besitzer zurück.', legendary:true },
+
+  // ── LEGENDÄRE MAGIER-WAFFEN ───────────────────────────────────
+  'stab_ewigkeit':      { name:'Stab der Ewigkeit',   icon:'🔱', type:'weapon', slot:'weapon1', classes:['mage'],    damage:[20,30],  stats:{intelligenz:8, ausdauer:4}, price:260,  desc:'Uralter Stab voller kosmischer Energie.', legendary:true },
+
+  // ── LEGENDÄRE ROLLEN ─────────────────────────────────────────
+  'rolle_apokalypse':   { name:'Apokalypse-Rolle',    icon:'💫', type:'scroll', slot:'weapon2', classes:['mage'],    damage:[16,24],  stats:{intelligenz:5, krit_schaden:4}, price:180, desc:'Vernichtet alles was sie berührt.', legendary:true },
+
+  // ── LEGENDÄRE HELME ──────────────────────────────────────────
+  'helm_drachen_krieger':  { name:'Drachenhelm',       icon:'🐉', type:'helmet', slot:'helmet', classes:['warrior'],               stats:{lp:6, ausdauer:4, krit_schaden:2}, price:220, desc:'Aus einem Drachenschädel gefertigt.', legendary:true },
+  'helm_adler':            { name:'Adlerhaube',         icon:'🦅', type:'helmet', slot:'helmet', classes:['archer'],                stats:{gewandheit:4, schnelligkeit:4, krit_chance:3}, price:210, desc:'Leicht wie eine Feder, scharf wie Adleraugen.', legendary:true },
+  'helm_sternenkrone':     { name:'Sternenkrone',       icon:'👑', type:'helmet', slot:'helmet', classes:['mage'],                  stats:{intelligenz:5, krit_chance:3, krit_schaden:2}, price:230, desc:'Eine Krone aus gefrorenem Sternenlicht.', legendary:true },
+
+  // ── LEGENDÄRE BRUSTPANZER ────────────────────────────────────
+  'brust_himmelsschmied':  { name:'Himmelsgeschmiedete Rüstung', icon:'✨', type:'chest', slot:'chest', classes:['warrior'],        stats:{lp:10, ausdauer:6}, price:280, desc:'Im Blitz eines Gewitters geschmiedet.', legendary:true },
+  'brust_waldgeist':       { name:'Waldgeist-Rüstung',  icon:'🌿', type:'chest', slot:'chest', classes:['archer'],                 stats:{gewandheit:5, schnelligkeit:4, lp:4}, price:260, desc:'Lebt und atmet wie ein Wald.', legendary:true },
+  'brust_astraler_mantel': { name:'Astraler Mantel',    icon:'🌌', type:'chest', slot:'chest', classes:['mage'],                   stats:{intelligenz:6, ausdauer:4, lp:5}, price:270, desc:'Gewebt aus den Fäden des Universums.', legendary:true },
+
+  // ── LEGENDÄRE HANDSCHUHE ─────────────────────────────────────
+  'handsch_titan':         { name:'Titanengriff',       icon:'⚡', type:'gloves', slot:'gloves', classes:['warrior'],              stats:{staerke:5, krit_schaden:3}, price:200, desc:'Mit diesen Handschuhen brichst du Felsen.', legendary:true },
+  'handsch_windflüster':   { name:'Windflüsterer',      icon:'💨', type:'gloves', slot:'gloves', classes:['archer'],               stats:{gewandheit:4, schnelligkeit:5}, price:190, desc:'Deine Hände bewegen sich schneller als der Wind.', legendary:true },
+  'handsch_arkan':         { name:'Arkanhandschuhe',    icon:'🔮', type:'gloves', slot:'gloves', classes:['mage'],                 stats:{intelligenz:5, krit_chance:4}, price:200, desc:'Kanalisieren Magie direkt aus dem Kosmos.', legendary:true },
+
+  // ── LEGENDÄRE HOSEN ──────────────────────────────────────────
+  'hose_titan':            { name:'Titanenbeinschienen', icon:'⚙️', type:'pants', slot:'pants', classes:['warrior'],              stats:{lp:5, ausdauer:5}, price:190, desc:'Unzerstörbar wie der Titan selbst.', legendary:true },
+  'hose_jaguar':           { name:'Jaguarhose',          icon:'🐆', type:'pants', slot:'pants', classes:['archer'],               stats:{schnelligkeit:6, gewandheit:3}, price:180, desc:'Schnell wie ein jagender Jaguar.', legendary:true },
+  'hose_sternenstaub':     { name:'Sternenstaub-Gewand', icon:'⭐', type:'pants', slot:'pants', classes:['mage'],                 stats:{intelligenz:4, ausdauer:4}, price:185, desc:'Hinterlässt eine Spur aus Sternenstaub.', legendary:true },
+
+  // ── LEGENDÄRE GÜRTEL ─────────────────────────────────────────
+  'guertel_held':          { name:'Gürtel des Helden',  icon:'🏆', type:'belt', slot:'belt', classes:['warrior','archer','mage'], stats:{lp:3, krit_chance:2, krit_schaden:2}, price:160, desc:'Nur wahre Helden dürfen ihn tragen.', legendary:true },
+
+  // ── LEGENDÄRE STIEFEL ────────────────────────────────────────
+  'stiefel_sturm':         { name:'Sturmstiefel',        icon:'⚡', type:'boots', slot:'boots', classes:['warrior'],              stats:{schnelligkeit:5, ausdauer:3}, price:195, desc:'Schnell wie ein Blitzeinschlag.', legendary:true },
+  'stiefel_wind':          { name:'Windläufer',          icon:'🌪️', type:'boots', slot:'boots', classes:['archer'],              stats:{schnelligkeit:8, krit_chance:2}, price:200, desc:'Du berührst kaum noch den Boden.', legendary:true },
+  'stiefel_levitation':    { name:'Levitations-Schlappen',icon:'🌠', type:'boots', slot:'boots', classes:['mage'],                stats:{intelligenz:3, schnelligkeit:4, ausdauer:2}, price:190, desc:'Schweben einen Zentimeter über dem Boden.', legendary:true },
+
+  // ── LEGENDÄRE RINGE ──────────────────────────────────────────
+  'ring_unsterblich':      { name:'Ring der Unsterblichkeit', icon:'♾️', type:'ring', slot:'ring', classes:['warrior','archer','mage'], stats:{lp:8, ausdauer:3}, price:300, desc:'Solange du ihn trägst kannst du nicht sterben.', legendary:true },
+  'ring_schicksal':        { name:'Ring des Schicksals',  icon:'🌀', type:'ring', slot:'ring', classes:['warrior','archer','mage'], stats:{krit_chance:5, krit_schaden:4}, price:320, desc:'Bestimmt das Schicksal deiner Feinde.', legendary:true },
+
+  // ── LEGENDÄRE HALSKETTEN ─────────────────────────────────────
+  'kette_drachen':         { name:'Drachenskalenamulett', icon:'🐉', type:'necklace', slot:'necklace', classes:['warrior'],       stats:{lp:5, staerke:4, ausdauer:3}, price:240, desc:'Aus einer Drachenschuppe gefertigt.', legendary:true },
+  'kette_phaenix':         { name:'Phönix-Amulett',       icon:'🔥', type:'necklace', slot:'necklace', classes:['archer'],        stats:{gewandheit:4, krit_chance:4, schnelligkeit:3}, price:250, desc:'Gibt dir die Kraft des Phönix.', legendary:true },
+  'kette_kosmisch':        { name:'Kosmisches Amulett',   icon:'🌌', type:'necklace', slot:'necklace', classes:['mage'],          stats:{intelligenz:6, krit_schaden:4}, price:260, desc:'Verbindet dich mit dem Kosmos.', legendary:true },
+
+  // ── LEGENDÄRE TRÄNKE ─────────────────────────────────────────
+  'trank_goetterblut':     { name:'Götterblut',            icon:'💎', type:'potion', slot:'potion', classes:['warrior','archer','mage'], stats:{}, heal:200, price:80,  desc:'Stellt 200 LP wieder her. Schmeckt nach Sternen.', legendary:true },
+  'trank_berserk':         { name:'Berserkertrank',        icon:'🔴', type:'potion', slot:'potion', classes:['warrior'],           stats:{}, buff:'staerke', buffVal:10, price:60, desc:'+10 Stärke für 1 Kampf. Sehr gefährlich.', legendary:true },
+  'trank_phantomschritt':  { name:'Phantomschritttrank',   icon:'👻', type:'potion', slot:'potion', classes:['archer'],            stats:{}, buff:'schnelligkeit', buffVal:10, price:60, desc:'+10 Schnelligkeit für 1 Kampf.', legendary:true },
+  'trank_orakel':          { name:'Orakeltrank',           icon:'🔵', type:'potion', slot:'potion', classes:['mage'],              stats:{}, buff:'intelligenz', buffVal:10, price:60, desc:'+10 Intelligenz für 1 Kampf.', legendary:true },
+
 };
 
 // Shop-Sortiment nach Klasse
@@ -1245,6 +1312,10 @@ function seededRandom(seed, index) {
 
 function getShopItemsForToday(shopType, characterClass, level) {
   const seed = getShopSeed();
+
+  // Legendäre Items: nur 3% Chance im Shop (hauptsächlich in Dungeons)
+  const LEGENDARY_CHANCE = 0.03;
+
   let pool = [];
   if(shopType === 'weapons') {
     pool = Object.entries(ITEM_DATABASE)
@@ -1258,11 +1329,28 @@ function getShopItemsForToday(shopType, characterClass, level) {
         || i.type==='potion'))
       .map(([k,i]) => ({...i, key:k}));
   }
-  // Mische mit täglichem Seed
-  const shuffled = [...pool].sort((a,b) =>
-    seededRandom(seed, pool.indexOf(a)) - seededRandom(seed, pool.indexOf(b))
+
+  // Trenne normale und legendäre Items
+  const normalItems    = pool.filter(i => !i.legendary);
+  const legendaryItems = pool.filter(i =>  i.legendary);
+
+  // Mische normale Items mit täglichem Seed
+  const shuffledNormal = [...normalItems].sort((a,b) =>
+    seededRandom(seed, normalItems.indexOf(a)) - seededRandom(seed, normalItems.indexOf(b))
   );
-  return shuffled.slice(0, SHOP_SIZE);
+
+  // Prüfe ob heute ein legendäres Item erscheint (3% pro Slot)
+  const result = shuffledNormal.slice(0, SHOP_SIZE).map((item, idx) => {
+    const roll = seededRandom(seed + 9999, idx);
+    if(roll < LEGENDARY_CHANCE && legendaryItems.length > 0) {
+      // Wähle zufälliges legendäres Item
+      const legIdx = Math.floor(seededRandom(seed + idx, 7) * legendaryItems.length);
+      return legendaryItems[legIdx];
+    }
+    return item;
+  });
+
+  return result;
 }
 
 function getNextRefreshTime() {
@@ -1324,7 +1412,7 @@ function renderShop(type, forceRefresh=false){
     <div class="shop-item" style="${!canAfford?'opacity:.6':''}">
       <div class="si-icon">${item.icon}</div>
       <div class="si-info">
-        <div class="si-name">${item.name} <span style="font-size:.65rem;color:var(--dim)">(Lv.${level})</span></div>
+        <div class="si-name" style="${item.legendary?'color:#f39c12':''}">${item.legendary?'⭐ ':''} ${item.name} ${item.legendary?'<span style="font-size:.6rem;color:#f39c12;font-family:Cinzel,serif;letter-spacing:.1em">LEGENDÄR</span>':''}<span style="font-size:.65rem;color:var(--dim)"> (Lv.${level})</span></div>
         <div class="si-desc">${statDesc}${dmgDesc}${healDesc}</div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
