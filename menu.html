@@ -1298,10 +1298,55 @@ function scaledDmg(min, max, level) {
 // ── Shop Refresh System ───────────────────────────────────────
 const SHOP_SIZE = 5; // Items pro Shop-Kategorie
 
+function getTodayKey() {
+  const now = new Date();
+  return now.getFullYear()*10000 + (now.getMonth()+1)*100 + now.getDate();
+}
+
+// Manueller Refresh-Offset wird pro Tag in localStorage gespeichert,
+// damit er auch nach Schließen/Neuladen des Spiels erhalten bleibt.
+function getManualShopRefreshOffset() {
+  try {
+    const stored = JSON.parse(localStorage.getItem('shopRefreshOffset') || '{}');
+    if (stored.day === getTodayKey()) return stored.offset || 0;
+  } catch(e) {}
+  return 0;
+}
+
+function setManualShopRefreshOffset(offset) {
+  localStorage.setItem('shopRefreshOffset', JSON.stringify({day: getTodayKey(), offset}));
+}
+
 function getShopSeed() {
   // Täglich um Mitternacht neuer Seed basierend auf Datum
   const now = new Date();
-  return now.getFullYear()*10000 + (now.getMonth()+1)*100 + now.getDate();
+  return now.getFullYear()*10000 + (now.getMonth()+1)*100 + now.getDate() + getManualShopRefreshOffset();
+}
+
+// ── Gekaufte Items ersetzen ───────────────────────────────────
+// Speichert pro Tag/Shop, welche Item-Keys bereits ersetzt wurden,
+// und durch welche Ersatz-Items (damit Ersetzung persistent bleibt).
+function getBoughtReplacements(shopType) {
+  try {
+    const stored = JSON.parse(localStorage.getItem('shopBoughtReplacements') || '{}');
+    if (stored.day === getTodayKey() && stored.offset === getManualShopRefreshOffset()) {
+      return stored[shopType] || {};
+    }
+  } catch(e) {}
+  return {};
+}
+
+function saveBoughtReplacement(shopType, originalKey, replacementKey) {
+  let stored;
+  try {
+    stored = JSON.parse(localStorage.getItem('shopBoughtReplacements') || '{}');
+  } catch(e) { stored = {}; }
+  if (stored.day !== getTodayKey() || stored.offset !== getManualShopRefreshOffset()) {
+    stored = {day: getTodayKey(), offset: getManualShopRefreshOffset()};
+  }
+  if (!stored[shopType]) stored[shopType] = {};
+  stored[shopType][originalKey] = replacementKey;
+  localStorage.setItem('shopBoughtReplacements', JSON.stringify(stored));
 }
 
 function seededRandom(seed, index) {
@@ -1350,7 +1395,15 @@ function getShopItemsForToday(shopType, characterClass, level) {
     return item;
   });
 
-  return result;
+  // Bereits gekaufte Items durch gespeicherte Ersatz-Items ersetzen
+  const replacements = getBoughtReplacements(shopType);
+  return result.map(item => {
+    const replKey = replacements[item.key];
+    if (replKey && ITEM_DATABASE[replKey]) {
+      return {...ITEM_DATABASE[replKey], key: replKey};
+    }
+    return item;
+  });
 }
 
 function getNextRefreshTime() {
@@ -1439,9 +1492,37 @@ async function refreshShopManual(){
   if(error){ alert('Fehler: '+error.message); return; }
   character.gold = gold-1;
   updateHUD();
-  // Neuen Seed generieren (aktueller Timestamp)
+  // Neuen Seed generieren (eindeutiger Offset für sofortige Neumischung), persistent speichern
+  setManualShopRefreshOffset(Date.now());
   renderShop(_currentShopType, true);
 }
+// Wählt nach einem Kauf ein neues Ersatz-Item für den gekauften Slot,
+// das aktuell nicht im Shop angezeigt wird, und speichert die Ersetzung dauerhaft.
+function replaceShopItemAfterPurchase(boughtKey) {
+  const cls   = character?.class || 'warrior';
+  const currentItems = getShopItemsForToday(_currentShopType, cls, character?.level || 1);
+  const currentKeys  = new Set(currentItems.map(i => i.key));
+
+  let pool = [];
+  if(_currentShopType === 'weapons') {
+    pool = Object.entries(ITEM_DATABASE)
+      .filter(([k,i]) => i.classes.includes(cls) &&
+        ['weapon','shield','arrows','scroll'].includes(i.type) && !i.legendary);
+  } else {
+    pool = Object.entries(ITEM_DATABASE)
+      .filter(([k,i]) => i.classes.includes(cls) &&
+        (['helmet','chest','gloves','pants','belt','boots','ring','necklace'].includes(i.type)
+        || i.type==='potion') && !i.legendary);
+  }
+
+  // Kandidaten, die aktuell nicht im Shop liegen
+  const candidates = pool.filter(([k]) => !currentKeys.has(k));
+  if(candidates.length === 0) return; // kein Ersatz möglich
+
+  const pick = candidates[Math.floor(Math.random() * candidates.length)];
+  saveBoughtReplacement(_currentShopType, boughtKey, pick[0]);
+}
+
 async function buyShopItem(itemKey) {
   const item = ITEM_DATABASE[itemKey];
   if(!item || !character) return;
@@ -1496,6 +1577,11 @@ async function buyShopItem(itemKey) {
 
     character.gold = gold - price;
     updateHUD();
+
+    // Gekauftes Item durch ein neues, noch nicht angezeigtes Item ersetzen
+    replaceShopItemAfterPurchase(itemKey);
+    renderShop(_currentShopType);
+
     closeOverlay('shopOverlay');
     showToast('🛒', item.name+' gekauft!');
   } catch(err){
