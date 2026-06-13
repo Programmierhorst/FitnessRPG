@@ -1669,17 +1669,9 @@ function updateStepsFromApp(schritte) {
   // Schritte aktualisieren
   stepsQuest.current = Math.min(schritte, stepsQuest.goal);
   
-  // Quest automatisch abschließen wenn Ziel erreicht
-  if(schritte >= stepsQuest.goal && !stepsQuest.done){
-    completeQuest('steps');
-  } else {
-    // Nur Anzeige aktualisieren
-    renderDailyQuests();
-    // Ritter-Menü neu öffnen falls es offen ist
-    if(document.getElementById('knightOverlay').classList.contains('active')){
-      renderDailyQuests();
-    }
-  }
+  // Quest wird NICHT automatisch abgeschlossen – der Spieler holt sich
+  // die Belohnung selbst per Button, sobald das Ziel erreicht ist.
+  renderDailyQuests();
 }
 
 function openKnight(){
@@ -1708,6 +1700,7 @@ function renderDailyQuests(){
             border-radius:3px;transition:width .5s ease"></div>
         </div>
       </div>` : '';
+    const goalReached = !q.goal || (q.current||0) >= q.goal;
     return `
     <div class="mission-card ${q.done?'':'exp-focus'}" style="${q.done?'opacity:.5':''}">
       <div class="mc-title">${q.icon} ${q.title} ${q.done?'✅':''}</div>
@@ -1718,7 +1711,7 @@ function renderDailyQuests(){
           <span class="mc-reward exp">✨ ${q.exp} EXP</span>
           <span class="mc-reward gold">💰 ${q.gold} Gold</span>
         </div>
-        ${!q.done?`<button onclick="completeQuest('${q.id}')" style="padding:5px 12px;background:linear-gradient(135deg,var(--gold-d),var(--gold));border:none;border-radius:2px;color:#1a1200;font-family:Cinzel,serif;font-size:.6rem;letter-spacing:.08em;cursor:pointer">Erledigt ✓</button>`:''}
+        ${!q.done?`<button onclick="completeQuest('${q.id}')" ${!goalReached?'disabled style="padding:5px 12px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:2px;color:var(--dim);font-family:Cinzel,serif;font-size:.6rem;letter-spacing:.08em;cursor:not-allowed"':'style="padding:5px 12px;background:linear-gradient(135deg,var(--gold-d),var(--gold));border:none;border-radius:2px;color:#1a1200;font-family:Cinzel,serif;font-size:.6rem;letter-spacing:.08em;cursor:pointer"'}>Erledigt ✓</button>`:''}
       </div>
     </div>`;
   }).join('');
