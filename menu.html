@@ -966,7 +966,9 @@ function getDungeonRewardBase(num){
 }
 
 function startDungeon(num){
+  alert('DEBUG: startDungeon('+num+') aufgerufen');
   const attemptsLeft = getDungeonAttemptsLeft();
+  alert('DEBUG: attemptsLeft='+attemptsLeft);
   if(attemptsLeft <= 0) return;
 
   const cls = character?.class || 'warrior';
