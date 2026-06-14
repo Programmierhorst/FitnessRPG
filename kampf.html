@@ -185,6 +185,38 @@ body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text);disp
   <div class="speed-label" id="tapHint">Tippe auf ⏭ um zu überspringen</div>
 </div>
 
+<!-- ENEMY DEFEATED overlay (dungeon mode, between fights) -->
+<div class="overlay" id="enemyDefeatedOverlay">
+  <div class="overlay-card">
+    <span class="ov-icon">⚔️</span>
+    <div class="ov-title win">Gegner besiegt!</div>
+    <div class="ov-text" id="enemyDefeatedText">Auf zum nächsten Gegner...</div>
+    <button class="btn-ov" onclick="proceedToNextFight()">Weiter →</button>
+  </div>
+</div>
+
+<!-- DUNGEON REWARDS overlay (gold + exp accepted, before item) -->
+<div class="overlay" id="dungeonGoldOverlay">
+  <div class="overlay-card">
+    <span class="ov-icon">🏆</span>
+    <div class="ov-title win">Dungeon gemeistert!</div>
+    <div class="ov-text" id="dungeonGoldText">Du hast den Dungeon erfolgreich abgeschlossen!</div>
+    <div class="ov-rewards" id="dungeonGoldRewardsBox"></div>
+    <button class="btn-ov" onclick="acceptDungeonGoldRewards()">✅ Belohnungen annehmen</button>
+  </div>
+</div>
+
+<!-- DUNGEON ITEM overlay (shown after gold/exp + levelup) -->
+<div class="overlay" id="dungeonItemOverlay">
+  <div class="overlay-card">
+    <span class="ov-icon" id="dungeonItemIcon">🎁</span>
+    <div class="ov-title win">Beute gefunden!</div>
+    <div class="ov-text" id="dungeonItemText">Du hast einen Gegenstand gefunden.</div>
+    <div class="ov-rewards" id="dungeonItemBox"></div>
+    <button class="btn-ov" onclick="goMenu()">Weiter → Hauptmenü</button>
+  </div>
+</div>
+
 <!-- WIN overlay -->
 <div class="overlay" id="winOverlay">
   <div class="overlay-card">
@@ -201,7 +233,7 @@ body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text);disp
   <div class="overlay-card">
     <span class="ov-icon">💀</span>
     <div class="ov-title lose">Niederlage</div>
-    <div class="ov-text">Dein Held ist gefallen... aber jede Niederlage macht dich stärker!</div>
+    <div class="ov-text" id="loseText">Dein Held ist gefallen... aber jede Niederlage macht dich stärker!</div>
     <button class="btn-ov" onclick="showTips()">Weiter →</button>
   </div>
 </div>
@@ -308,6 +340,94 @@ const ENEMIES = {
 
 // Get mission + fighter info from URL params (default: warrior vs archer demo)
 const params = new URLSearchParams(location.search);
+const MODE = params.get('mode') || 'mission';
+
+// ── DUNGEON-ITEMS (Subset für Belohnungen, identisch mit menu.html) ──
+// Pro Klasse: weapon1, weapon2, helmet, chest, gloves, pants, belt,
+// boots, ring, necklace – jeweils normal + legendär.
+const DUNGEON_ITEM_DATABASE = {
+  // ── KRIEGER ──
+  'dg_schwert_knochen':     { name:'Knochenklinge',         icon:'🦴', type:'weapon', slot:'weapon1', classes:['warrior'], damage:[14,20], stats:{staerke:5, ausdauer:1}, price:130, desc:'Aus den Knochen gefallener Krieger geschmiedet.', dungeon_drop:true },
+  'dg_schwert_verflucht':   { name:'Verfluchte Klinge',     icon:'🗡️', type:'weapon', slot:'weapon1', classes:['warrior'], damage:[26,38], stats:{staerke:11, krit_schaden:4}, price:340, desc:'Flüstert die Namen ihrer früheren Träger.', dungeon_drop:true, legendary:true },
+  'dg_schild_skelett':      { name:'Skelettschild',         icon:'🛡️', type:'shield', slot:'weapon2', classes:['warrior'], damage:[0,0], stats:{ausdauer:6, lp:3}, price:115, desc:'Zusammengesetzt aus Rippenknochen.', dungeon_drop:true },
+  'dg_schild_abyss':        { name:'Abyssaler Schildwall',  icon:'🌑', type:'shield', slot:'weapon2', classes:['warrior'], damage:[0,0], stats:{ausdauer:12, lp:6, krit_chance:3}, price:330, desc:'Verschluckt jedes Licht, das ihn berührt.', dungeon_drop:true, legendary:true },
+  'dg_helm_minotaurus':     { name:'Minotaurushelm',        icon:'🐂', type:'helmet', slot:'helmet', classes:['warrior'], stats:{lp:4, ausdauer:3}, price:120, desc:'Mit den Hörnern eines Labyrinthwächters.', dungeon_drop:true },
+  'dg_helm_obsidian':       { name:'Obsidiankrone',         icon:'👑', type:'helmet', slot:'helmet', classes:['warrior'], stats:{lp:7, ausdauer:5, krit_schaden:3}, price:310, desc:'Aus dem Herzen eines erloschenen Vulkans.', dungeon_drop:true, legendary:true },
+  'dg_brust_eisengolem':    { name:'Golemplatte',           icon:'⚙️', type:'chest', slot:'chest', classes:['warrior'], stats:{lp:6, ausdauer:4}, price:135, desc:'Gebrochen vom Panzer eines Eisengolems.', dungeon_drop:true },
+  'dg_brust_drachenschuppe':{ name:'Drachenschuppenrüstung',icon:'🐲', type:'chest', slot:'chest', classes:['warrior'], stats:{lp:12, ausdauer:7}, price:340, desc:'Jede Schuppe glüht noch von innerer Hitze.', dungeon_drop:true, legendary:true },
+  'dg_handsch_kralle':      { name:'Krallenhandschuhe',     icon:'🧤', type:'gloves', slot:'gloves', classes:['warrior'], stats:{staerke:3, krit_chance:1}, price:110, desc:'Aus den Klauen einer Höhlenbestie.', dungeon_drop:true },
+  'dg_handsch_titanenfaust':{ name:'Titanenfaust',          icon:'👊', type:'gloves', slot:'gloves', classes:['warrior'], stats:{staerke:6, krit_schaden:4}, price:290, desc:'Ein einziger Schlag erschüttert den Boden.', dungeon_drop:true, legendary:true },
+  'dg_hose_kerker':         { name:'Kerkerwächterhose',     icon:'👖', type:'pants', slot:'pants', classes:['warrior'], stats:{lp:4, ausdauer:3}, price:115, desc:'Getragen von den ewigen Wächtern der Tiefe.', dungeon_drop:true },
+  'dg_hose_lavagestein':    { name:'Lavagestein-Beinschienen',icon:'🌋', type:'pants', slot:'pants', classes:['warrior'], stats:{lp:7, ausdauer:6}, price:300, desc:'Noch immer warm vom Feuer der Tiefe.', dungeon_drop:true, legendary:true },
+  'dg_guertel_eisenwall':   { name:'Eisenwallgürtel',       icon:'📿', type:'belt', slot:'belt', classes:['warrior'], stats:{staerke:2, lp:2}, price:100, desc:'Geschmiedet aus den Toren einer gefallenen Festung.', dungeon_drop:true },
+  'dg_guertel_titanenring': { name:'Titanenkettengürtel',   icon:'⛓️', type:'belt', slot:'belt', classes:['warrior'], stats:{lp:5, krit_chance:2, krit_schaden:2}, price:270, desc:'Soll die Ketten eines Titanen gehalten haben.', dungeon_drop:true, legendary:true },
+  'dg_stiefel_oger':        { name:'Ogerschreiter',         icon:'👢', type:'boots', slot:'boots', classes:['warrior'], stats:{lp:2, ausdauer:3}, price:110, desc:'Jeder Schritt erzittert wie ein Erdstoß.', dungeon_drop:true },
+  'dg_stiefel_magma':       { name:'Magmastapfer',          icon:'🌋', type:'boots', slot:'boots', classes:['warrior'], stats:{schnelligkeit:4, ausdauer:5}, price:280, desc:'Hinterlassen glühende Fußspuren.', dungeon_drop:true, legendary:true },
+  'dg_ring_kerkerlord':     { name:'Ring des Kerkerlords',  icon:'💍', type:'ring', slot:'ring', classes:['warrior'], stats:{staerke:3, ausdauer:1}, price:120, desc:'Einst am Finger eines gefallenen Lords.', dungeon_drop:true },
+  'dg_ring_drachenfeuer':   { name:'Ring des Drachenfeuers',icon:'💍', type:'ring', slot:'ring', classes:['warrior'], stats:{staerke:6, krit_schaden:4}, price:310, desc:'Brennt heiß, doch nur für Feinde.', dungeon_drop:true, legendary:true },
+  'dg_kette_knochenjaeger': { name:'Knochenjägeramulett',   icon:'📿', type:'necklace', slot:'necklace', classes:['warrior'], stats:{staerke:2, lp:2}, price:115, desc:'Aus den Reißzähnen eines Untiers.', dungeon_drop:true },
+  'dg_kette_drachenherz':   { name:'Drachenherz-Amulett',   icon:'❤️‍🔥', type:'necklace', slot:'necklace', classes:['warrior'], stats:{lp:8, staerke:5, ausdauer:3}, price:330, desc:'Schlägt noch immer leise im Takt.', dungeon_drop:true, legendary:true },
+
+  // ── BOGENSCHÜTZE ──
+  'dg_bogen_spinnenseide':  { name:'Spinnenseidenbogen',    icon:'🕷️', type:'weapon', slot:'weapon1', classes:['archer'], damage:[16,24], stats:{gewandheit:6, schnelligkeit:1}, price:135, desc:'Die Sehne webt sich selbst nach.', dungeon_drop:true },
+  'dg_bogen_schattenjaeger':{ name:'Schattenjägerbogen',    icon:'🏹', type:'weapon', slot:'weapon1', classes:['archer'], damage:[28,40], stats:{gewandheit:11, krit_chance:5}, price:345, desc:'Trifft, bevor man den Schützen sieht.', dungeon_drop:true, legendary:true },
+  'dg_pfeile_giftspitz':    { name:'Giftspitzpfeile',       icon:'🟢', type:'arrows', slot:'weapon2', classes:['archer'], damage:[6,10], stats:{krit_schaden:2}, price:110, desc:'Eine Berührung reicht.', dungeon_drop:true },
+  'dg_pfeile_sternensturz': { name:'Sternensturzpfeile',    icon:'☄️', type:'arrows', slot:'weapon2', classes:['archer'], damage:[12,18], stats:{krit_chance:4, krit_schaden:3}, price:320, desc:'Schlagen ein wie kleine Meteore.', dungeon_drop:true, legendary:true },
+  'dg_helm_waldgeist':      { name:'Waldgeisthaube',        icon:'🍃', type:'helmet', slot:'helmet', classes:['archer'], stats:{gewandheit:3, schnelligkeit:2}, price:120, desc:'Flüstert mit den Bäumen des Dungeons.', dungeon_drop:true },
+  'dg_helm_phoenixfeder':   { name:'Phönixfederkrone',      icon:'🪶', type:'helmet', slot:'helmet', classes:['archer'], stats:{gewandheit:5, schnelligkeit:5, krit_chance:3}, price:310, desc:'Glüht sanft, als würde sie nie verbrennen.', dungeon_drop:true, legendary:true },
+  'dg_brust_spinnenchitin': { name:'Spinnenchitinpanzer',   icon:'🕸️', type:'chest', slot:'chest', classes:['archer'], stats:{gewandheit:4, lp:3}, price:130, desc:'Leicht wie Seide, hart wie Stahl.', dungeon_drop:true },
+  'dg_brust_schattentuch':  { name:'Schattentuchmantel',    icon:'🌑', type:'chest', slot:'chest', classes:['archer'], stats:{gewandheit:6, schnelligkeit:6, lp:4}, price:340, desc:'Verschwindet fast völlig im Dunkeln.', dungeon_drop:true, legendary:true },
+  'dg_handsch_klauengriff': { name:'Klauengriff',           icon:'🧤', type:'gloves', slot:'gloves', classes:['archer'], stats:{gewandheit:3, krit_chance:1}, price:110, desc:'Erinnert an die Pranke einer Bestie.', dungeon_drop:true },
+  'dg_handsch_windreissend':{ name:'Windreißerhandschuhe',  icon:'💨', type:'gloves', slot:'gloves', classes:['archer'], stats:{gewandheit:5, schnelligkeit:6}, price:295, desc:'Lassen jeden Pfeil dem Wind entgleiten.', dungeon_drop:true, legendary:true },
+  'dg_hose_nachtschleicher': { name:'Nachtschleicherhose',  icon:'👖', type:'pants', slot:'pants', classes:['archer'], stats:{gewandheit:3, schnelligkeit:2}, price:115, desc:'Macht jeden Schritt lautlos.', dungeon_drop:true },
+  'dg_hose_kometenschweif':  { name:'Kometenschweifhose',   icon:'☄️', type:'pants', slot:'pants', classes:['archer'], stats:{schnelligkeit:7, gewandheit:4}, price:300, desc:'Hinterlässt eine Spur aus Licht.', dungeon_drop:true, legendary:true },
+  'dg_guertel_jaegerschlinge':{ name:'Jägerschlinge',       icon:'📿', type:'belt', slot:'belt', classes:['archer'], stats:{gewandheit:2, schnelligkeit:1}, price:100, desc:'Aus dem Fell eines Alpha-Wolfs gefertigt.', dungeon_drop:true },
+  'dg_guertel_himmelsbogner':{ name:'Himmelsbognergürtel',  icon:'🌠', type:'belt', slot:'belt', classes:['archer'], stats:{gewandheit:4, krit_chance:3, krit_schaden:2}, price:275, desc:'Soll von einem Sternenschützen stammen.', dungeon_drop:true, legendary:true },
+  'dg_stiefel_spinnenlauf':  { name:'Spinnenläufer',        icon:'🕷️', type:'boots', slot:'boots', classes:['archer'], stats:{gewandheit:2, schnelligkeit:3}, price:110, desc:'Klettern wie eine Spinne an Wänden.', dungeon_drop:true },
+  'dg_stiefel_sturmpfeil':   { name:'Sturmpfeilstiefel',    icon:'⚡', type:'boots', slot:'boots', classes:['archer'], stats:{schnelligkeit:9, krit_chance:2}, price:285, desc:'Schneller als der eigene Pfeil.', dungeon_drop:true, legendary:true },
+  'dg_ring_falkenauge':      { name:'Ring des Falkenauges', icon:'💍', type:'ring', slot:'ring', classes:['archer'], stats:{gewandheit:3, krit_chance:1}, price:120, desc:'Schärft den Blick auf jedes Ziel.', dungeon_drop:true },
+  'dg_ring_sternenpfeil':    { name:'Ring des Sternenpfeils',icon:'💍', type:'ring', slot:'ring', classes:['archer'], stats:{gewandheit:6, krit_chance:4}, price:315, desc:'Jeder Schuss findet sein Ziel.', dungeon_drop:true, legendary:true },
+  'dg_kette_waldwaechter':   { name:'Waldwächteramulett',   icon:'📿', type:'necklace', slot:'necklace', classes:['archer'], stats:{gewandheit:2, schnelligkeit:2}, price:115, desc:'Beschützt von den Geistern des Waldes.', dungeon_drop:true },
+  'dg_kette_phoenixflug':    { name:'Phönixflug-Amulett',   icon:'🔥', type:'necklace', slot:'necklace', classes:['archer'], stats:{gewandheit:5, schnelligkeit:5, krit_chance:3}, price:325, desc:'Lässt dich kurz fliegen können.', dungeon_drop:true, legendary:true },
+
+  // ── MAGIER ──
+  'dg_stab_seelenfresser':   { name:'Seelenfresserstab',    icon:'💀', type:'weapon', slot:'weapon1', classes:['mage'], damage:[16,24], stats:{intelligenz:6, ausdauer:1}, price:135, desc:'Hungert nach mehr als nur Mana.', dungeon_drop:true },
+  'dg_stab_abyssgrimoire':   { name:'Abyssaler Stab',       icon:'🌌', type:'weapon', slot:'weapon1', classes:['mage'], damage:[28,40], stats:{intelligenz:11, krit_schaden:5}, price:345, desc:'Flüstert Formeln, die niemand sprechen sollte.', dungeon_drop:true, legendary:true },
+  'dg_rolle_schattenbann':   { name:'Schattenbannrolle',    icon:'📜', type:'scroll', slot:'weapon2', classes:['mage'], damage:[10,16], stats:{intelligenz:3}, price:110, desc:'Beschwört kurz die Dunkelheit selbst.', dungeon_drop:true },
+  'dg_rolle_sternenkollaps': { name:'Sternenkollapsrolle',  icon:'💫', type:'scroll', slot:'weapon2', classes:['mage'], damage:[18,26], stats:{intelligenz:6, krit_schaden:4}, price:325, desc:'Lässt einen kleinen Stern in sich zusammenfallen.', dungeon_drop:true, legendary:true },
+  'dg_helm_geisterkrone':    { name:'Geisterkrone',         icon:'👻', type:'helmet', slot:'helmet', classes:['mage'], stats:{intelligenz:3, lp:1}, price:120, desc:'Flüstert Erinnerungen vergangener Magier.', dungeon_drop:true },
+  'dg_helm_kosmoskrone':     { name:'Kosmoskrone',          icon:'👑', type:'helmet', slot:'helmet', classes:['mage'], stats:{intelligenz:6, krit_chance:3, krit_schaden:3}, price:310, desc:'Trägt einen Splitter eines Sternenkerns.', dungeon_drop:true, legendary:true },
+  'dg_robe_void':            { name:'Voidgewebte Robe',     icon:'🌑', type:'chest', slot:'chest', classes:['mage'], stats:{intelligenz:4, lp:3}, price:130, desc:'Webt sich aus den Fäden der Leere.', dungeon_drop:true },
+  'dg_robe_sternensturz':    { name:'Sternensturzrobe',     icon:'☄️', type:'chest', slot:'chest', classes:['mage'], stats:{intelligenz:7, ausdauer:5, lp:4}, price:340, desc:'Funkelt wie ein fallender Meteor.', dungeon_drop:true, legendary:true },
+  'dg_handsch_runenweber':   { name:'Runenweberhandschuhe', icon:'🧤', type:'gloves', slot:'gloves', classes:['mage'], stats:{intelligenz:3}, price:110, desc:'Jede Geste zeichnet eine Rune in die Luft.', dungeon_drop:true },
+  'dg_handsch_arkanstrum':   { name:'Arkanstromhandschuhe', icon:'⚡', type:'gloves', slot:'gloves', classes:['mage'], stats:{intelligenz:6, krit_chance:4}, price:295, desc:'Magie fließt ungebremst durch sie hindurch.', dungeon_drop:true, legendary:true },
+  'dg_hose_nebelschritt':    { name:'Nebelschrittgewand',   icon:'👘', type:'pants', slot:'pants', classes:['mage'], stats:{intelligenz:2, ausdauer:2}, price:115, desc:'Lässt dich halb im Nebel verschwinden.', dungeon_drop:true },
+  'dg_hose_sternenweber':    { name:'Sternenwebergewand',   icon:'⭐', type:'pants', slot:'pants', classes:['mage'], stats:{intelligenz:5, ausdauer:5}, price:300, desc:'Gewebt aus den Fäden ferner Galaxien.', dungeon_drop:true, legendary:true },
+  'dg_guertel_runengeflecht':{ name:'Runengeflechtgürtel',  icon:'📿', type:'belt', slot:'belt', classes:['mage'], stats:{intelligenz:2, lp:1}, price:100, desc:'Hält uralte Schutzrunen verwoben.', dungeon_drop:true },
+  'dg_guertel_arkanzirkel':  { name:'Arkanzirkelgürtel',    icon:'🔮', type:'belt', slot:'belt', classes:['mage'], stats:{intelligenz:4, krit_chance:2, krit_schaden:2}, price:275, desc:'Ein Zirkel ewiger Magie, um die Hüfte gelegt.', dungeon_drop:true, legendary:true },
+  'dg_stiefel_geisterschritt':{ name:'Geisterschrittschuhe',icon:'👟', type:'boots', slot:'boots', classes:['mage'], stats:{intelligenz:1, schnelligkeit:2}, price:110, desc:'Lassen kaum eine Spur zurück.', dungeon_drop:true },
+  'dg_stiefel_sternenfall':  { name:'Sternenfallschuhe',    icon:'🌠', type:'boots', slot:'boots', classes:['mage'], stats:{intelligenz:4, schnelligkeit:5, ausdauer:2}, price:285, desc:'Jeder Schritt hinterlässt funkelnden Staub.', dungeon_drop:true, legendary:true },
+  'dg_ring_seelenbinder':    { name:'Ring des Seelenbinders',icon:'💍', type:'ring', slot:'ring', classes:['mage'], stats:{intelligenz:3}, price:120, desc:'Bindet einen Hauch fremder Magie an dich.', dungeon_drop:true },
+  'dg_ring_kosmosauge':      { name:'Ring des Kosmosauges', icon:'💍', type:'ring', slot:'ring', classes:['mage'], stats:{intelligenz:6, krit_chance:4}, price:315, desc:'Sieht durch Wirklichkeit hindurch.', dungeon_drop:true, legendary:true },
+  'dg_kette_schattenweber':  { name:'Schattenweberamulett',icon:'📿', type:'necklace', slot:'necklace', classes:['mage'], stats:{intelligenz:2, ausdauer:2}, price:115, desc:'Spinnt sich aus den Schatten des Dungeons.', dungeon_drop:true },
+  'dg_kette_sternengeist':   { name:'Sternengeistamulett', icon:'✨', type:'necklace', slot:'necklace', classes:['mage'], stats:{intelligenz:6, krit_schaden:4, lp:3}, price:330, desc:'Beherbergt den Funken eines toten Sterns.', dungeon_drop:true, legendary:true },
+};
+
+// Loot-Pool: Item-Keys (normal/legendär) je Klasse für Dungeon-Beute
+const DUNGEON_LOOT_KEYS = {
+  warrior: {
+    normal:    ['dg_schwert_knochen','dg_schild_skelett','dg_helm_minotaurus','dg_brust_eisengolem','dg_handsch_kralle','dg_hose_kerker','dg_guertel_eisenwall','dg_stiefel_oger','dg_ring_kerkerlord','dg_kette_knochenjaeger'],
+    legendary: ['dg_schwert_verflucht','dg_schild_abyss','dg_helm_obsidian','dg_brust_drachenschuppe','dg_handsch_titanenfaust','dg_hose_lavagestein','dg_guertel_titanenring','dg_stiefel_magma','dg_ring_drachenfeuer','dg_kette_drachenherz']
+  },
+  archer: {
+    normal:    ['dg_bogen_spinnenseide','dg_pfeile_giftspitz','dg_helm_waldgeist','dg_brust_spinnenchitin','dg_handsch_klauengriff','dg_hose_nachtschleicher','dg_guertel_jaegerschlinge','dg_stiefel_spinnenlauf','dg_ring_falkenauge','dg_kette_waldwaechter'],
+    legendary: ['dg_bogen_schattenjaeger','dg_pfeile_sternensturz','dg_helm_phoenixfeder','dg_brust_schattentuch','dg_handsch_windreissend','dg_hose_kometenschweif','dg_guertel_himmelsbogner','dg_stiefel_sturmpfeil','dg_ring_sternenpfeil','dg_kette_phoenixflug']
+  },
+  mage: {
+    normal:    ['dg_stab_seelenfresser','dg_rolle_schattenbann','dg_helm_geisterkrone','dg_robe_void','dg_handsch_runenweber','dg_hose_nebelschritt','dg_guertel_runengeflecht','dg_stiefel_geisterschritt','dg_ring_seelenbinder','dg_kette_schattenweber'],
+    legendary: ['dg_stab_abyssgrimoire','dg_rolle_sternenkollaps','dg_helm_kosmoskrone','dg_robe_sternensturz','dg_handsch_arkanstrum','dg_hose_sternenweber','dg_guertel_arkanzirkel','dg_stiefel_sternenfall','dg_ring_kosmosauge','dg_kette_sternengeist']
+  }
+};
 
 // Mission rewards come from URL params (set by menu.html)
 const MISSION = {
@@ -316,15 +436,45 @@ const MISSION = {
   gold:  parseInt(params.get('gold') || '1'),
   item:  params.get('item') || null
 };
-const clsA     = params.get('player') || 'warrior';
-const clsB     = params.get('enemy')  || 'archer';
-const enemyKey = params.get('enemykey') || null; // z.B. 'goblin', 'bandit', 'wichtel'
-const lvA   = parseInt(params.get('level')||'1');
-const lvB   = parseInt(params.get('elvl') || String(getEnemyLevel(lvA)));
 
-const sA = CLASSES[clsA];
-// Wenn ein spezieller Gegner definiert ist, nutze dessen Stats
-const sB = enemyKey && ENEMIES[enemyKey] ? ENEMIES[enemyKey] : CLASSES[clsB];
+// ── Dungeon-Session laden ─────────────────────────────────────
+let dungeonSession = null;
+let dungeonFightIdx = 0; // Index des aktuellen Gegners in dungeonSession.enemies
+let dungeonCarryHP = null; // HP des Spielers, die in den nächsten Kampf übernommen wird
+
+if (MODE === 'dungeon') {
+  try {
+    dungeonSession = JSON.parse(sessionStorage.getItem('dungeonSession') || 'null');
+  } catch(e) { dungeonSession = null; }
+  if (!dungeonSession) {
+    // Keine Session gefunden -> zurück ins Menü
+    window.location.href = 'menu.html';
+  }
+}
+
+// clsA/lvA: Spieler. clsB/lvB/sB: aktueller Gegner (wird bei Dungeons pro Kampf neu gesetzt)
+let clsA, lvA, clsB, lvB, enemyKey, sA, sB;
+
+function setupFighters(){
+  if (MODE === 'dungeon') {
+    clsA = dungeonSession.player;
+    lvA  = dungeonSession.playerLevel;
+    const enemy = dungeonSession.enemies[dungeonFightIdx];
+    clsB = enemy.cls;
+    lvB  = enemy.level;
+    enemyKey = null;
+  } else {
+    clsA = params.get('player') || 'warrior';
+    clsB = params.get('enemy')  || 'archer';
+    enemyKey = params.get('enemykey') || null; // z.B. 'goblin', 'bandit', 'wichtel'
+    lvA = parseInt(params.get('level')||'1');
+    lvB = parseInt(params.get('elvl') || String(getEnemyLevel(lvA)));
+  }
+  sA = CLASSES[clsA];
+  // Wenn ein spezieller Gegner definiert ist, nutze dessen Stats
+  sB = enemyKey && ENEMIES[enemyKey] ? ENEMIES[enemyKey] : CLASSES[clsB];
+}
+setupFighters();
 
 function maxLP(lk,lv,lpBonus){ return 70+lk*6+lv*9+(lpBonus||0); }
 function gmain(cls,s){ return {warrior:s.staerke,archer:s.gewandheit,mage:s.intelligenz}[cls]; }
@@ -353,11 +503,14 @@ function calcDef(ac,dc,dst,r,lv){
 }
 
 // ── Pre-compute all rounds ───────────────────────────────────
-function simulateFull(){
+// startHpA: optionale Start-HP des Spielers (Carry-Over zwischen Dungeon-Kämpfen).
+// Wenn nicht gesetzt oder größer als maxA, wird volle HP genutzt.
+function simulateFull(startHpA){
   const lpBonusA = (sA.lp_bonus||0)*8;
   const lpBonusB = (sB.lp_bonus||0)*8;
-  let ha=maxLP(sA.lebenskraft,lvA,lpBonusA), hb=maxLP(sB.lebenskraft,lvB,lpBonusB);
-  const maxA=ha, maxB=hb;
+  const maxA=maxLP(sA.lebenskraft,lvA,lpBonusA), maxB=maxLP(sB.lebenskraft,lvB,lpBonusB);
+  let ha = (typeof startHpA === 'number') ? Math.min(startHpA, maxA) : maxA;
+  let hb = maxB;
   const rounds=[];
   for(let r=1;r<=100&&ha>0&&hb>0;r++){
     const ia=r<=5?sA.schnelligkeit:sA.ausdauer;
@@ -377,7 +530,7 @@ function simulateFull(){
     rounds.push({r,events,ha:Math.max(0,ha),hb:Math.max(0,hb),maxA,maxB});
     if(ha<=0||hb<=0)break;
   }
-  return{rounds,winner:ha>0?'A':'B',maxA,maxB};
+  return{rounds,winner:ha>0?'A':'B',maxA,maxB,finalHpA:Math.max(0,ha)};
 }
 
 // ── Animation state ──────────────────────────────────────────
@@ -386,11 +539,23 @@ const SPEEDS={1:{label:'Normal',ms:900},2:{label:'Schnell',ms:400},3:{label:'Tur
 
 // ── Init UI ──────────────────────────────────────────────────
 function initUI(){
-  const sim=simulateFull();
+  // Carry-Over HP nur im Dungeon-Modus, und nicht vor dem letzten Gegner (Boss) –
+  // davor wird vollständig geheilt.
+  let startHp = undefined;
+  if (MODE === 'dungeon') {
+    const isBossFight = dungeonFightIdx === dungeonSession.enemies.length - 1;
+    if (!isBossFight && dungeonCarryHP !== null) {
+      startHp = dungeonCarryHP;
+    }
+    // isBossFight oder erster Kampf -> startHp bleibt undefined -> volle HP
+  }
+
+  const sim=simulateFull(startHp);
   allRounds=sim.rounds;
   window._winner=sim.winner;
   window._maxA=sim.maxA;
   window._maxB=sim.maxB;
+  window._finalHpA=sim.finalHpA;
 
   document.getElementById('nameA').textContent=sA.name;
   document.getElementById('nameA').className='f-name '+clsA;
@@ -399,13 +564,31 @@ function initUI(){
   document.getElementById('nameB').className='f-name '+clsB;
   document.getElementById('avatarB').textContent=sB.icon;
 
-  document.getElementById('hpLabelA').textContent=`${sim.maxA} / ${sim.maxA}`;
+  const startHpA = (typeof startHp === 'number') ? Math.min(startHp, sim.maxA) : sim.maxA;
+  document.getElementById('hpLabelA').textContent=`${Math.ceil(startHpA)} / ${sim.maxA}`;
   document.getElementById('hpLabelB').textContent=`${sim.maxB} / ${sim.maxB}`;
+  updateHP('A', startHpA, sim.maxA);
+  updateHP('B', sim.maxB, sim.maxB);
 
   // mini stats
   renderStats('statsA',clsA,sA);
   renderStats('statsB',clsB,sB);
 
+  // Dungeon: Fortschrittsanzeige + Heilungs-Hinweis
+  if (MODE === 'dungeon') {
+    const total = dungeonSession.enemies.length;
+    const isBossFight = dungeonFightIdx === total - 1;
+    const label = isBossFight
+      ? `Endgegner – Dungeon ${dungeonSession.dungeonNum}`
+      : `Gegner ${dungeonFightIdx+1}/${total-1} – Dungeon ${dungeonSession.dungeonNum}`;
+    document.getElementById('roundBadge').textContent = label;
+    if (isBossFight && dungeonFightIdx > 0) {
+      addLog('<span class="log-round">── Du wurdest vor dem Endgegner vollständig geheilt! ──</span>');
+    }
+  }
+
+  roundIdx = 0;
+  running = true;
   playRound();
 }
 
@@ -453,7 +636,9 @@ function playRound(){
     return;
   }
   const rd=allRounds[roundIdx++];
-  document.getElementById('roundBadge').textContent=`Runde ${rd.r}`;
+  if (MODE !== 'dungeon') {
+    document.getElementById('roundBadge').textContent=`Runde ${rd.r}`;
+  }
   addLog(`<span class="log-round">── Runde ${rd.r} ──</span>`);
 
   let delay=0;
@@ -498,6 +683,10 @@ function skipAll(){
 }
 
 function showResult(){
+  if (MODE === 'dungeon') {
+    showDungeonResult();
+    return;
+  }
   if(window._winner==='A'){
     // WIN
     document.getElementById('winText').textContent=`Du hast ${sB.name} besiegt!`;
@@ -511,7 +700,177 @@ function showResult(){
   }
 }
 
-async function acceptRewards(){
+// ── Dungeon: Ergebnis eines einzelnen Kampfs ─────────────────
+function showDungeonResult(){
+  const total = dungeonSession.enemies.length;
+  const isBossFight = dungeonFightIdx === total - 1;
+
+  if (window._winner !== 'A') {
+    // Niederlage irgendwann im Dungeon -> keine Belohnung
+    document.getElementById('loseText').textContent =
+      `Du wurdest von ${sB.name} (Lvl ${lvB}) besiegt. Der Dungeon-Versuch ist verbraucht – keine Belohnung.`;
+    document.getElementById('loseOverlay').classList.add('active');
+    return;
+  }
+
+  // Sieg -> HP für nächsten Kampf übernehmen
+  dungeonCarryHP = window._finalHpA;
+
+  if (!isBossFight) {
+    // Zwischengegner besiegt -> "Weiter"-Screen
+    document.getElementById('enemyDefeatedText').textContent =
+      `Du hast ${sB.name} (Lvl ${lvB}) besiegt! Auf zum nächsten Gegner...`;
+    document.getElementById('enemyDefeatedOverlay').classList.add('active');
+  } else {
+    // Boss besiegt -> Dungeon abgeschlossen, Belohnungen anzeigen
+    document.getElementById('dungeonGoldText').textContent =
+      `Du hast den Endgegner von Dungeon ${dungeonSession.dungeonNum} besiegt!`;
+    document.getElementById('dungeonGoldRewardsBox').innerHTML = `
+      <div class="ov-reward-row"><span class="ov-reward-label">✨ Erfahrung</span><span class="ov-reward-val">+${dungeonSession.rewards.exp} EXP</span></div>
+      <div class="ov-reward-row"><span class="ov-reward-label">💰 Gold</span><span class="ov-reward-val">+${dungeonSession.rewards.gold} Gold</span></div>`;
+    document.getElementById('dungeonGoldOverlay').classList.add('active');
+  }
+}
+
+// ── Dungeon: Weiter zum nächsten Gegner ───────────────────────
+function proceedToNextFight(){
+  document.getElementById('enemyDefeatedOverlay').classList.remove('active');
+  dungeonFightIdx++;
+  setupFighters();
+  // Log zurücksetzen für Übersicht
+  document.getElementById('log').innerHTML = '';
+  initUI();
+}
+
+// ── Dungeon: Gold & EXP annehmen, Level-Up, danach Item-Drop ──
+async function acceptDungeonGoldRewards(){
+  const btn = document.querySelector('#dungeonGoldOverlay .btn-ov');
+  btn.disabled = true;
+  btn.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid rgba(0,0,0,.3);border-top-color:#1a1200;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:6px"></span>Wird gespeichert...';
+
+  try {
+    const { data:{ session } } = await sb.auth.getSession();
+    if (!session) { window.location.href='menu.html'; return; }
+
+    const earnedExp  = dungeonSession.rewards.exp;
+    const earnedGold = dungeonSession.rewards.gold;
+
+    // 1. Aktuellen Charakter laden
+    const { data: chars, error: loadErr } = await sb
+      .from('characters')
+      .select('id, level, xp, gold, class')
+      .eq('user_id', session.user.id)
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (loadErr || !chars || chars.length === 0) {
+      console.error('Charakter laden fehlgeschlagen:', loadErr);
+      window.location.href='menu.html';
+      return;
+    }
+
+    const char = chars[0];
+    let newXP   = (char.xp   || 0) + earnedExp;
+    let newGold = (char.gold || 0) + earnedGold;
+    let newLevel = char.level || 1;
+    let leveledUp = false;
+
+    // 2. Level-Up berechnen
+    while (true) {
+      const needed = expRequired(newLevel + 1);
+      if (newXP >= needed && newLevel < 9999) {
+        newXP -= needed;
+        newLevel++;
+        leveledUp = true;
+      } else break;
+    }
+
+    // 3. Charakter updaten (Gold + EXP zuerst, BEVOR das Item bestimmt wird)
+    const { error: updateErr } = await sb
+      .from('characters')
+      .update({ xp: newXP, gold: newGold, level: newLevel })
+      .eq('id', char.id);
+
+    if (updateErr) {
+      console.error('Update fehlgeschlagen:', updateErr);
+      btn.disabled = false;
+      btn.textContent = '✅ Belohnungen annehmen';
+      alert('Fehler beim Speichern (Update): ' + updateErr.message + '\nCode: ' + updateErr.code);
+      return;
+    }
+
+    // 4. Item-Drop bestimmen — AUF BASIS DES NEUEN LEVELS
+    const itemResult = await rollDungeonItem(char.id, char.class || 'warrior', newLevel);
+
+    // 5. Weiterleitung zur Item-Anzeige
+    if (leveledUp) {
+      btn.textContent = `🎉 Level ${newLevel} erreicht!`;
+    } else {
+      btn.textContent = '✅ Gespeichert!';
+    }
+
+    setTimeout(() => {
+      document.getElementById('dungeonGoldOverlay').classList.remove('active');
+      showDungeonItemResult(itemResult, leveledUp ? newLevel : null);
+    }, 900);
+
+  } catch(err) {
+    console.error('Fehler:', err);
+    btn.disabled = false;
+    btn.textContent = '✅ Belohnungen annehmen';
+    alert('Technischer Fehler: ' + (err.message || JSON.stringify(err)));
+  }
+}
+
+// Würfelt das Dungeon-Item basierend auf Klasse, Level und Legendär-Chance,
+// skaliert die Stats und speichert es im Inventar.
+async function rollDungeonItem(characterId, playerClass, level){
+  const legChance = dungeonSession.legendaryChance || 0.15;
+  const pool = DUNGEON_LOOT_KEYS[playerClass] || DUNGEON_LOOT_KEYS.warrior;
+  const isLegendary = Math.random() < legChance;
+  const keys = isLegendary ? pool.legendary : pool.normal;
+  const itemKey = keys[Math.floor(Math.random() * keys.length)];
+  const item = DUNGEON_ITEM_DATABASE[itemKey];
+
+  const stats = Object.fromEntries(
+    Object.entries(item.stats||{}).map(([k,v]) => [k, itemStat(v, level)])
+  );
+  const dmg = item.damage ? itemDmg(item.damage[0], item.damage[1], level) : null;
+
+  try {
+    const { error: invErr } = await sb.from('inventory').insert([{
+      character_id: characterId,
+      item_name:    item.name,
+      item_type:    item.type,
+      item_icon:    item.icon,
+      item_slot:    item.slot,
+      stat_bonus:   stats,
+      description:  item.desc + (dmg?` Schaden: ${dmg[0]}-${dmg[1]}`:''),
+      quantity:     1
+    }]);
+    if (invErr) console.warn('Inventar Fehler (nicht kritisch):', invErr.message);
+  } catch(e) {
+    console.warn('Item speichern fehlgeschlagen:', e);
+  }
+
+  return { item, stats, dmg, isLegendary };
+}
+
+function showDungeonItemResult(itemResult, newLevelIfUp){
+  const { item, stats, dmg, isLegendary } = itemResult;
+  const statNames={lp:'LP',staerke:'STR',gewandheit:'GEW',intelligenz:'INT',schnelligkeit:'SCH',ausdauer:'AUS',krit_chance:'Krit-Chance',krit_schaden:'Krit-Schaden'};
+  const statStr = Object.entries(stats).map(([k,v])=>`+${v} ${statNames[k]||k}`).join(', ');
+  const dmgStr  = dmg ? `⚔️ ${dmg[0]}-${dmg[1]}` : '';
+  const desc    = [statStr,dmgStr].filter(Boolean).join(' | ');
+
+  document.getElementById('dungeonItemIcon').textContent = item.icon;
+  document.getElementById('dungeonItemText').innerHTML =
+    (newLevelIfUp ? `🎉 Du hast Level ${newLevelIfUp} erreicht!<br>` : '') +
+    `Du hast folgenden Gegenstand gefunden${isLegendary?' – ein <strong style="color:var(--gold-l)">legendäres Item</strong>!':''}`;
+  document.getElementById('dungeonItemBox').innerHTML = `
+    <div class="ov-reward-row"><span class="ov-reward-label">${item.icon} ${item.name}</span><span class="ov-reward-val">${desc}</span></div>`;
+  document.getElementById('dungeonItemOverlay').classList.add('active');
+}
   const btn = document.querySelector('#winOverlay .btn-ov');
   btn.disabled = true;
   btn.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid rgba(0,0,0,.3);border-top-color:#1a1200;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:6px"></span>Wird gespeichert...';
@@ -603,6 +962,7 @@ function showTips(){
   document.getElementById('tipsOverlay').classList.add('active');
 }
 function goMenu(){
+  sessionStorage.removeItem('dungeonSession');
   window.location.href='menu.html';
 }
 

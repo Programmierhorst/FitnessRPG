@@ -285,6 +285,25 @@ body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text)}
       <ellipse cx="611" cy="254" rx="3" ry="5" fill="#8fa8e8" opacity=".6"/>
     </g>
 
+    <!-- ── DUNGEON ENTRANCE ── -->
+    <g id="dungeonGroup" class="clickable" onclick="openDungeons()" style="cursor:pointer">
+      <!-- shadow -->
+      <ellipse cx="300" cy="455" rx="38" ry="9" fill="rgba(0,0,0,.4)"/>
+      <!-- stone arch -->
+      <path d="M265 455 L265 400 Q300 370 335 400 L335 455 Z" fill="#15161c" stroke="#3a3f4d" stroke-width="2"/>
+      <!-- inner darkness -->
+      <path d="M275 452 L275 405 Q300 382 325 405 L325 452 Z" fill="#05060a"/>
+      <!-- glowing rune -->
+      <circle cx="300" cy="420" r="9" fill="#7a3fe0" opacity=".55"/>
+      <text x="300" y="427" font-size="14" text-anchor="middle">🌀</text>
+      <!-- skull decorations -->
+      <text x="266" y="402" font-size="14" text-anchor="middle">💀</text>
+      <text x="334" y="402" font-size="14" text-anchor="middle">💀</text>
+      <!-- sign -->
+      <rect x="258" y="460" width="84" height="22" rx="3" fill="#1a1a22" stroke="#7a3fe0" stroke-width="1" opacity=".85"/>
+      <text x="300" y="475" font-family="serif" font-size="9" fill="#c9a4e8" text-anchor="middle" letter-spacing="1">DUNGEON</text>
+    </g>
+
     <!-- ── PRANGER (center) ── -->
     <g id="prangerGroup" class="clickable" onclick="openMissions()" style="cursor:pointer">
       <!-- post -->
@@ -434,6 +453,27 @@ body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text)}
 </div>
 
 <!-- ── MISSION OVERLAY ── -->
+<!-- ── DUNGEON OVERLAY ── -->
+<div class="overlay" id="dungeonOverlay">
+  <div class="mission-panel">
+    <div class="mp-header">
+      <div class="mp-title">🌀 Dungeons</div>
+      <button class="mp-close" onclick="closeOverlay('dungeonOverlay')">✕</button>
+    </div>
+    <div class="mp-npc">
+      <div class="mp-npc-icon">🧙‍♂️</div>
+      <div class="mp-npc-text">
+        "Tief unter der Stadt warten 100 Dungeons auf tapfere Helden.
+        Vor jedem Endgegner wirst du vollständig geheilt – doch scheiterst du,
+        gibt es keine Belohnung. Du hast <span id="dungeonAttemptsLeft">3</span> von 3 Versuchen heute übrig."
+      </div>
+    </div>
+    <div class="mp-missions" id="dungeonList" style="max-height:55vh;overflow-y:auto">
+      <!-- filled by JS -->
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="missionOverlay">
   <div class="mission-panel">
     <div class="mp-header">
@@ -656,6 +696,88 @@ function getEnemyLevel(playerLevel) {
   return Math.max(1, Math.round(playerLevel * 0.9));
 }
 
+// ── DUNGEON-SYSTEM ───────────────────────────────────────────
+// 100 Dungeons: Boss-Level = Dungeon-Nr * 10 (10 bis 1000)
+// Vorgegner (2-4): Boss-Level minus 2-5, zufälliger Klassen-Typ
+const DUNGEON_COUNT = 100;
+const DUNGEON_ATTEMPTS_PER_DAY = 3;
+
+// Loot-Pool: Slot-Schlüssel (ohne dg_/Klassen-Präfix) für
+// normale und legendäre Dungeon-Items je Klasse
+const DUNGEON_LOOT_KEYS = {
+  warrior: {
+    normal:    ['dg_schwert_knochen','dg_schild_skelett','dg_helm_minotaurus','dg_brust_eisengolem','dg_handsch_kralle','dg_hose_kerker','dg_guertel_eisenwall','dg_stiefel_oger','dg_ring_kerkerlord','dg_kette_knochenjaeger'],
+    legendary: ['dg_schwert_verflucht','dg_schild_abyss','dg_helm_obsidian','dg_brust_drachenschuppe','dg_handsch_titanenfaust','dg_hose_lavagestein','dg_guertel_titanenring','dg_stiefel_magma','dg_ring_drachenfeuer','dg_kette_drachenherz']
+  },
+  archer: {
+    normal:    ['dg_bogen_spinnenseide','dg_pfeile_giftspitz','dg_helm_waldgeist','dg_brust_spinnenchitin','dg_handsch_klauengriff','dg_hose_nachtschleicher','dg_guertel_jaegerschlinge','dg_stiefel_spinnenlauf','dg_ring_falkenauge','dg_kette_waldwaechter'],
+    legendary: ['dg_bogen_schattenjaeger','dg_pfeile_sternensturz','dg_helm_phoenixfeder','dg_brust_schattentuch','dg_handsch_windreissend','dg_hose_kometenschweif','dg_guertel_himmelsbogner','dg_stiefel_sturmpfeil','dg_ring_sternenpfeil','dg_kette_phoenixflug']
+  },
+  mage: {
+    normal:    ['dg_stab_seelenfresser','dg_rolle_schattenbann','dg_helm_geisterkrone','dg_robe_void','dg_handsch_runenweber','dg_hose_nebelschritt','dg_guertel_runengeflecht','dg_stiefel_geisterschritt','dg_ring_seelenbinder','dg_kette_schattenweber'],
+    legendary: ['dg_stab_abyssgrimoire','dg_rolle_sternenkollaps','dg_helm_kosmoskrone','dg_robe_sternensturz','dg_handsch_arkanstrum','dg_hose_sternenweber','dg_guertel_arkanzirkel','dg_stiefel_sternenfall','dg_ring_kosmosauge','dg_kette_sternengeist']
+  }
+};
+
+// Dungeon-Namen-Bausteine für thematische Vielfalt
+const DUNGEON_NAME_PARTS = {
+  prefixes: ['Verlassene','Vergessene','Dunkle','Uralte','Verfluchte','Schattige','Versunkene','Knochige','Eisige','Brennende','Verborgene','Trostlose','Wispernde','Zerbrochene','Heilige'],
+  places:   ['Gruft','Katakomben','Höhle','Festung','Ruine','Krypta','Mine','Zitadelle','Kaverne','Tempel','Verschlag','Bastion','Tiefen','Gewölbe','Hallen']
+};
+
+function getDungeonName(num) {
+  const p = DUNGEON_NAME_PARTS.prefixes[(num*7) % DUNGEON_NAME_PARTS.prefixes.length];
+  const o = DUNGEON_NAME_PARTS.places[(num*13) % DUNGEON_NAME_PARTS.places.length];
+  return `${p} ${o}`;
+}
+
+// Generiert die Definition für einen Dungeon (1-100)
+function getDungeonDef(num) {
+  const bossLevel = num * 10;
+  // Anzahl Vorgegner: 2-4, deterministisch pro Dungeon (damit stabil)
+  const enemyCount = 2 + (num % 3); // 2,3,4,2,3,4,...
+  return {
+    num,
+    name: getDungeonName(num),
+    bossLevel,
+    enemyCount,
+    enemyLevelMin: Math.max(1, bossLevel - 5),
+    enemyLevelMax: Math.max(1, bossLevel - 2)
+  };
+}
+
+// Legendär-Chance für einen Dungeon: 100% bei #1, garantiert bei jedem 5.,
+// sonst 15%
+function getDungeonLegendaryChance(num) {
+  if (num === 1) return 1.0;
+  if (num >= 5 && num % 5 === 0) return 1.0;
+  return 0.15;
+}
+
+// ── Dungeon-Versuche (3x täglich, persistiert) ───────────────
+function getDungeonAttemptsLeft() {
+  try {
+    const stored = JSON.parse(localStorage.getItem('dungeonAttempts') || '{}');
+    if (stored.day === getTodayKey()) {
+      return Math.max(0, DUNGEON_ATTEMPTS_PER_DAY - (stored.used || 0));
+    }
+  } catch(e) {}
+  return DUNGEON_ATTEMPTS_PER_DAY;
+}
+
+function useDungeonAttempt() {
+  let stored;
+  try {
+    stored = JSON.parse(localStorage.getItem('dungeonAttempts') || '{}');
+  } catch(e) { stored = {}; }
+  if (stored.day !== getTodayKey()) {
+    stored = {day: getTodayKey(), used: 0};
+  }
+  stored.used = (stored.used || 0) + 1;
+  localStorage.setItem('dungeonAttempts', JSON.stringify(stored));
+}
+
+
 
 
 const sb = supabase.createClient(
@@ -799,6 +921,91 @@ function openMissions(){
   el('mission3Gold', `💰 ${r3.gold} Gold`);
   document.getElementById('missionOverlay').classList.add('active');
 }
+
+function openDungeons(){
+  const left = getDungeonAttemptsLeft();
+  document.getElementById('dungeonAttemptsLeft').textContent = left;
+  renderDungeonList();
+  document.getElementById('dungeonOverlay').classList.add('active');
+}
+
+function renderDungeonList(){
+  const lvl = character?.level || 1;
+  const attemptsLeft = getDungeonAttemptsLeft();
+  const list = document.getElementById('dungeonList');
+
+  let html = '';
+  for(let num=1; num<=DUNGEON_COUNT; num++){
+    const d = getDungeonDef(num);
+    const legChance = getDungeonLegendaryChance(num);
+    const legTxt = legChance >= 1 ? '🌟 Garantiert Legendär'
+                                   : `🌟 ${Math.round(legChance*100)}% Legendär`;
+    const disabled = attemptsLeft <= 0;
+    html += `
+    <div class="mission-card ${disabled?'':'exp-focus'}" style="${disabled?'opacity:.5;cursor:default':''}"
+         ${disabled?'':`onclick="startDungeon(${num})"`}>
+      <div class="mc-title">🌀 Dungeon ${num}: ${d.name}</div>
+      <div class="mc-desc">${d.enemyCount} Gegner (Lvl ${d.enemyLevelMin}-${d.enemyLevelMax}) + Endgegner (Lvl ${d.bossLevel}). Heilung vor dem Endgegner.</div>
+      <div class="mc-rewards">
+        <span class="mc-reward exp">✨ EXP</span>
+        <span class="mc-reward gold">💰 Gold</span>
+        <span class="mc-reward item">🎁 ${legTxt}</span>
+      </div>
+    </div>`;
+  }
+  list.innerHTML = html;
+}
+
+// Belohnungs-Basiswerte pro Dungeon (skaliert mit Spielerlevel über rewardMultiplier)
+function getDungeonRewardBase(num){
+  // Grundwerte steigen mit der Dungeon-Nummer
+  return {
+    exp:  60 + num * 8,
+    gold: 30 + num * 4
+  };
+}
+
+function startDungeon(num){
+  const attemptsLeft = getDungeonAttemptsLeft();
+  if(attemptsLeft <= 0) return;
+
+  const cls = character?.class || 'warrior';
+  const lvl = character?.level || 1;
+  const d = getDungeonDef(num);
+
+  // Vorgegner generieren: zufälliger Klassen-Typ, Level zwischen enemyLevelMin und enemyLevelMax
+  const enemyClasses = ['warrior','archer','mage'];
+  const enemies = [];
+  for(let i=0; i<d.enemyCount; i++){
+    const ecls = enemyClasses[Math.floor(Math.random()*enemyClasses.length)];
+    const elvl = d.enemyLevelMin + Math.floor(Math.random()*(d.enemyLevelMax - d.enemyLevelMin + 1));
+    enemies.push({cls: ecls, level: elvl});
+  }
+  // Boss: zufälliger Klassen-Typ auf Boss-Level
+  const bossCls = enemyClasses[Math.floor(Math.random()*enemyClasses.length)];
+  const boss = {cls: bossCls, level: d.bossLevel, isBoss: true};
+
+  const rewardBase = getDungeonRewardBase(num);
+  const rewards = {
+    exp:  Math.round(rewardBase.exp  * rewardMultiplier(lvl)),
+    gold: Math.round(rewardBase.gold * rewardMultiplier(lvl))
+  };
+
+  const session = {
+    dungeonNum: num,
+    player: cls,
+    playerLevel: lvl,
+    enemies: [...enemies, boss],
+    legendaryChance: getDungeonLegendaryChance(num),
+    rewards
+  };
+
+  sessionStorage.setItem('dungeonSession', JSON.stringify(session));
+  // Versuch sofort verbrauchen (auch bei Niederlage gezählt)
+  useDungeonAttempt();
+  window.location.href = `kampf.html?mode=dungeon`;
+}
+
 
 
 // ── Item System ───────────────────────────────────────────────
@@ -995,6 +1202,108 @@ const ITEM_DATABASE = {
   'trank_orakel':          { name:'Orakeltrank',           icon:'🔵', type:'potion', slot:'potion', classes:['mage'],              stats:{}, buff:'intelligenz', buffVal:10, price:60, desc:'+10 Intelligenz für 1 Kampf.', legendary:true },
 
 };
+
+// ── DUNGEON-ITEMS (nicht im Shop, nur als Dungeon-Beute) ─────────
+// Pro Klasse: weapon1, weapon2, helmet, chest, gloves, pants, belt,
+// boots, ring, necklace – jeweils normal + legendär.
+// dungeon_drop:true markiert Items, die nicht im Shop erscheinen,
+// aber normal verkauft werden können.
+Object.assign(ITEM_DATABASE, {
+
+  // ── KRIEGER – DUNGEON-BEUTE ──────────────────────────────────
+  'dg_schwert_knochen':     { name:'Knochenklinge',         icon:'🦴', type:'weapon', slot:'weapon1', classes:['warrior'], damage:[14,20], stats:{staerke:5, ausdauer:1}, price:130, desc:'Aus den Knochen gefallener Krieger geschmiedet.', dungeon_drop:true },
+  'dg_schwert_verflucht':   { name:'Verfluchte Klinge',     icon:'🗡️', type:'weapon', slot:'weapon1', classes:['warrior'], damage:[26,38], stats:{staerke:11, krit_schaden:4}, price:340, desc:'Flüstert die Namen ihrer früheren Träger.', dungeon_drop:true, legendary:true },
+
+  'dg_schild_skelett':      { name:'Skelettschild',         icon:'🛡️', type:'shield', slot:'weapon2', classes:['warrior'], damage:[0,0], stats:{ausdauer:6, lp:3}, price:115, desc:'Zusammengesetzt aus Rippenknochen.', dungeon_drop:true },
+  'dg_schild_abyss':        { name:'Abyssaler Schildwall',  icon:'🌑', type:'shield', slot:'weapon2', classes:['warrior'], damage:[0,0], stats:{ausdauer:12, lp:6, krit_chance:3}, price:330, desc:'Verschluckt jedes Licht, das ihn berührt.', dungeon_drop:true, legendary:true },
+
+  'dg_helm_minotaurus':     { name:'Minotaurushelm',        icon:'🐂', type:'helmet', slot:'helmet', classes:['warrior'], stats:{lp:4, ausdauer:3}, price:120, desc:'Mit den Hörnern eines Labyrinthwächters.', dungeon_drop:true },
+  'dg_helm_obsidian':       { name:'Obsidiankrone',         icon:'👑', type:'helmet', slot:'helmet', classes:['warrior'], stats:{lp:7, ausdauer:5, krit_schaden:3}, price:310, desc:'Aus dem Herzen eines erloschenen Vulkans.', dungeon_drop:true, legendary:true },
+
+  'dg_brust_eisengolem':    { name:'Golemplatte',           icon:'⚙️', type:'chest', slot:'chest', classes:['warrior'], stats:{lp:6, ausdauer:4}, price:135, desc:'Gebrochen vom Panzer eines Eisengolems.', dungeon_drop:true },
+  'dg_brust_drachenschuppe':{ name:'Drachenschuppenrüstung',icon:'🐲', type:'chest', slot:'chest', classes:['warrior'], stats:{lp:12, ausdauer:7}, price:340, desc:'Jede Schuppe glüht noch von innerer Hitze.', dungeon_drop:true, legendary:true },
+
+  'dg_handsch_kralle':      { name:'Krallenhandschuhe',     icon:'🧤', type:'gloves', slot:'gloves', classes:['warrior'], stats:{staerke:3, krit_chance:1}, price:110, desc:'Aus den Klauen einer Höhlenbestie.', dungeon_drop:true },
+  'dg_handsch_titanenfaust':{ name:'Titanenfaust',          icon:'👊', type:'gloves', slot:'gloves', classes:['warrior'], stats:{staerke:6, krit_schaden:4}, price:290, desc:'Ein einziger Schlag erschüttert den Boden.', dungeon_drop:true, legendary:true },
+
+  'dg_hose_kerker':         { name:'Kerkerwächterhose',     icon:'👖', type:'pants', slot:'pants', classes:['warrior'], stats:{lp:4, ausdauer:3}, price:115, desc:'Getragen von den ewigen Wächtern der Tiefe.', dungeon_drop:true },
+  'dg_hose_lavagestein':    { name:'Lavagestein-Beinschienen',icon:'🌋', type:'pants', slot:'pants', classes:['warrior'], stats:{lp:7, ausdauer:6}, price:300, desc:'Noch immer warm vom Feuer der Tiefe.', dungeon_drop:true, legendary:true },
+
+  'dg_guertel_eisenwall':   { name:'Eisenwallgürtel',       icon:'📿', type:'belt', slot:'belt', classes:['warrior'], stats:{staerke:2, lp:2}, price:100, desc:'Geschmiedet aus den Toren einer gefallenen Festung.', dungeon_drop:true },
+  'dg_guertel_titanenring': { name:'Titanenkettengürtel',   icon:'⛓️', type:'belt', slot:'belt', classes:['warrior'], stats:{lp:5, krit_chance:2, krit_schaden:2}, price:270, desc:'Soll die Ketten eines Titanen gehalten haben.', dungeon_drop:true, legendary:true },
+
+  'dg_stiefel_oger':        { name:'Ogerschreiter',         icon:'👢', type:'boots', slot:'boots', classes:['warrior'], stats:{lp:2, ausdauer:3}, price:110, desc:'Jeder Schritt erzittert wie ein Erdstoß.', dungeon_drop:true },
+  'dg_stiefel_magma':       { name:'Magmastapfer',          icon:'🌋', type:'boots', slot:'boots', classes:['warrior'], stats:{schnelligkeit:4, ausdauer:5}, price:280, desc:'Hinterlassen glühende Fußspuren.', dungeon_drop:true, legendary:true },
+
+  'dg_ring_kerkerlord':     { name:'Ring des Kerkerlords',  icon:'💍', type:'ring', slot:'ring', classes:['warrior'], stats:{staerke:3, ausdauer:1}, price:120, desc:'Einst am Finger eines gefallenen Lords.', dungeon_drop:true },
+  'dg_ring_drachenfeuer':   { name:'Ring des Drachenfeuers',icon:'💍', type:'ring', slot:'ring', classes:['warrior'], stats:{staerke:6, krit_schaden:4}, price:310, desc:'Brennt heiß, doch nur für Feinde.', dungeon_drop:true, legendary:true },
+
+  'dg_kette_knochenjaeger': { name:'Knochenjägeramulett',   icon:'📿', type:'necklace', slot:'necklace', classes:['warrior'], stats:{staerke:2, lp:2}, price:115, desc:'Aus den Reißzähnen eines Untiers.', dungeon_drop:true },
+  'dg_kette_drachenherz':   { name:'Drachenherz-Amulett',   icon:'❤️‍🔥', type:'necklace', slot:'necklace', classes:['warrior'], stats:{lp:8, staerke:5, ausdauer:3}, price:330, desc:'Schlägt noch immer leise im Takt.', dungeon_drop:true, legendary:true },
+
+  // ── BOGENSCHÜTZE – DUNGEON-BEUTE ─────────────────────────────
+  'dg_bogen_spinnenseide':  { name:'Spinnenseidenbogen',    icon:'🕷️', type:'weapon', slot:'weapon1', classes:['archer'], damage:[16,24], stats:{gewandheit:6, schnelligkeit:1}, price:135, desc:'Die Sehne webt sich selbst nach.', dungeon_drop:true },
+  'dg_bogen_schattenjaeger':{ name:'Schattenjägerbogen',    icon:'🏹', type:'weapon', slot:'weapon1', classes:['archer'], damage:[28,40], stats:{gewandheit:11, krit_chance:5}, price:345, desc:'Trifft, bevor man den Schützen sieht.', dungeon_drop:true, legendary:true },
+
+  'dg_pfeile_giftspitz':    { name:'Giftspitzpfeile',       icon:'🟢', type:'arrows', slot:'weapon2', classes:['archer'], damage:[6,10], stats:{krit_schaden:2}, price:110, desc:'Eine Berührung reicht.', dungeon_drop:true },
+  'dg_pfeile_sternensturz': { name:'Sternensturzpfeile',    icon:'☄️', type:'arrows', slot:'weapon2', classes:['archer'], damage:[12,18], stats:{krit_chance:4, krit_schaden:3}, price:320, desc:'Schlagen ein wie kleine Meteore.', dungeon_drop:true, legendary:true },
+
+  'dg_helm_waldgeist':      { name:'Waldgeisthaube',        icon:'🍃', type:'helmet', slot:'helmet', classes:['archer'], stats:{gewandheit:3, schnelligkeit:2}, price:120, desc:'Flüstert mit den Bäumen des Dungeons.', dungeon_drop:true },
+  'dg_helm_phoenixfeder':   { name:'Phönixfederkrone',      icon:'🪶', type:'helmet', slot:'helmet', classes:['archer'], stats:{gewandheit:5, schnelligkeit:5, krit_chance:3}, price:310, desc:'Glüht sanft, als würde sie nie verbrennen.', dungeon_drop:true, legendary:true },
+
+  'dg_brust_spinnenchitin': { name:'Spinnenchitinpanzer',   icon:'🕸️', type:'chest', slot:'chest', classes:['archer'], stats:{gewandheit:4, lp:3}, price:130, desc:'Leicht wie Seide, hart wie Stahl.', dungeon_drop:true },
+  'dg_brust_schattentuch':  { name:'Schattentuchmantel',    icon:'🌑', type:'chest', slot:'chest', classes:['archer'], stats:{gewandheit:6, schnelligkeit:6, lp:4}, price:340, desc:'Verschwindet fast völlig im Dunkeln.', dungeon_drop:true, legendary:true },
+
+  'dg_handsch_klauengriff': { name:'Klauengriff',           icon:'🧤', type:'gloves', slot:'gloves', classes:['archer'], stats:{gewandheit:3, krit_chance:1}, price:110, desc:'Erinnert an die Pranke einer Bestie.', dungeon_drop:true },
+  'dg_handsch_windreissend':{ name:'Windreißerhandschuhe',  icon:'💨', type:'gloves', slot:'gloves', classes:['archer'], stats:{gewandheit:5, schnelligkeit:6}, price:295, desc:'Lassen jeden Pfeil dem Wind entgleiten.', dungeon_drop:true, legendary:true },
+
+  'dg_hose_nachtschleicher': { name:'Nachtschleicherhose',  icon:'👖', type:'pants', slot:'pants', classes:['archer'], stats:{gewandheit:3, schnelligkeit:2}, price:115, desc:'Macht jeden Schritt lautlos.', dungeon_drop:true },
+  'dg_hose_kometenschweif':  { name:'Kometenschweifhose',   icon:'☄️', type:'pants', slot:'pants', classes:['archer'], stats:{schnelligkeit:7, gewandheit:4}, price:300, desc:'Hinterlässt eine Spur aus Licht.', dungeon_drop:true, legendary:true },
+
+  'dg_guertel_jaegerschlinge':{ name:'Jägerschlinge',       icon:'📿', type:'belt', slot:'belt', classes:['archer'], stats:{gewandheit:2, schnelligkeit:1}, price:100, desc:'Aus dem Fell eines Alpha-Wolfs gefertigt.', dungeon_drop:true },
+  'dg_guertel_himmelsbogner':{ name:'Himmelsbognergürtel',  icon:'🌠', type:'belt', slot:'belt', classes:['archer'], stats:{gewandheit:4, krit_chance:3, krit_schaden:2}, price:275, desc:'Soll von einem Sternenschützen stammen.', dungeon_drop:true, legendary:true },
+
+  'dg_stiefel_spinnenlauf':  { name:'Spinnenläufer',        icon:'🕷️', type:'boots', slot:'boots', classes:['archer'], stats:{gewandheit:2, schnelligkeit:3}, price:110, desc:'Klettern wie eine Spinne an Wänden.', dungeon_drop:true },
+  'dg_stiefel_sturmpfeil':   { name:'Sturmpfeilstiefel',    icon:'⚡', type:'boots', slot:'boots', classes:['archer'], stats:{schnelligkeit:9, krit_chance:2}, price:285, desc:'Schneller als der eigene Pfeil.', dungeon_drop:true, legendary:true },
+
+  'dg_ring_falkenauge':      { name:'Ring des Falkenauges', icon:'💍', type:'ring', slot:'ring', classes:['archer'], stats:{gewandheit:3, krit_chance:1}, price:120, desc:'Schärft den Blick auf jedes Ziel.', dungeon_drop:true },
+  'dg_ring_sternenpfeil':    { name:'Ring des Sternenpfeils',icon:'💍', type:'ring', slot:'ring', classes:['archer'], stats:{gewandheit:6, krit_chance:4}, price:315, desc:'Jeder Schuss findet sein Ziel.', dungeon_drop:true, legendary:true },
+
+  'dg_kette_waldwaechter':   { name:'Waldwächteramulett',   icon:'📿', type:'necklace', slot:'necklace', classes:['archer'], stats:{gewandheit:2, schnelligkeit:2}, price:115, desc:'Beschützt von den Geistern des Waldes.', dungeon_drop:true },
+  'dg_kette_phoenixflug':    { name:'Phönixflug-Amulett',   icon:'🔥', type:'necklace', slot:'necklace', classes:['archer'], stats:{gewandheit:5, schnelligkeit:5, krit_chance:3}, price:325, desc:'Lässt dich kurz fliegen können.', dungeon_drop:true, legendary:true },
+
+  // ── MAGIER – DUNGEON-BEUTE ───────────────────────────────────
+  'dg_stab_seelenfresser':   { name:'Seelenfresserstab',    icon:'💀', type:'weapon', slot:'weapon1', classes:['mage'], damage:[16,24], stats:{intelligenz:6, ausdauer:1}, price:135, desc:'Hungert nach mehr als nur Mana.', dungeon_drop:true },
+  'dg_stab_abyssgrimoire':   { name:'Abyssaler Stab',       icon:'🌌', type:'weapon', slot:'weapon1', classes:['mage'], damage:[28,40], stats:{intelligenz:11, krit_schaden:5}, price:345, desc:'Flüstert Formeln, die niemand sprechen sollte.', dungeon_drop:true, legendary:true },
+
+  'dg_rolle_schattenbann':   { name:'Schattenbannrolle',    icon:'📜', type:'scroll', slot:'weapon2', classes:['mage'], damage:[10,16], stats:{intelligenz:3}, price:110, desc:'Beschwört kurz die Dunkelheit selbst.', dungeon_drop:true },
+  'dg_rolle_sternenkollaps': { name:'Sternenkollapsrolle',  icon:'💫', type:'scroll', slot:'weapon2', classes:['mage'], damage:[18,26], stats:{intelligenz:6, krit_schaden:4}, price:325, desc:'Lässt einen kleinen Stern in sich zusammenfallen.', dungeon_drop:true, legendary:true },
+
+  'dg_helm_geisterkrone':    { name:'Geisterkrone',         icon:'👻', type:'helmet', slot:'helmet', classes:['mage'], stats:{intelligenz:3, lp:1}, price:120, desc:'Flüstert Erinnerungen vergangener Magier.', dungeon_drop:true },
+  'dg_helm_kosmoskrone':     { name:'Kosmoskrone',          icon:'👑', type:'helmet', slot:'helmet', classes:['mage'], stats:{intelligenz:6, krit_chance:3, krit_schaden:3}, price:310, desc:'Trägt einen Splitter eines Sternenkerns.', dungeon_drop:true, legendary:true },
+
+  'dg_robe_void':            { name:'Voidgewebte Robe',     icon:'🌑', type:'chest', slot:'chest', classes:['mage'], stats:{intelligenz:4, lp:3}, price:130, desc:'Webt sich aus den Fäden der Leere.', dungeon_drop:true },
+  'dg_robe_sternensturz':    { name:'Sternensturzrobe',     icon:'☄️', type:'chest', slot:'chest', classes:['mage'], stats:{intelligenz:7, ausdauer:5, lp:4}, price:340, desc:'Funkelt wie ein fallender Meteor.', dungeon_drop:true, legendary:true },
+
+  'dg_handsch_runenweber':   { name:'Runenweberhandschuhe', icon:'🧤', type:'gloves', slot:'gloves', classes:['mage'], stats:{intelligenz:3}, price:110, desc:'Jede Geste zeichnet eine Rune in die Luft.', dungeon_drop:true },
+  'dg_handsch_arkanstrum':   { name:'Arkanstromhandschuhe', icon:'⚡', type:'gloves', slot:'gloves', classes:['mage'], stats:{intelligenz:6, krit_chance:4}, price:295, desc:'Magie fließt ungebremst durch sie hindurch.', dungeon_drop:true, legendary:true },
+
+  'dg_hose_nebelschritt':    { name:'Nebelschrittgewand',   icon:'👘', type:'pants', slot:'pants', classes:['mage'], stats:{intelligenz:2, ausdauer:2}, price:115, desc:'Lässt dich halb im Nebel verschwinden.', dungeon_drop:true },
+  'dg_hose_sternenweber':    { name:'Sternenwebergewand',   icon:'⭐', type:'pants', slot:'pants', classes:['mage'], stats:{intelligenz:5, ausdauer:5}, price:300, desc:'Gewebt aus den Fäden ferner Galaxien.', dungeon_drop:true, legendary:true },
+
+  'dg_guertel_runengeflecht':{ name:'Runengeflechtgürtel',  icon:'📿', type:'belt', slot:'belt', classes:['mage'], stats:{intelligenz:2, lp:1}, price:100, desc:'Hält uralte Schutzrunen verwoben.', dungeon_drop:true },
+  'dg_guertel_arkanzirkel':  { name:'Arkanzirkelgürtel',    icon:'🔮', type:'belt', slot:'belt', classes:['mage'], stats:{intelligenz:4, krit_chance:2, krit_schaden:2}, price:275, desc:'Ein Zirkel ewiger Magie, um die Hüfte gelegt.', dungeon_drop:true, legendary:true },
+
+  'dg_stiefel_geisterschritt':{ name:'Geisterschrittschuhe',icon:'👟', type:'boots', slot:'boots', classes:['mage'], stats:{intelligenz:1, schnelligkeit:2}, price:110, desc:'Lassen kaum eine Spur zurück.', dungeon_drop:true },
+  'dg_stiefel_sternenfall':  { name:'Sternenfallschuhe',    icon:'🌠', type:'boots', slot:'boots', classes:['mage'], stats:{intelligenz:4, schnelligkeit:5, ausdauer:2}, price:285, desc:'Jeder Schritt hinterlässt funkelnden Staub.', dungeon_drop:true, legendary:true },
+
+  'dg_ring_seelenbinder':    { name:'Ring des Seelenbinders',icon:'💍', type:'ring', slot:'ring', classes:['mage'], stats:{intelligenz:3}, price:120, desc:'Bindet einen Hauch fremder Magie an dich.', dungeon_drop:true },
+  'dg_ring_kosmosauge':      { name:'Ring des Kosmosauges', icon:'💍', type:'ring', slot:'ring', classes:['mage'], stats:{intelligenz:6, krit_chance:4}, price:315, desc:'Sieht durch Wirklichkeit hindurch.', dungeon_drop:true, legendary:true },
+
+  'dg_kette_schattenweber':  { name:'Schattenweberamulett',icon:'📿', type:'necklace', slot:'necklace', classes:['mage'], stats:{intelligenz:2, ausdauer:2}, price:115, desc:'Spinnt sich aus den Schatten des Dungeons.', dungeon_drop:true },
+  'dg_kette_sternengeist':   { name:'Sternengeistamulett', icon:'✨', type:'necklace', slot:'necklace', classes:['mage'], stats:{intelligenz:6, krit_schaden:4, lp:3}, price:330, desc:'Beherbergt den Funken eines toten Sterns.', dungeon_drop:true, legendary:true },
+
+});
 
 // Shop-Sortiment nach Klasse
 function getShopItems(shopType, characterClass) {
