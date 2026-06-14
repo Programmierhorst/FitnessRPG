@@ -1674,6 +1674,10 @@ function updateStepsFromApp(schritte) {
   renderDailyQuests();
 }
 
+// updateStepsFromApp explizit global verfügbar machen, damit der
+// Flutter-WebView-Wrapper sie von außen aufrufen kann.
+window.updateStepsFromApp = updateStepsFromApp;
+
 function openKnight(){
   renderDailyQuests();
   const lvl = character?.level||1;
@@ -1772,7 +1776,14 @@ async function completeQuest(id){
   }
 }
 
-loadCharacter();
+// ── FLUTTER-HANDSHAKE ──────────────────────────────────────────
+// Web-App initialisieren, danach Flutter signalisieren, dass
+// updateStepsFromApp jetzt sicher aufgerufen werden kann.
+loadCharacter().then(() => {
+  if (window.FlutterBridge) {
+    window.FlutterBridge.postMessage('ready');
+  }
+});
 </script>
 
 <!-- ── KNIGHT / DAILY QUESTS OVERLAY ── -->
