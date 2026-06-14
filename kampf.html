@@ -871,6 +871,8 @@ function showDungeonItemResult(itemResult, newLevelIfUp){
     <div class="ov-reward-row"><span class="ov-reward-label">${item.icon} ${item.name}</span><span class="ov-reward-val">${desc}</span></div>`;
   document.getElementById('dungeonItemOverlay').classList.add('active');
 }
+
+async function acceptRewards(){
   const btn = document.querySelector('#winOverlay .btn-ov');
   btn.disabled = true;
   btn.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid rgba(0,0,0,.3);border-top-color:#1a1200;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:6px"></span>Wird gespeichert...';
