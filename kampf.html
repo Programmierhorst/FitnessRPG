@@ -802,6 +802,17 @@ async function acceptDungeonGoldRewards(){
     // 4. Item-Drop bestimmen — AUF BASIS DES NEUEN LEVELS
     const itemResult = await rollDungeonItem(char.id, char.class || 'warrior', newLevel);
 
+    // 4b. Dungeon als abgeschlossen markieren (einmalig pro Charakter)
+    try {
+      const { error: completeErr } = await sb.from('completed_dungeons').insert([{
+        character_id: char.id,
+        dungeon_num: dungeonSession.dungeonNum
+      }]);
+      if (completeErr) console.warn('Konnte Dungeon nicht als abgeschlossen markieren:', completeErr.message);
+    } catch(e) {
+      console.warn('Fehler beim Markieren des Dungeons:', e);
+    }
+
     // 5. Weiterleitung zur Item-Anzeige
     if (leveledUp) {
       btn.textContent = `🎉 Level ${newLevel} erreicht!`;

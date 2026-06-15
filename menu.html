@@ -922,9 +922,26 @@ function openMissions(){
   document.getElementById('missionOverlay').classList.add('active');
 }
 
-function openDungeons(){
+// Cache der abgeschlossenen Dungeon-Nummern (Set), wird bei openDungeons() geladen
+let _completedDungeons = new Set();
+
+async function loadCompletedDungeons(){
+  if(!character) return;
+  try {
+    const {data, error} = await sb.from('completed_dungeons')
+      .select('dungeon_num')
+      .eq('character_id', character.id);
+    if(error){ console.warn('Konnte abgeschlossene Dungeons nicht laden:', error.message); return; }
+    _completedDungeons = new Set((data||[]).map(d=>d.dungeon_num));
+  } catch(e){
+    console.warn('Fehler beim Laden der abgeschlossenen Dungeons:', e);
+  }
+}
+
+async function openDungeons(){
   const left = getDungeonAttemptsLeft();
   document.getElementById('dungeonAttemptsLeft').textContent = left;
+  await loadCompletedDungeons();
   renderDungeonList();
   document.getElementById('dungeonOverlay').classList.add('active');
 }
@@ -935,21 +952,34 @@ function renderDungeonList(){
   const list = document.getElementById('dungeonList');
 
   let html = '';
+
+  if(attemptsLeft <= 0){
+    html += `
+    <div style="padding:12px;margin-bottom:10px;background:rgba(201,168,76,.08);
+      border:1px solid var(--border);border-radius:3px;text-align:center;
+      font-family:Cinzel,serif;font-size:.7rem;letter-spacing:.08em;color:var(--gold-l)">
+      ⏳ Du hast heute keine Versuche mehr übrig. Komm morgen wieder!
+    </div>`;
+  }
+
   for(let num=1; num<=DUNGEON_COUNT; num++){
     const d = getDungeonDef(num);
     const legChance = getDungeonLegendaryChance(num);
     const legTxt = legChance >= 1 ? '🌟 Garantiert Legendär'
                                    : `🌟 ${Math.round(legChance*100)}% Legendär`;
-    const disabled = attemptsLeft <= 0;
+    const completed = _completedDungeons.has(num);
+    const disabled = attemptsLeft <= 0 || completed;
     html += `
     <div class="mission-card ${disabled?'':'exp-focus'}" style="${disabled?'opacity:.5;cursor:default':''}"
          ${disabled?'':`onclick="startDungeon(${num})"`}>
-      <div class="mc-title">🌀 Dungeon ${num}: ${d.name}</div>
+      <div class="mc-title">🌀 Dungeon ${num}: ${d.name} ${completed?'✅':''}</div>
       <div class="mc-desc">${d.enemyCount} Gegner (Lvl ${d.enemyLevelMin}-${d.enemyLevelMax}) + Endgegner (Lvl ${d.bossLevel}). Heilung vor dem Endgegner.</div>
       <div class="mc-rewards">
-        <span class="mc-reward exp">✨ EXP</span>
-        <span class="mc-reward gold">💰 Gold</span>
-        <span class="mc-reward item">🎁 ${legTxt}</span>
+        ${completed
+          ? '<span class="mc-reward item">✅ Bereits abgeschlossen</span>'
+          : `<span class="mc-reward exp">✨ EXP</span>
+             <span class="mc-reward gold">💰 Gold</span>
+             <span class="mc-reward item">🎁 ${legTxt}</span>`}
       </div>
     </div>`;
   }
@@ -966,10 +996,15 @@ function getDungeonRewardBase(num){
 }
 
 function startDungeon(num){
-  alert('DEBUG: startDungeon('+num+') aufgerufen');
   const attemptsLeft = getDungeonAttemptsLeft();
-  alert('DEBUG: attemptsLeft='+attemptsLeft);
-  if(attemptsLeft <= 0) return;
+  if(attemptsLeft <= 0){
+    showToast('⏳', 'Keine Versuche mehr übrig! Komm morgen wieder.');
+    return;
+  }
+  if(_completedDungeons.has(num)){
+    showToast('✅', 'Diesen Dungeon hast du bereits abgeschlossen.');
+    return;
+  }
 
   const cls = character?.class || 'warrior';
   const lvl = character?.level || 1;
