@@ -2299,9 +2299,11 @@ function closeOverlay(id){
 // ── Daily quests ─────────────────────────────────────────────
 const DAILY_QUESTS = [
   {id:'steps',   icon:'🚶', title:'1.000 Schritte gehen',        desc:'Gehe heute mindestens 1.000 Schritte.',  exp:50,  gold:5,  done:false, goal:1000, current:0},
-  {id:'workout', icon:'💪', title:'Workout-Belohnung',            desc:'Trainiere heute und erhalte Statpunkte für deinen Charakter.', exp:0, gold:0, done:false, statPoints:0, minutes:0},
   {id:'water',   icon:'💧', title:'2 Liter Wasser trinken',       desc:'Trinke heute mindestens 2 Liter Wasser.',exp:30,  gold:3,  done:false},
 ];
+
+// Workout-Belohnung ist separat von den täglichen Quests
+const WORKOUT_QUEST = {id:'workout', icon:'💪', title:'Workout-Belohnung', done:false, statPoints:0, minutes:0};
 
 // ── WORKOUT-SYSTEM ────────────────────────────────────────────
 // Sportkategorien mit zugehörigem Stat und Empfehlung
@@ -2360,7 +2362,7 @@ window.updateStepsFromApp = updateStepsFromApp;
 // Wird von Flutter aufgerufen mit Gesamtminuten des heutigen Trainings
 // und optionalem Workout-Typ (z.B. 'STRENGTH_TRAINING', 'RUNNING' etc.)
 function updateWorkoutFromApp(totalMinutes, workoutType) {
-  const q = DAILY_QUESTS.find(q => q.id === 'workout');
+  const q = WORKOUT_QUEST;
   if (!q || q.done) return;
 
   q.minutes = Math.round(totalMinutes || 0);
@@ -2397,41 +2399,6 @@ function openKnight(){
 function renderDailyQuests(){
   const list = document.getElementById('dailyQuestList');
   list.innerHTML = DAILY_QUESTS.map(q=>{
-    // ── Spezial-Rendering für Workout-Quest ──
-    if (q.id === 'workout') {
-      const points = getWorkoutPoints(q.minutes);
-      const statusTxt = q.done
-        ? `✅ Erledigt (+${q.statPoints} Statpunkte)`
-        : q.minutes >= 10
-          ? `⏱️ ${q.minutes} Min. erkannt → ${points.total} Statpunkte bereit`
-          : '⏱️ Noch kein Training heute erkannt.';
-      const canClaim = !q.done && q.minutes >= 10;
-      return `
-    <div class="mission-card ${q.done?'':'exp-focus'}" style="${q.done?'opacity:.5':''}">
-      <div class="mc-title">${q.icon} ${q.title} ${q.done?'✅':''}</div>
-      <div class="mc-desc">${q.desc}</div>
-      <div style="font-size:.8rem;color:var(--gold-l);margin:6px 0">${statusTxt}</div>
-      <div style="font-size:.72rem;color:var(--dim);margin-bottom:8px">
-        🕐 10-29 Min → 1 Pkt &nbsp;|&nbsp; 30-59 Min → 3 Pkt &nbsp;|&nbsp; 60+ Min → 5 Pkt
-      </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
-        <div></div>
-        ${!q.done ? `
-          <div style="display:flex;gap:6px">
-            <button onclick="openWorkoutManualDialog()"
-              style="padding:5px 12px;background:rgba(201,168,76,.15);border:1px solid var(--border);
-              border-radius:2px;color:var(--gold-l);font-family:Cinzel,serif;font-size:.6rem;
-              letter-spacing:.08em;cursor:pointer">✏️ Manuell eingeben</button>
-            ${canClaim ? `<button onclick="openWorkoutStatDialogFromQuest()"
-              style="padding:5px 12px;background:linear-gradient(135deg,var(--gold-d),var(--gold));
-              border:none;border-radius:2px;color:#1a1200;font-family:Cinzel,serif;font-size:.6rem;
-              letter-spacing:.08em;cursor:pointer">Punkte vergeben ✓</button>` : ''}
-          </div>` : ''}
-      </div>
-    </div>`;
-    }
-
-    // ── Standard-Rendering für andere Quests ──
     const hasProgress = q.goal && !q.done;
     const pct = hasProgress ? Math.min(100, Math.round((q.current||0)/q.goal*100)) : 0;
     const progressBar = hasProgress ? `
@@ -2461,11 +2428,46 @@ function renderDailyQuests(){
       </div>
     </div>`;
   }).join('');
+
+  renderWorkoutSection();
+}
+
+function renderWorkoutSection(){
+  const q = WORKOUT_QUEST;
+  const points = getWorkoutPoints(q.minutes);
+  const statusTxt = q.done
+    ? `✅ Erledigt (+${q.statPoints} Statpunkte)`
+    : q.minutes >= 10
+      ? `⏱️ ${q.minutes} Min. erkannt → ${points.total} Statpunkte bereit`
+      : '⏱️ Noch kein Training heute erkannt.';
+  const canClaim = !q.done && q.minutes >= 10;
+
+  document.getElementById('workoutSection').innerHTML = `
+    <div class="mission-card ${q.done?'':'exp-focus'}" style="${q.done?'opacity:.5':''}">
+      <div class="mc-title">${q.icon} ${q.title} ${q.done?'✅':''}</div>
+      <div class="mc-desc">Trainiere heute und erhalte Statpunkte für deinen Charakter.</div>
+      <div style="font-size:.8rem;color:var(--gold-l);margin:6px 0">${statusTxt}</div>
+      <div style="font-size:.72rem;color:var(--dim);margin-bottom:8px">
+        🕐 10-29 Min → 1 Pkt &nbsp;|&nbsp; 30-59 Min → 3 Pkt &nbsp;|&nbsp; 60+ Min → 5 Pkt
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:4px">
+        ${!q.done ? `
+          <button onclick="openWorkoutManualDialog()"
+            style="padding:5px 12px;background:rgba(201,168,76,.15);border:1px solid var(--border);
+            border-radius:2px;color:var(--gold-l);font-family:Cinzel,serif;font-size:.6rem;
+            letter-spacing:.08em;cursor:pointer">✏️ Manuell eingeben</button>
+          ${canClaim ? `<button onclick="openWorkoutStatDialogFromQuest()"
+            style="padding:5px 12px;background:linear-gradient(135deg,var(--gold-d),var(--gold));
+            border:none;border-radius:2px;color:#1a1200;font-family:Cinzel,serif;font-size:.6rem;
+            letter-spacing:.08em;cursor:pointer">Punkte vergeben ✓</button>` : ''}
+        ` : ''}
+      </div>
+    </div>`;
 }
 
 // ── WORKOUT-DIALOG: Manuell eingeben ─────────────────────────
 function openWorkoutManualDialog() {
-  const q = DAILY_QUESTS.find(q => q.id === 'workout');
+  const q = WORKOUT_QUEST;
   if (!q || q.done) return;
   document.getElementById('workoutOverlay').classList.add('active');
   showWorkoutStep1();
@@ -2637,7 +2639,7 @@ function addWorkoutStatPoint(statId) {
 
 // Health-Connect Variante: öffnet Stat-Dialog direkt
 function openWorkoutStatDialog(minutes, points, categoryId) {
-  const q = DAILY_QUESTS.find(q => q.id === 'workout');
+  const q = WORKOUT_QUEST;
   if (!q || q.done) return;
   q.minutes = minutes;
   renderDailyQuests();
@@ -2660,7 +2662,7 @@ function openWorkoutStatDialog(minutes, points, categoryId) {
 }
 
 function openWorkoutStatDialogFromQuest() {
-  const q = DAILY_QUESTS.find(q => q.id === 'workout');
+  const q = WORKOUT_QUEST;
   if (!q || q.done) return;
   const points = getWorkoutPoints(q.minutes);
   openWorkoutStatDialog(q.minutes, points, null);
@@ -2670,7 +2672,7 @@ async function applyWorkoutStats() {
   if (!_workoutState) return;
   closeOverlay('workoutOverlay');
 
-  const q = DAILY_QUESTS.find(q => q.id === 'workout');
+  const q = WORKOUT_QUEST;
   if (!q || q.done) return;
 
   const { statsChosen, points } = _workoutState;
@@ -2806,9 +2808,29 @@ loadCharacter().then(() => {
           eine Gilde zu empfehlen. Gilden werden ab Level 5 freigeschaltet!"
         </div>
       </div>
+
+      <!-- Tägliche Quests -->
+      <div style="padding:6px 18px 2px">
+        <div style="font-family:Cinzel,serif;font-size:.6rem;letter-spacing:.12em;
+          text-transform:uppercase;color:var(--dim)">📋 Tägliche Aufgaben</div>
+      </div>
       <div class="mp-missions" id="dailyQuestList">
         <!-- filled by JS -->
       </div>
+
+      <!-- Trennlinie -->
+      <div style="margin:4px 18px;border-top:1px solid var(--border)"></div>
+
+      <!-- Workout-Belohnung separat -->
+      <div style="padding:6px 18px 2px">
+        <div style="font-family:Cinzel,serif;font-size:.6rem;letter-spacing:.12em;
+          text-transform:uppercase;color:var(--dim)">💪 Workout-Belohnung</div>
+      </div>
+      <div class="mp-missions" id="workoutSection">
+        <!-- filled by JS -->
+      </div>
+
+      <!-- Gilden -->
       <div style="padding:0 18px 16px">
         <div style="padding:12px;background:rgba(201,168,76,.05);border:1px solid var(--border);border-radius:3px;text-align:center">
           <div style="font-family:Cinzel,serif;font-size:.65rem;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin-bottom:6px">⚜️ Gilden</div>
