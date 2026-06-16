@@ -320,6 +320,89 @@ body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text)}
 
 @keyframes toastIn  { from{opacity:0;transform:translateX(-50%) translateY(20px)} to{opacity:1;transform:translateX(-50%) translateY(0)} }
 @keyframes toastOut { from{opacity:1;transform:translateX(-50%) translateY(0)} to{opacity:0;transform:translateX(-50%) translateY(20px)} }
+
+/* ══════════════════════════════════════════
+   PORTRAIT NAVIGATION BAR
+   Erscheint nur im Hochformat
+   ══════════════════════════════════════════ */
+.portrait-nav {
+  display: none; /* standardmäßig versteckt */
+}
+
+/* Hochformat auf Mobilgeräten: Nav einblenden */
+@media (orientation: portrait) and (max-width: 600px) {
+  .portrait-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    z-index: 50;
+    background: linear-gradient(0deg, rgba(8,5,15,.97) 0%, rgba(10,8,18,.92) 100%);
+    border-top: 1px solid var(--border);
+    padding: 6px 4px;
+    padding-bottom: max(6px, env(safe-area-inset-bottom)); /* iPhone Notch */
+    gap: 2px;
+    justify-content: space-around;
+    align-items: stretch;
+    box-shadow: 0 -4px 24px rgba(0,0,0,.6);
+  }
+
+  /* Szene nach oben schieben damit die Nav-Bar nicht überlappt */
+  .scene { padding-bottom: 72px; }
+
+  /* Labels die im SVG sowieso unsichtbar sind, auch als HTML ausblenden */
+  .portrait-hide { display: none !important; }
+}
+
+.pnav-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 6px 2px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background .15s, transform .1s;
+  min-height: 52px; /* Touch-Target */
+  -webkit-tap-highlight-color: transparent;
+}
+.pnav-btn:active {
+  background: rgba(201,168,76,.12);
+  transform: scale(.93);
+}
+
+/* Mittlerer Button (Missionen) hervorgehoben */
+.pnav-center {
+  background: rgba(201,168,76,.08);
+  border: 1px solid rgba(201,168,76,.2);
+  border-radius: 8px;
+  position: relative;
+}
+.pnav-center::before {
+  content: '';
+  position: absolute;
+  top: -1px; left: 10%; right: 10%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  border-radius: 1px;
+}
+
+.pnav-icon {
+  font-size: 1.4rem;
+  line-height: 1;
+  filter: drop-shadow(0 0 4px rgba(201,168,76,.3));
+}
+.pnav-label {
+  font-family: 'Cinzel', serif;
+  font-size: .48rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--dim);
+  white-space: nowrap;
+}
 </style>
 </head>
 <body>
@@ -613,11 +696,36 @@ body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text)}
     🗣️ „Abenteurer, ich habe die neusten Missionen vom König erhalten!"
   </div>
 
-  <!-- Labels -->
-  <div class="scene-label" style="position:absolute;top:62%;left:6%">Waffen &amp; Rüstungen</div>
-  <div class="scene-label" style="position:absolute;top:62%;right:6%">Tränke &amp; Rollen</div>
+  <!-- Labels (nur Querformat) -->
+  <div class="scene-label portrait-hide" style="position:absolute;top:62%;left:6%">Waffen &amp; Rüstungen</div>
+  <div class="scene-label portrait-hide" style="position:absolute;top:62%;right:6%">Tränke &amp; Rollen</div>
   <div class="scene-label" style="position:absolute;top:44%;left:50%;transform:translateX(-50%)">Missionen</div>
-  <div class="scene-label" style="position:absolute;top:62%;left:22%;transform:translateX(-50%)">Tägliche Aufgaben</div>
+  <div class="scene-label portrait-hide" style="position:absolute;top:62%;left:22%;transform:translateX(-50%)">Tägliche Aufgaben</div>
+
+  <!-- ── PORTRAIT NAVIGATION BAR ── -->
+  <!-- Erscheint nur im Hochformat, wenn Stände/Ritter/Held außerhalb des SVG-Rahmens liegen -->
+  <nav class="portrait-nav" id="portraitNav">
+    <button class="pnav-btn" onclick="openShop('weapons')">
+      <span class="pnav-icon">⚔️</span>
+      <span class="pnav-label">Waffen</span>
+    </button>
+    <button class="pnav-btn" onclick="openKnight()">
+      <span class="pnav-icon">🪖</span>
+      <span class="pnav-label">Aufgaben</span>
+    </button>
+    <button class="pnav-btn pnav-center" onclick="openMissions()">
+      <span class="pnav-icon">📜</span>
+      <span class="pnav-label">Missionen</span>
+    </button>
+    <button class="pnav-btn" onclick="openHero()">
+      <span class="pnav-icon">🦸</span>
+      <span class="pnav-label">Held</span>
+    </button>
+    <button class="pnav-btn" onclick="openShop('potions')">
+      <span class="pnav-icon">🧪</span>
+      <span class="pnav-label">Tränke</span>
+    </button>
+  </nav>
 
 </div>
 
