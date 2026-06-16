@@ -2003,13 +2003,15 @@ function getShopItemsForToday(shopType, characterClass, level) {
   if(shopType === 'weapons') {
     pool = Object.entries(ITEM_DATABASE)
       .filter(([k,i]) => i.classes.includes(characterClass) &&
-        ['weapon','shield','arrows','scroll'].includes(i.type))
+        ['weapon','shield','arrows','scroll'].includes(i.type) &&
+        !i.dungeon_drop)
       .map(([k,i]) => ({...i, key:k}));
   } else {
     pool = Object.entries(ITEM_DATABASE)
       .filter(([k,i]) => i.classes.includes(characterClass) &&
         (['helmet','chest','gloves','pants','belt','boots','ring','necklace'].includes(i.type)
-        || i.type==='potion'))
+        || i.type==='potion') &&
+        !i.dungeon_drop)
       .map(([k,i]) => ({...i, key:k}));
   }
 
@@ -2151,12 +2153,12 @@ function replaceShopItemAfterPurchase(boughtKey) {
   if(_currentShopType === 'weapons') {
     pool = Object.entries(ITEM_DATABASE)
       .filter(([k,i]) => i.classes.includes(cls) &&
-        ['weapon','shield','arrows','scroll'].includes(i.type) && !i.legendary);
+        ['weapon','shield','arrows','scroll'].includes(i.type) && !i.legendary && !i.dungeon_drop);
   } else {
     pool = Object.entries(ITEM_DATABASE)
       .filter(([k,i]) => i.classes.includes(cls) &&
         (['helmet','chest','gloves','pants','belt','boots','ring','necklace'].includes(i.type)
-        || i.type==='potion') && !i.legendary);
+        || i.type==='potion') && !i.legendary && !i.dungeon_drop);
   }
 
   // Kandidaten, die aktuell nicht im Shop liegen
