@@ -2299,9 +2299,41 @@ function closeOverlay(id){
 // ── Daily quests ─────────────────────────────────────────────
 const DAILY_QUESTS = [
   {id:'steps',   icon:'🚶', title:'1.000 Schritte gehen',        desc:'Gehe heute mindestens 1.000 Schritte.',  exp:50,  gold:5,  done:false, goal:1000, current:0},
-  {id:'workout', icon:'💪', title:'30 Min. Training absolvieren', desc:'Trainiere heute mindestens 30 Minuten.', exp:100, gold:10, done:false},
+  {id:'workout', icon:'💪', title:'Workout-Belohnung',            desc:'Trainiere heute und erhalte Statpunkte für deinen Charakter.', exp:0, gold:0, done:false, statPoints:0, minutes:0},
   {id:'water',   icon:'💧', title:'2 Liter Wasser trinken',       desc:'Trinke heute mindestens 2 Liter Wasser.',exp:30,  gold:3,  done:false},
 ];
+
+// ── WORKOUT-SYSTEM ────────────────────────────────────────────
+// Sportkategorien mit zugehörigem Stat und Empfehlung
+const WORKOUT_CATEGORIES = [
+  { id:'strength',    label:'💪 Krafttraining',          stat:'staerke',       statLabel:'Stärke'       },
+  { id:'endurance',   label:'🏃 Ausdauersport',          stat:'ausdauer',      statLabel:'Ausdauer'     },
+  { id:'speed',       label:'⚡ Schnelligkeitssport',    stat:'schnelligkeit', statLabel:'Schnelligkeit'},
+  { id:'agility',     label:'🤸 Beweglichkeit/Yoga',     stat:'gewandheit',    statLabel:'Gewandheit'   },
+  { id:'mixed',       label:'🏋️ Crossfit/Teamsport',     stat:null,            statLabel:null           },
+  { id:'other',       label:'🎯 Sonstiges',              stat:null,            statLabel:null           },
+];
+
+// Alle wählbaren Stats für freie Punkte
+const WORKOUT_FREE_STATS = [
+  {id:'staerke',       label:'⚔️ Stärke'},
+  {id:'gewandheit',    label:'🌿 Gewandheit'},
+  {id:'intelligenz',   label:'🔮 Intelligenz'},
+  {id:'schnelligkeit', label:'⚡ Schnelligkeit'},
+  {id:'ausdauer',      label:'🛡️ Ausdauer'},
+  {id:'lp',            label:'❤️ Lebenskraft'},
+];
+
+// Berechnet Statpunkte und feste/freie Aufteilung anhand Trainingsminuten
+function getWorkoutPoints(minutes) {
+  if (minutes >= 60) return { total:5, fixed:2, free:3 };
+  if (minutes >= 30) return { total:3, fixed:1, free:2 };
+  if (minutes >= 10) return { total:1, fixed:0, free:1 };
+  return null; // unter 10 Min → keine Belohnung
+}
+
+// Aktuell laufender Workout-State (während der Stat-Vergabe)
+let _workoutState = null;
 
 // ── Health Connect Bridge ─────────────────────────────────────
 // Diese Funktion wird von der Flutter-App aufgerufen
@@ -2324,6 +2356,36 @@ function updateStepsFromApp(schritte) {
 // Flutter-WebView-Wrapper sie von außen aufrufen kann.
 window.updateStepsFromApp = updateStepsFromApp;
 
+// ── Health Connect: Workout-Daten empfangen ───────────────────
+// Wird von Flutter aufgerufen mit Gesamtminuten des heutigen Trainings
+// und optionalem Workout-Typ (z.B. 'STRENGTH_TRAINING', 'RUNNING' etc.)
+function updateWorkoutFromApp(totalMinutes, workoutType) {
+  const q = DAILY_QUESTS.find(q => q.id === 'workout');
+  if (!q || q.done) return;
+
+  q.minutes = Math.round(totalMinutes || 0);
+
+  // Health-Connect Workout-Typ zu Kategorie mappen
+  const typeMap = {
+    STRENGTH_TRAINING: 'strength', WEIGHT_TRAINING: 'strength', BODYBUILDING:'strength',
+    RUNNING:'endurance', CYCLING:'endurance', SWIMMING:'endurance',
+    WALKING:'endurance', HIKING:'endurance', ROWING:'endurance', TRIATHLON:'endurance',
+    SPRINTING:'speed', GYMNASTICS:'agility', YOGA:'agility',
+    DANCING:'agility', MARTIAL_ARTS:'strength', BOXING:'strength',
+    SOCCER:'mixed', BASKETBALL:'mixed', TENNIS:'speed',
+  };
+  const cat = workoutType ? (typeMap[workoutType] || 'other') : null;
+
+  const points = getWorkoutPoints(q.minutes);
+  if (!points) { renderDailyQuests(); return; }
+
+  q.statPoints = points.total;
+
+  // Direkt den Stat-Vergabe-Dialog öffnen
+  openWorkoutStatDialog(q.minutes, points, cat);
+}
+window.updateWorkoutFromApp = updateWorkoutFromApp;
+
 function openKnight(){
   renderDailyQuests();
   const lvl = character?.level||1;
@@ -2335,7 +2397,41 @@ function openKnight(){
 function renderDailyQuests(){
   const list = document.getElementById('dailyQuestList');
   list.innerHTML = DAILY_QUESTS.map(q=>{
-    // Fortschrittsanzeige für Quests mit Ziel (z.B. Schritte)
+    // ── Spezial-Rendering für Workout-Quest ──
+    if (q.id === 'workout') {
+      const points = getWorkoutPoints(q.minutes);
+      const statusTxt = q.done
+        ? `✅ Erledigt (+${q.statPoints} Statpunkte)`
+        : q.minutes >= 10
+          ? `⏱️ ${q.minutes} Min. erkannt → ${points.total} Statpunkte bereit`
+          : '⏱️ Noch kein Training heute erkannt.';
+      const canClaim = !q.done && q.minutes >= 10;
+      return `
+    <div class="mission-card ${q.done?'':'exp-focus'}" style="${q.done?'opacity:.5':''}">
+      <div class="mc-title">${q.icon} ${q.title} ${q.done?'✅':''}</div>
+      <div class="mc-desc">${q.desc}</div>
+      <div style="font-size:.8rem;color:var(--gold-l);margin:6px 0">${statusTxt}</div>
+      <div style="font-size:.72rem;color:var(--dim);margin-bottom:8px">
+        🕐 10-29 Min → 1 Pkt &nbsp;|&nbsp; 30-59 Min → 3 Pkt &nbsp;|&nbsp; 60+ Min → 5 Pkt
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+        <div></div>
+        ${!q.done ? `
+          <div style="display:flex;gap:6px">
+            <button onclick="openWorkoutManualDialog()"
+              style="padding:5px 12px;background:rgba(201,168,76,.15);border:1px solid var(--border);
+              border-radius:2px;color:var(--gold-l);font-family:Cinzel,serif;font-size:.6rem;
+              letter-spacing:.08em;cursor:pointer">✏️ Manuell eingeben</button>
+            ${canClaim ? `<button onclick="openWorkoutStatDialogFromQuest()"
+              style="padding:5px 12px;background:linear-gradient(135deg,var(--gold-d),var(--gold));
+              border:none;border-radius:2px;color:#1a1200;font-family:Cinzel,serif;font-size:.6rem;
+              letter-spacing:.08em;cursor:pointer">Punkte vergeben ✓</button>` : ''}
+          </div>` : ''}
+      </div>
+    </div>`;
+    }
+
+    // ── Standard-Rendering für andere Quests ──
     const hasProgress = q.goal && !q.done;
     const pct = hasProgress ? Math.min(100, Math.round((q.current||0)/q.goal*100)) : 0;
     const progressBar = hasProgress ? `
@@ -2365,6 +2461,268 @@ function renderDailyQuests(){
       </div>
     </div>`;
   }).join('');
+}
+
+// ── WORKOUT-DIALOG: Manuell eingeben ─────────────────────────
+function openWorkoutManualDialog() {
+  const q = DAILY_QUESTS.find(q => q.id === 'workout');
+  if (!q || q.done) return;
+  document.getElementById('workoutOverlay').classList.add('active');
+  showWorkoutStep1();
+}
+
+function showWorkoutStep1() {
+  document.getElementById('workoutDialogContent').innerHTML = `
+    <div style="font-family:Cinzel,serif;font-size:.75rem;letter-spacing:.1em;
+      color:var(--gold-l);text-transform:uppercase;margin-bottom:16px">
+      💪 Workout-Belohnung
+    </div>
+    <div style="font-size:.95rem;color:var(--text);margin-bottom:18px">
+      Wie lange hast du heute insgesamt trainiert?
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px">
+      ${[
+        {label:'10 – 29 Min',  min:10,  pts:1, desc:'1 freier Statpunkt'},
+        {label:'30 – 59 Min',  min:30,  pts:3, desc:'1 fest + 2 frei'},
+        {label:'60+ Min',      min:60,  pts:5, desc:'2 fest + 3 frei'},
+        {label:'Unter 10 Min', min:0,   pts:0, desc:'Keine Belohnung'},
+      ].map(o => `
+        <button onclick="onWorkoutDurationSelected(${o.min})"
+          style="padding:12px 8px;background:rgba(201,168,76,.08);
+          border:1px solid var(--border);border-radius:3px;cursor:pointer;
+          font-family:Cinzel,serif;font-size:.65rem;letter-spacing:.05em;
+          color:${o.pts>0?'var(--text)':'var(--dim)'};text-align:center">
+          <div style="font-size:1rem;margin-bottom:4px">${o.pts>0?'⏱️':'⛔'}</div>
+          <div style="font-weight:600">${o.label}</div>
+          <div style="font-size:.6rem;color:var(--gold-l);margin-top:3px">${o.desc}</div>
+        </button>`).join('')}
+    </div>
+    <button onclick="closeOverlay('workoutOverlay')"
+      style="width:100%;padding:10px;background:transparent;border:1px solid var(--border);
+      border-radius:3px;color:var(--dim);font-family:Cinzel,serif;font-size:.65rem;
+      letter-spacing:.08em;cursor:pointer">Abbrechen</button>`;
+}
+
+function onWorkoutDurationSelected(minMinutes) {
+  if (minMinutes === 0) {
+    closeOverlay('workoutOverlay');
+    return;
+  }
+  const points = getWorkoutPoints(minMinutes);
+  // Zeige Kategorie-Auswahl
+  showWorkoutStep2(minMinutes, points);
+}
+
+function showWorkoutStep2(minutes, points) {
+  document.getElementById('workoutDialogContent').innerHTML = `
+    <div style="font-family:Cinzel,serif;font-size:.75rem;letter-spacing:.1em;
+      color:var(--gold-l);text-transform:uppercase;margin-bottom:16px">
+      💪 Workout-Art
+    </div>
+    <div style="font-size:.9rem;color:var(--text);margin-bottom:4px">
+      Was für ein Training war es?
+    </div>
+    <div style="font-size:.72rem;color:var(--dim);margin-bottom:14px">
+      ${points.fixed > 0
+        ? `${points.fixed} Punkt${points.fixed>1?'e':''} werden automatisch vergeben, ${points.free} frei wählbar.`
+        : `${points.free} Punkt${points.free>1?'e':''} frei wählbar.`}
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+      ${WORKOUT_CATEGORIES.map(cat => `
+        <button onclick="onWorkoutCategorySelected(${minutes}, '${cat.id}')"
+          style="padding:11px 14px;background:rgba(201,168,76,.08);
+          border:1px solid var(--border);border-radius:3px;cursor:pointer;
+          font-family:Cinzel,serif;font-size:.7rem;letter-spacing:.06em;
+          color:var(--text);text-align:left;display:flex;justify-content:space-between;align-items:center">
+          <span>${cat.label}</span>
+          ${cat.stat && points.fixed > 0
+            ? `<span style="font-size:.6rem;color:var(--gold-l)">+${points.fixed}× ${cat.statLabel} fest</span>`
+            : `<span style="font-size:.6rem;color:var(--dim)">alle Punkte frei</span>`}
+        </button>`).join('')}
+    </div>
+    <button onclick="showWorkoutStep1()"
+      style="width:100%;padding:10px;background:transparent;border:1px solid var(--border);
+      border-radius:3px;color:var(--dim);font-family:Cinzel,serif;font-size:.65rem;
+      letter-spacing:.08em;cursor:pointer">← Zurück</button>`;
+}
+
+function onWorkoutCategorySelected(minutes, categoryId) {
+  const points = getWorkoutPoints(minutes);
+  const cat = WORKOUT_CATEGORIES.find(c => c.id === categoryId);
+  _workoutState = { minutes, points, cat, freeRemaining: points.free, statsChosen: {} };
+
+  // Feste Punkte automatisch vergeben
+  if (points.fixed > 0 && cat.stat) {
+    _workoutState.statsChosen[cat.stat] = (_workoutState.statsChosen[cat.stat] || 0) + points.fixed;
+  } else if (points.fixed > 0 && !cat.stat) {
+    // Gemischt/Sonstiges: alle Punkte werden frei
+    _workoutState.freeRemaining = points.total;
+  }
+
+  if (_workoutState.freeRemaining > 0) {
+    showWorkoutStep3();
+  } else {
+    applyWorkoutStats();
+  }
+}
+
+function showWorkoutStep3() {
+  const { points, cat, freeRemaining, statsChosen } = _workoutState;
+  const fixedTxt = points.fixed > 0 && cat.stat
+    ? `<div style="font-size:.75rem;color:var(--gold-l);margin-bottom:10px">
+        ✅ ${points.fixed} Pkt${points.fixed>1?'e':''} automatisch auf ${cat.statLabel} vergeben.
+       </div>`
+    : '';
+
+  document.getElementById('workoutDialogContent').innerHTML = `
+    <div style="font-family:Cinzel,serif;font-size:.75rem;letter-spacing:.1em;
+      color:var(--gold-l);text-transform:uppercase;margin-bottom:12px">
+      💪 Statpunkte verteilen
+    </div>
+    ${fixedTxt}
+    <div style="font-size:.85rem;color:var(--text);margin-bottom:4px">
+      Du hast noch <strong id="freePointsLeft">${freeRemaining}</strong> freie Punkt${freeRemaining!==1?'e':''} zu verteilen:
+    </div>
+    <div style="font-size:.7rem;color:var(--dim);margin-bottom:14px">
+      Tippe auf einen Stat um einen Punkt hinzuzufügen.
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px" id="statGrid">
+      ${WORKOUT_FREE_STATS.map(s => `
+        <button id="statBtn_${s.id}" onclick="addWorkoutStatPoint('${s.id}')"
+          style="padding:10px 8px;background:rgba(201,168,76,.08);
+          border:1px solid var(--border);border-radius:3px;cursor:pointer;
+          font-family:Cinzel,serif;font-size:.65rem;letter-spacing:.05em;
+          color:var(--text);text-align:center">
+          <div>${s.label}</div>
+          <div id="statCount_${s.id}" style="font-size:.85rem;color:var(--gold-l);
+            font-weight:600;margin-top:3px">+${_workoutState.statsChosen[s.id]||0}</div>
+        </button>`).join('')}
+    </div>
+    <button id="confirmWorkoutBtn" onclick="applyWorkoutStats()"
+      ${freeRemaining > 0 ? 'disabled' : ''}
+      style="width:100%;padding:11px;
+      background:${freeRemaining > 0 ? 'rgba(255,255,255,.06)' : 'linear-gradient(135deg,var(--gold-d),var(--gold))'};
+      border:${freeRemaining > 0 ? '1px solid var(--border)' : 'none'};
+      border-radius:3px;
+      color:${freeRemaining > 0 ? 'var(--dim)' : '#1a1200'};
+      font-family:Cinzel,serif;font-size:.7rem;font-weight:600;
+      letter-spacing:.1em;cursor:${freeRemaining > 0 ? 'not-allowed' : 'pointer'}">
+      Punkte bestätigen ✓
+    </button>`;
+}
+
+function addWorkoutStatPoint(statId) {
+  if (!_workoutState || _workoutState.freeRemaining <= 0) return;
+  _workoutState.statsChosen[statId] = (_workoutState.statsChosen[statId] || 0) + 1;
+  _workoutState.freeRemaining--;
+
+  // Anzeige aktualisieren
+  const countEl = document.getElementById(`statCount_${statId}`);
+  if (countEl) countEl.textContent = `+${_workoutState.statsChosen[statId]}`;
+  const leftEl = document.getElementById('freePointsLeft');
+  if (leftEl) leftEl.textContent = _workoutState.freeRemaining;
+
+  // Button aktivieren wenn alle Punkte vergeben
+  if (_workoutState.freeRemaining === 0) {
+    const btn = document.getElementById('confirmWorkoutBtn');
+    if (btn) {
+      btn.disabled = false;
+      btn.style.background = 'linear-gradient(135deg,var(--gold-d),var(--gold))';
+      btn.style.border = 'none';
+      btn.style.color = '#1a1200';
+      btn.style.cursor = 'pointer';
+    }
+  }
+}
+
+// Health-Connect Variante: öffnet Stat-Dialog direkt
+function openWorkoutStatDialog(minutes, points, categoryId) {
+  const q = DAILY_QUESTS.find(q => q.id === 'workout');
+  if (!q || q.done) return;
+  q.minutes = minutes;
+  renderDailyQuests();
+
+  const cat = categoryId ? WORKOUT_CATEGORIES.find(c => c.id === categoryId) : null;
+  _workoutState = { minutes, points, cat, freeRemaining: points.free, statsChosen: {} };
+
+  if (points.fixed > 0 && cat?.stat) {
+    _workoutState.statsChosen[cat.stat] = (_workoutState.statsChosen[cat.stat] || 0) + points.fixed;
+  } else if (points.fixed > 0 && !cat?.stat) {
+    _workoutState.freeRemaining = points.total;
+  }
+
+  document.getElementById('workoutOverlay').classList.add('active');
+  if (_workoutState.freeRemaining > 0) {
+    showWorkoutStep3();
+  } else {
+    applyWorkoutStats();
+  }
+}
+
+function openWorkoutStatDialogFromQuest() {
+  const q = DAILY_QUESTS.find(q => q.id === 'workout');
+  if (!q || q.done) return;
+  const points = getWorkoutPoints(q.minutes);
+  openWorkoutStatDialog(q.minutes, points, null);
+}
+
+async function applyWorkoutStats() {
+  if (!_workoutState) return;
+  closeOverlay('workoutOverlay');
+
+  const q = DAILY_QUESTS.find(q => q.id === 'workout');
+  if (!q || q.done) return;
+
+  const { statsChosen, points } = _workoutState;
+  const totalPoints = Object.values(statsChosen).reduce((a,b)=>a+b, 0);
+  q.done = true;
+  q.statPoints = totalPoints;
+  _workoutState = null;
+  renderDailyQuests();
+
+  try {
+    const { data:{session} } = await sb.auth.getSession();
+    if (!session) return;
+
+    const { data: chars } = await sb
+      .from('characters')
+      .select('id, staerke, gewandheit, intelligenz, schnelligkeit, ausdauer, lebenskraft')
+      .eq('user_id', session.user.id)
+      .order('created_at', {ascending:false})
+      .limit(1);
+
+    if (!chars || !chars.length) return;
+    const char = chars[0];
+
+    // Stats addieren
+    const updates = {};
+    for (const [stat, pts] of Object.entries(statsChosen)) {
+      if (pts > 0) updates[stat] = (char[stat] || 0) + pts;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await sb.from('characters').update(updates).eq('id', char.id);
+      // Lokalen Charakter aktualisieren
+      for (const [stat, val] of Object.entries(updates)) {
+        if (character) character[stat] = val;
+      }
+      updateHUD();
+    }
+
+    // Übersicht der vergebenen Stats
+    const statNames = {staerke:'Stärke',gewandheit:'Gewandheit',intelligenz:'Intelligenz',
+      schnelligkeit:'Schnelligkeit',ausdauer:'Ausdauer',lp:'Lebenskraft'};
+    const summary = Object.entries(statsChosen)
+      .filter(([,v])=>v>0)
+      .map(([k,v])=>`+${v} ${statNames[k]||k}`)
+      .join(', ');
+    showToast('💪', `Workout-Belohnung erhalten! ${summary}`);
+
+  } catch(err) {
+    console.error('Workout-Quest Fehler:', err);
+    q.done = false;
+    renderDailyQuests();
+  }
 }
 
 async function completeQuest(id){
@@ -2461,6 +2819,17 @@ loadCharacter().then(() => {
   </div>
 </div>
 
+
+<!-- ── WORKOUT OVERLAY ── -->
+<div class="overlay" id="workoutOverlay" style="z-index:150">
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:4px;
+    width:min(360px,92vw);max-height:85vh;overflow-y:auto;padding:24px 20px;
+    box-shadow:0 0 40px rgba(0,0,0,.9)">
+    <div id="workoutDialogContent">
+      <!-- filled by JS -->
+    </div>
+  </div>
+</div>
 
 <!-- ── CONFIRM OVERLAY ── -->
 <div class="overlay" id="confirmOverlay" style="z-index:200">
