@@ -2590,15 +2590,26 @@ function showWorkoutStep3() {
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px" id="statGrid">
       ${WORKOUT_FREE_STATS.map(s => `
-        <button id="statBtn_${s.id}" onclick="addWorkoutStatPoint('${s.id}')"
-          style="padding:10px 8px;background:rgba(201,168,76,.08);
-          border:1px solid var(--border);border-radius:3px;cursor:pointer;
-          font-family:Cinzel,serif;font-size:.65rem;letter-spacing:.05em;
-          color:var(--text);text-align:center">
-          <div>${s.label}</div>
-          <div id="statCount_${s.id}" style="font-size:.85rem;color:var(--gold-l);
-            font-weight:600;margin-top:3px">+${_workoutState.statsChosen[s.id]||0}</div>
-        </button>`).join('')}
+        <div style="display:flex;gap:4px;align-items:stretch">
+          <button id="statBtn_${s.id}" onclick="addWorkoutStatPoint('${s.id}')"
+            style="flex:1;padding:10px 8px;background:rgba(201,168,76,.08);
+            border:1px solid var(--border);border-radius:3px;cursor:pointer;
+            font-family:Cinzel,serif;font-size:.65rem;letter-spacing:.05em;
+            color:var(--text);text-align:center">
+            <div>${s.label}</div>
+            <div id="statCount_${s.id}" style="font-size:.85rem;color:var(--gold-l);
+              font-weight:600;margin-top:3px">+${_workoutState.statsChosen[s.id]||0}</div>
+          </button>
+          <button id="statMinus_${s.id}" onclick="removeWorkoutStatPoint('${s.id}')"
+            ${(_workoutState.statsChosen[s.id]||0) === 0 ? 'disabled' : ''}
+            style="width:28px;padding:0;
+            background:${(_workoutState.statsChosen[s.id]||0) > 0 ? 'rgba(201,68,68,.2)' : 'rgba(255,255,255,.04)'};
+            border:1px solid var(--border);border-radius:3px;
+            color:${(_workoutState.statsChosen[s.id]||0) > 0 ? '#e07070' : 'var(--dim)'};
+            font-size:1rem;cursor:${(_workoutState.statsChosen[s.id]||0) > 0 ? 'pointer' : 'not-allowed'}">
+            −
+          </button>
+        </div>`).join('')}
     </div>
     <button id="confirmWorkoutBtn" onclick="applyWorkoutStats()"
       ${freeRemaining > 0 ? 'disabled' : ''}
@@ -2617,23 +2628,45 @@ function addWorkoutStatPoint(statId) {
   if (!_workoutState || _workoutState.freeRemaining <= 0) return;
   _workoutState.statsChosen[statId] = (_workoutState.statsChosen[statId] || 0) + 1;
   _workoutState.freeRemaining--;
+  updateWorkoutStatUI(statId);
+}
 
-  // Anzeige aktualisieren
+function removeWorkoutStatPoint(statId) {
+  if (!_workoutState || (_workoutState.statsChosen[statId] || 0) <= 0) return;
+  _workoutState.statsChosen[statId]--;
+  _workoutState.freeRemaining++;
+  updateWorkoutStatUI(statId);
+}
+
+function updateWorkoutStatUI(statId) {
+  const count = _workoutState.statsChosen[statId] || 0;
+
+  // Zähler aktualisieren
   const countEl = document.getElementById(`statCount_${statId}`);
-  if (countEl) countEl.textContent = `+${_workoutState.statsChosen[statId]}`;
+  if (countEl) countEl.textContent = `+${count}`;
+
+  // Minus-Button aktivieren/deaktivieren
+  const minusBtn = document.getElementById(`statMinus_${statId}`);
+  if (minusBtn) {
+    minusBtn.disabled = count === 0;
+    minusBtn.style.background = count > 0 ? 'rgba(201,68,68,.2)' : 'rgba(255,255,255,.04)';
+    minusBtn.style.color = count > 0 ? '#e07070' : 'var(--dim)';
+    minusBtn.style.cursor = count > 0 ? 'pointer' : 'not-allowed';
+  }
+
+  // Verbleibende Punkte aktualisieren
   const leftEl = document.getElementById('freePointsLeft');
   if (leftEl) leftEl.textContent = _workoutState.freeRemaining;
 
-  // Button aktivieren wenn alle Punkte vergeben
-  if (_workoutState.freeRemaining === 0) {
-    const btn = document.getElementById('confirmWorkoutBtn');
-    if (btn) {
-      btn.disabled = false;
-      btn.style.background = 'linear-gradient(135deg,var(--gold-d),var(--gold))';
-      btn.style.border = 'none';
-      btn.style.color = '#1a1200';
-      btn.style.cursor = 'pointer';
-    }
+  // Bestätigen-Button aktivieren/deaktivieren
+  const btn = document.getElementById('confirmWorkoutBtn');
+  if (btn) {
+    const allSpent = _workoutState.freeRemaining === 0;
+    btn.disabled = !allSpent;
+    btn.style.background = allSpent ? 'linear-gradient(135deg,var(--gold-d),var(--gold))' : 'rgba(255,255,255,.06)';
+    btn.style.border = allSpent ? 'none' : '1px solid var(--border)';
+    btn.style.color = allSpent ? '#1a1200' : 'var(--dim)';
+    btn.style.cursor = allSpent ? 'pointer' : 'not-allowed';
   }
 }
 
