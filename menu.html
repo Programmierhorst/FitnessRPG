@@ -556,6 +556,26 @@ body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text)}
       <text x="300" y="475" font-family="serif" font-size="9" fill="#c9a4e8" text-anchor="middle" letter-spacing="1">DUNGEON</text>
     </g>
 
+    <!-- ── ARENA ENTRANCE ── -->
+    <g id="arenaGroup" class="clickable" onclick="openArena()" style="cursor:pointer">
+      <!-- shadow -->
+      <ellipse cx="490" cy="455" rx="38" ry="9" fill="rgba(0,0,0,.4)"/>
+      <!-- stone gate -->
+      <rect x="458" y="400" width="64" height="55" rx="4" fill="#1a1214" stroke="#5a3030" stroke-width="2"/>
+      <path d="M458 420 Q490 395 522 420" fill="#1a1214" stroke="#5a3030" stroke-width="2"/>
+      <!-- inner glow -->
+      <rect x="468" y="415" width="44" height="40" rx="2" fill="#0d0810"/>
+      <rect x="468" y="415" width="44" height="40" rx="2" fill="rgba(200,50,50,.08)"/>
+      <!-- swords icon -->
+      <text x="490" y="442" font-size="20" text-anchor="middle">⚔️</text>
+      <!-- torches -->
+      <text x="460" y="408" font-size="12" text-anchor="middle">🔥</text>
+      <text x="520" y="408" font-size="12" text-anchor="middle">🔥</text>
+      <!-- sign -->
+      <rect x="462" y="460" width="56" height="22" rx="3" fill="#1a0d0d" stroke="#8b2020" stroke-width="1" opacity=".9"/>
+      <text x="490" y="475" font-family="serif" font-size="9" fill="#e07070" text-anchor="middle" letter-spacing="1">ARENA</text>
+    </g>
+
     <!-- ── PRANGER (center) ── -->
     <g id="prangerGroup" class="clickable" onclick="openMissions()" style="cursor:pointer">
       <!-- post -->
@@ -713,7 +733,11 @@ body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text)}
       <span class="pnav-icon">🪖</span>
       <span class="pnav-label">Aufgaben</span>
     </button>
-    <button class="pnav-btn pnav-center" onclick="openMissions()">
+    <button class="pnav-btn pnav-center" onclick="openArena()">
+      <span class="pnav-icon">🏟️</span>
+      <span class="pnav-label">Arena</span>
+    </button>
+    <button class="pnav-btn" onclick="openMissions()">
       <span class="pnav-icon">📜</span>
       <span class="pnav-label">Missionen</span>
     </button>
@@ -721,12 +745,29 @@ body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text)}
       <span class="pnav-icon">🦸</span>
       <span class="pnav-label">Held</span>
     </button>
-    <button class="pnav-btn" onclick="openShop('potions')">
-      <span class="pnav-icon">🧪</span>
-      <span class="pnav-label">Tränke</span>
-    </button>
   </nav>
 
+</div>
+
+<!-- ── ARENA OVERLAY ── -->
+<div class="overlay" id="arenaOverlay">
+  <div class="mission-panel">
+    <div class="mp-header">
+      <div class="mp-title">⚔️ Arena</div>
+      <button class="mp-close" onclick="closeOverlay('arenaOverlay')">✕</button>
+    </div>
+    <div class="mp-npc">
+      <div class="mp-npc-icon">🗡️</div>
+      <div class="mp-npc-text">
+        "Willkommen in der Arena, Krieger! Beweise deine Stärke gegen andere Helden,
+        sammle Ruhm und erklimme die Rangliste. Die Season dauert 3 Monate –
+        kämpfe täglich für Ruhm und Ehre!"
+      </div>
+    </div>
+    <div class="mp-missions" id="arenaContent" style="max-height:65vh;overflow-y:auto">
+      <!-- filled by JS -->
+    </div>
+  </div>
 </div>
 
 <!-- ── MISSION OVERLAY ── -->
@@ -2293,6 +2334,581 @@ async function sellItem(itemId, sellPrice, itemName) {
 
 function closeOverlay(id){
   document.getElementById(id).classList.remove('active');
+}
+
+// ══════════════════════════════════════════════════════════════
+// ── ARENA-SYSTEM ──────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+
+const ARENA_SEASON_ID   = 1;       // Aktuelle Season (manuell hochzählen je Season)
+const ARENA_MAX_FIGHTS  = 3;       // Kämpfe pro Tag
+const ARENA_RUHM_WIN_LOWER  = 80;  // Ruhm: Sieg gegen schwächeren Rang
+const ARENA_RUHM_WIN_EQUAL  = 100; // Ruhm: Sieg gegen gleichen Rang
+const ARENA_RUHM_WIN_HIGHER = 120; // Ruhm: Sieg gegen stärkeren Rang
+const ARENA_RUHM_LOSS_ATK   = -40; // Ruhm-Verlust Angreifer bei Niederlage
+
+// ── Rang-Definitionen ────────────────────────────────────────
+const ARENA_RANKS = [
+  { id:'S', label:'S', icon:'🏆', color:'#ffd700' },
+  { id:'A', label:'A', icon:'💎', color:'#c9a84c' },
+  { id:'B', label:'B', icon:'🥈', color:'#a8b4c0' },
+  { id:'C', label:'C', icon:'🥉', color:'#cd7f32' },
+  { id:'D', label:'D', icon:'⚔️', color:'#7a8a6a' },
+  { id:'E', label:'E', icon:'🛡️', color:'#5a5a5a' },
+];
+
+// Berechnet Rang eines Spielers anhand seines Ruhm-Rangs unter allen Spielern
+// players: [{character_id, ruhm}] sortiert nach ruhm desc, idx: Index des Spielers
+function calcArenaRank(idx, totalPlayers) {
+  if (totalPlayers === 0) return 'E';
+  const pos = idx + 1; // 1-basiert
+
+  // S-Rang: Top 0,1% aber mind. 10, max. 100
+  const sCount = Math.min(100, Math.max(10, Math.round(totalPlayers * 0.001)));
+  if (pos <= sCount) return 'S';
+
+  // A-Rang: Top 20% aber mind. Plätze 11-100, max. Plätze 101-2000
+  const aTopRaw  = Math.round(totalPlayers * 0.20);
+  const aTop     = Math.min(2000, Math.max(100, aTopRaw));
+  if (pos <= aTop) return 'A';
+
+  // B-Rang: Top 40%
+  const bTop = Math.round(totalPlayers * 0.40);
+  if (pos <= bTop) return 'B';
+
+  // C-Rang: Top 60%
+  const cTop = Math.round(totalPlayers * 0.60);
+  if (pos <= cTop) return 'C';
+
+  // D-Rang: Top 80%
+  const dTop = Math.round(totalPlayers * 0.80);
+  if (pos <= dTop) return 'D';
+
+  return 'E';
+}
+
+// Ruhm-Gewinn für den Sieger basierend auf Rang-Verhältnis
+function calcRuhmReward(attackerRank, defenderRank) {
+  const order = ['S','A','B','C','D','E'];
+  const ai = order.indexOf(attackerRank);
+  const di = order.indexOf(defenderRank);
+  if (di < ai) return ARENA_RUHM_WIN_HIGHER; // Verteidiger höherrangig
+  if (di > ai) return ARENA_RUHM_WIN_LOWER;
+  return ARENA_RUHM_WIN_EQUAL;
+}
+
+// Gold/EXP-Belohnung pro Kampf (für Sieger)
+function calcArenaFightReward(playerLevel) {
+  const mult = rewardMultiplier(playerLevel);
+  return {
+    gold: Math.round(15 * mult),
+    exp:  Math.round(30 * mult),
+  };
+}
+
+// Season-Belohnungen nach Rang (Gold+EXP: E bis B steigend, A/S gleich wie B)
+function calcSeasonReward(rank, playerLevel) {
+  const mult = rewardMultiplier(playerLevel);
+  const base = { E:{gold:100,exp:200}, D:{gold:200,exp:400}, C:{gold:350,exp:700},
+                 B:{gold:500,exp:1000}, A:{gold:500,exp:1000}, S:{gold:500,exp:1000} };
+  const b = base[rank] || base.E;
+  return { gold: Math.round(b.gold*mult), exp: Math.round(b.exp*mult) };
+}
+
+// ── Arena-Items ───────────────────────────────────────────────
+// 6 Ränge × 3 Klassen × 10 Slots = 180 Items
+// Basis-Multiplikatoren: E=1x, D=1.4x, C=2x, B=2.8x, A=3.8x, S=5x (stärker als Dungeon-Legendary)
+// Slot-Basis-Stats analog zu bestehenden Items, aber leicht höher
+
+const ARENA_RANK_MULT = { E:1, D:1.4, C:2.0, B:2.8, A:3.8, S:5.0 };
+const ARENA_RANK_COLOR = { E:'#5a5a5a', D:'#7a8a6a', C:'#cd7f32', B:'#a8b4c0', A:'#c9a84c', S:'#ffd700' };
+
+// Item-Definitionen pro Klasse und Slot (Basis bei E-Rang, skaliert mit ARENA_RANK_MULT)
+const ARENA_ITEM_BASES = {
+  warrior: {
+    weapon1: { name:'Arenaschwert',    icon:'⚔️',  type:'weapon',   slot:'weapon1', damage:[18,26], stats:{staerke:7}, price:200 },
+    weapon2: { name:'Arenaschild',     icon:'🛡️',  type:'shield',   slot:'weapon2', damage:[0,0],   stats:{ausdauer:8, lp:4}, price:180 },
+    helmet:  { name:'Arenahelm',       icon:'🪖',  type:'helmet',   slot:'helmet',  stats:{lp:5, ausdauer:4}, price:170 },
+    chest:   { name:'Arenapanzer',     icon:'🦺',  type:'chest',    slot:'chest',   stats:{lp:8, ausdauer:5}, price:190 },
+    gloves:  { name:'Arenahandschuhe', icon:'🥊',  type:'gloves',   slot:'gloves',  stats:{staerke:4, krit_chance:1}, price:150 },
+    pants:   { name:'Arenahose',       icon:'👖',  type:'pants',    slot:'pants',   stats:{lp:5, ausdauer:4}, price:155 },
+    belt:    { name:'Arenagürtel',     icon:'📿',  type:'belt',     slot:'belt',    stats:{staerke:3, lp:3}, price:140 },
+    boots:   { name:'Arenastiefel',    icon:'👢',  type:'boots',    slot:'boots',   stats:{schnelligkeit:4, ausdauer:3}, price:145 },
+    ring:    { name:'Arenasiegerring', icon:'💍',  type:'ring',     slot:'ring',    stats:{staerke:4, krit_chance:2}, price:160 },
+    necklace:{ name:'Arenamed.',       icon:'📿',  type:'necklace', slot:'necklace',stats:{staerke:3, lp:4}, price:155 },
+  },
+  archer: {
+    weapon1: { name:'Arenabogen',      icon:'🏹',  type:'weapon',   slot:'weapon1', damage:[20,30], stats:{gewandheit:7}, price:200 },
+    weapon2: { name:'Arenapfeile',     icon:'🪃',  type:'arrows',   slot:'weapon2', damage:[8,12],  stats:{krit_schaden:3}, price:170 },
+    helmet:  { name:'Arenakappe',      icon:'🎭',  type:'helmet',   slot:'helmet',  stats:{gewandheit:4, schnelligkeit:3}, price:170 },
+    chest:   { name:'Arenalederwams',  icon:'🥋',  type:'chest',    slot:'chest',   stats:{gewandheit:5, lp:4}, price:185 },
+    gloves:  { name:'Arenaschützhand', icon:'🧤',  type:'gloves',   slot:'gloves',  stats:{gewandheit:4, krit_chance:1}, price:150 },
+    pants:   { name:'Arenajägerhose',  icon:'👖',  type:'pants',    slot:'pants',   stats:{schnelligkeit:5, gewandheit:3}, price:155 },
+    belt:    { name:'Arenajägergurt',  icon:'📿',  type:'belt',     slot:'belt',    stats:{gewandheit:3, schnelligkeit:2}, price:140 },
+    boots:   { name:'Arenajägerstief.',icon:'👟',  type:'boots',    slot:'boots',   stats:{schnelligkeit:6, gewandheit:2}, price:150 },
+    ring:    { name:'Arenazielsuchring',icon:'💍', type:'ring',     slot:'ring',    stats:{krit_chance:3, gewandheit:3}, price:160 },
+    necklace:{ name:'Arenajägerket.',  icon:'📿',  type:'necklace', slot:'necklace',stats:{gewandheit:3, krit_schaden:3}, price:155 },
+  },
+  mage: {
+    weapon1: { name:'Arenastab',       icon:'🔮',  type:'weapon',   slot:'weapon1', damage:[22,32], stats:{intelligenz:7}, price:200 },
+    weapon2: { name:'Arenarune',       icon:'📜',  type:'scroll',   slot:'weapon2', damage:[12,18], stats:{intelligenz:4, krit_schaden:2}, price:175 },
+    helmet:  { name:'Arenamagierhut',  icon:'🎩',  type:'helmet',   slot:'helmet',  stats:{intelligenz:4, ausdauer:2}, price:170 },
+    chest:   { name:'Arenarobe',       icon:'👘',  type:'chest',    slot:'chest',   stats:{intelligenz:6, lp:3}, price:185 },
+    gloves:  { name:'Arenamagierhands.',icon:'🧤', type:'gloves',   slot:'gloves',  stats:{intelligenz:4, krit_chance:1}, price:150 },
+    pants:   { name:'Arenamagegewand', icon:'👘',  type:'pants',    slot:'pants',   stats:{intelligenz:4, ausdauer:3}, price:155 },
+    belt:    { name:'Arenazirkelgurt', icon:'🔮',  type:'belt',     slot:'belt',    stats:{intelligenz:3, krit_chance:1}, price:140 },
+    boots:   { name:'Arenageistschuh', icon:'👟',  type:'boots',    slot:'boots',   stats:{schnelligkeit:3, intelligenz:3}, price:145 },
+    ring:    { name:'Arenamachtring',  icon:'💍',  type:'ring',     slot:'ring',    stats:{intelligenz:4, krit_schaden:2}, price:160 },
+    necklace:{ name:'Arenasteinket.',  icon:'📿',  type:'necklace', slot:'necklace',stats:{intelligenz:4, krit_chance:2}, price:155 },
+  },
+};
+
+// Generiert einen Arena-Item-Key
+function arenaItemKey(rank, cls, slot) { return `arena_${rank}_${cls}_${slot}`; }
+
+// Generiert ein skaliertes Arena-Item-Objekt
+function getArenaItem(rank, cls, slot) {
+  const base = ARENA_ITEM_BASES[cls]?.[slot];
+  if (!base) return null;
+  const m = ARENA_RANK_MULT[rank];
+  const stats = Object.fromEntries(Object.entries(base.stats).map(([k,v])=>[k, Math.round(v*m)]));
+  const damage = base.damage?.[0] ? [Math.round(base.damage[0]*m), Math.round(base.damage[1]*m)] : null;
+  return {
+    ...base,
+    name:  `${rank}-Rang ${base.name}`,
+    stats,
+    damage,
+    price: Math.round(base.price * m),
+    arena_item: true,
+    arena_rank: rank,
+    classes: [cls],
+    desc: `Exklusives Arena-Item des ${rank}-Rangs.`,
+  };
+}
+
+// ── Arena-State ───────────────────────────────────────────────
+let _arenaStats     = null;   // Eigener Arena-Stat-Eintrag
+let _arenaRanking   = [];     // Alle Spieler [{character_id, name, ruhm, rank, level}]
+let _arenaOpponents = [];     // 3 aktuelle Gegner für heute
+let _arenaFightsLeft = ARENA_MAX_FIGHTS;
+
+// ── Arena: Kämpfe heute ───────────────────────────────────────
+function getArenaFightsLeft() {
+  if (!_arenaStats) return ARENA_MAX_FIGHTS;
+  const today = new Date().toISOString().split('T')[0];
+  if (_arenaStats.last_fight_date === today) {
+    return Math.max(0, ARENA_MAX_FIGHTS - (_arenaStats.fights_today || 0));
+  }
+  return ARENA_MAX_FIGHTS;
+}
+
+// ── Arena öffnen ──────────────────────────────────────────────
+async function openArena() {
+  document.getElementById('arenaOverlay').classList.add('active');
+  document.getElementById('arenaContent').innerHTML =
+    '<div style="text-align:center;padding:40px;color:var(--dim)">⏳ Lade Rangliste...</div>';
+  await loadArenaData();
+  renderArena();
+}
+
+async function loadArenaData() {
+  try {
+    // 1. Eigene Arena-Stats laden (oder anlegen)
+    const { data:{ session } } = await sb.auth.getSession();
+    if (!session || !character) return;
+
+    const { data: myStats } = await sb.from('arena_stats')
+      .select('*').eq('character_id', character.id).limit(1);
+
+    if (!myStats || myStats.length === 0) {
+      // Neu anlegen
+      const { data: inserted } = await sb.from('arena_stats').insert([{
+        character_id: character.id, ruhm: 0, season_id: ARENA_SEASON_ID,
+        fights_today: 0, last_fight_date: null, season_reward_claimed: false
+      }]).select();
+      _arenaStats = inserted?.[0] || null;
+    } else {
+      _arenaStats = myStats[0];
+    }
+
+    // 2. Alle Spieler für Rangliste laden
+    const { data: allStats } = await sb.from('arena_stats')
+      .select('character_id, ruhm, season_id')
+      .eq('season_id', ARENA_SEASON_ID)
+      .order('ruhm', { ascending: false });
+
+    // 3. Charakter-Namen und Level laden
+    const charIds = (allStats||[]).map(s => s.character_id);
+    let charMap = {};
+    if (charIds.length > 0) {
+      const { data: chars } = await sb.from('characters')
+        .select('id, name, level, class').in('id', charIds);
+      (chars||[]).forEach(c => charMap[c.id] = c);
+    }
+
+    const total = (allStats||[]).length;
+    _arenaRanking = (allStats||[]).map((s, idx) => ({
+      character_id: s.character_id,
+      ruhm: s.ruhm,
+      rank: calcArenaRank(idx, total),
+      name: charMap[s.character_id]?.name || '???',
+      level: charMap[s.character_id]?.level || 1,
+      class: charMap[s.character_id]?.class || 'warrior',
+    }));
+
+    // 4. Gegner auswählen (1 niedriger, 1 gleich, 1 höher)
+    selectArenaOpponents();
+
+  } catch(e) {
+    console.error('Arena laden fehlgeschlagen:', e);
+  }
+}
+
+function selectArenaOpponents() {
+  if (!_arenaRanking.length || !character) return;
+  const myEntry = _arenaRanking.find(r => r.character_id === character.id);
+  if (!myEntry) return;
+
+  const order = ['S','A','B','C','D','E'];
+  const myRankIdx = order.indexOf(myEntry.rank);
+  const others = _arenaRanking.filter(r => r.character_id !== character.id);
+
+  const lower  = others.filter(r => order.indexOf(r.rank) > myRankIdx);
+  const equal  = others.filter(r => r.rank === myEntry.rank);
+  const higher = others.filter(r => order.indexOf(r.rank) < myRankIdx);
+
+  const pick = arr => arr[Math.floor(Math.random() * arr.length)] || null;
+  _arenaOpponents = [
+    lower.length  ? pick(lower)  : pick(others),
+    equal.length  ? pick(equal)  : pick(others),
+    higher.length ? pick(higher) : pick(others),
+  ].filter(Boolean);
+
+  // Duplikate entfernen
+  const seen = new Set();
+  _arenaOpponents = _arenaOpponents.filter(o => {
+    if (seen.has(o.character_id)) return false;
+    seen.add(o.character_id); return true;
+  });
+}
+
+// ── Arena rendern ─────────────────────────────────────────────
+function renderArena() {
+  const myEntry = _arenaRanking.find(r => r.character_id === character?.id);
+  const myRank  = myEntry?.rank || 'E';
+  const myRuhm  = myEntry?.ruhm || 0;
+  const myPos   = myEntry ? _arenaRanking.indexOf(myEntry) + 1 : '–';
+  const fightsLeft = getArenaFightsLeft();
+  const rankInfo = ARENA_RANKS.find(r => r.id === myRank);
+
+  document.getElementById('arenaContent').innerHTML = `
+    <!-- Eigener Rang -->
+    <div style="background:rgba(201,168,76,.06);border:1px solid var(--border);
+      border-radius:4px;padding:14px 16px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-family:Cinzel,serif;font-size:.75rem;letter-spacing:.1em;
+          text-transform:uppercase;color:var(--dim)">Dein Rang</div>
+        <div style="font-size:.7rem;color:var(--dim)">Platz ${myPos} / ${_arenaRanking.length}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px">
+        <div style="font-size:2.2rem;filter:drop-shadow(0 0 8px ${rankInfo?.color||'#fff'})">
+          ${rankInfo?.icon||'🛡️'}
+        </div>
+        <div>
+          <div style="font-family:Cinzel,serif;font-size:1.4rem;font-weight:700;
+            color:${rankInfo?.color||'var(--gold)'};letter-spacing:.12em">${myRank}-Rang</div>
+          <div style="font-size:.8rem;color:var(--dim)">⭐ ${myRuhm.toLocaleString()} Ruhm</div>
+        </div>
+        <div style="margin-left:auto;text-align:right">
+          <div style="font-size:.7rem;color:var(--dim)">Kämpfe heute</div>
+          <div style="font-family:Cinzel,serif;font-size:1rem;color:${fightsLeft>0?'var(--gold-l)':'var(--dim)'}">
+            ${fightsLeft} / ${ARENA_MAX_FIGHTS}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gegner für heute -->
+    <div style="font-family:Cinzel,serif;font-size:.6rem;letter-spacing:.12em;
+      text-transform:uppercase;color:var(--dim);margin-bottom:8px">⚔️ Heutige Gegner</div>
+    ${fightsLeft <= 0
+      ? `<div style="text-align:center;padding:16px;background:rgba(255,255,255,.04);
+          border:1px solid var(--border);border-radius:3px;font-size:.82rem;color:var(--dim)">
+          ⏳ Du hast heute keine Kämpfe mehr übrig. Komm morgen wieder!
+        </div>`
+      : _arenaOpponents.length === 0
+        ? `<div style="text-align:center;padding:16px;color:var(--dim);font-size:.82rem">
+            Keine Gegner verfügbar – du bist der einzige Spieler!
+          </div>`
+        : _arenaOpponents.map(opp => {
+            const oppRankInfo = ARENA_RANKS.find(r => r.id === opp.rank);
+            const order = ['S','A','B','C','D','E'];
+            const rel = order.indexOf(opp.rank) < order.indexOf(myRank) ? 'higher'
+                      : order.indexOf(opp.rank) > order.indexOf(myRank) ? 'lower' : 'equal';
+            const ruhmGain = rel==='higher' ? ARENA_RUHM_WIN_HIGHER
+                           : rel==='lower'  ? ARENA_RUHM_WIN_LOWER
+                           : ARENA_RUHM_WIN_EQUAL;
+            const relLabel = rel==='higher' ? '↑ Stärker' : rel==='lower' ? '↓ Schwächer' : '= Gleich';
+            const relColor = rel==='higher' ? '#e07070' : rel==='lower' ? '#70a0e0' : 'var(--gold-l)';
+            return `
+          <div class="mission-card" style="margin-bottom:8px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <div>
+                <span style="font-family:Cinzel,serif;font-size:.8rem;color:var(--text)">${opp.name}</span>
+                <span style="font-size:.7rem;color:var(--dim);margin-left:6px">Lvl ${opp.level}</span>
+              </div>
+              <span style="font-size:.65rem;color:${relColor};font-family:Cinzel,serif">${relLabel}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div style="display:flex;align-items:center;gap:6px">
+                <span style="font-size:1.1rem;filter:drop-shadow(0 0 4px ${oppRankInfo?.color})">${oppRankInfo?.icon}</span>
+                <span style="font-family:Cinzel,serif;font-size:.85rem;color:${oppRankInfo?.color}">${opp.rank}-Rang</span>
+                <span style="font-size:.7rem;color:var(--dim)">⭐ ${opp.ruhm.toLocaleString()}</span>
+              </div>
+              <button onclick="startArenaBattle('${opp.character_id}')"
+                style="padding:6px 14px;background:linear-gradient(135deg,var(--gold-d),var(--gold));
+                border:none;border-radius:2px;color:#1a1200;font-family:Cinzel,serif;
+                font-size:.6rem;letter-spacing:.08em;cursor:pointer">
+                ⚔️ Kämpfen (+${ruhmGain} ⭐)
+              </button>
+            </div>
+          </div>`;
+          }).join('')
+    }
+
+    <!-- Rangliste -->
+    <div style="font-family:Cinzel,serif;font-size:.6rem;letter-spacing:.12em;
+      text-transform:uppercase;color:var(--dim);margin:14px 0 8px">🏆 Rangliste</div>
+    <div style="max-height:35vh;overflow-y:auto">
+      ${_arenaRanking.slice(0,100).map((p, idx) => {
+        const ri = ARENA_RANKS.find(r => r.id === p.rank);
+        const isMe = p.character_id === character?.id;
+        return `
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;
+          background:${isMe?'rgba(201,168,76,.12)':'rgba(255,255,255,.03)'};
+          border:1px solid ${isMe?'var(--gold-d)':'var(--border)'};
+          border-radius:3px;margin-bottom:4px">
+          <span style="font-family:Cinzel,serif;font-size:.7rem;color:var(--dim);
+            min-width:24px;text-align:right">${idx+1}.</span>
+          <span style="font-size:1rem">${ri?.icon}</span>
+          <span style="font-family:Cinzel,serif;font-size:.75rem;
+            color:${isMe?'var(--gold-l)':'var(--text)'};flex:1">${p.name}</span>
+          <span style="font-size:.7rem;color:var(--dim)">Lvl ${p.level}</span>
+          <span style="font-family:Cinzel,serif;font-size:.7rem;color:${ri?.color}">
+            ${p.rank}
+          </span>
+          <span style="font-size:.7rem;color:var(--dim)">⭐ ${p.ruhm.toLocaleString()}</span>
+        </div>`;
+      }).join('')}
+      ${_arenaRanking.length > 100 ? `<div style="text-align:center;padding:8px;
+        font-size:.7rem;color:var(--dim)">... und ${_arenaRanking.length-100} weitere Spieler</div>` : ''}
+    </div>
+
+    <!-- Season-Belohnung -->
+    ${_arenaStats && !_arenaStats.season_reward_claimed ? `
+    <div style="margin-top:12px;padding:12px;background:rgba(201,168,76,.06);
+      border:1px solid var(--border);border-radius:3px;text-align:center">
+      <div style="font-family:Cinzel,serif;font-size:.65rem;letter-spacing:.1em;
+        text-transform:uppercase;color:var(--gold-l);margin-bottom:6px">🎁 Season-Belohnung</div>
+      <div style="font-size:.78rem;color:var(--dim);margin-bottom:10px">
+        Season ${ARENA_SEASON_ID} ist aktiv. Hole deine Belohnung nach Saisonende ab.
+      </div>
+      <button onclick="claimSeasonReward()"
+        style="padding:8px 18px;background:linear-gradient(135deg,var(--gold-d),var(--gold));
+        border:none;border-radius:3px;color:#1a1200;font-family:Cinzel,serif;
+        font-size:.65rem;letter-spacing:.1em;cursor:pointer">
+        🏆 Belohnung abholen (${myRank}-Rang)
+      </button>
+    </div>` : ''}`;
+}
+
+// ── Arena-Kampf ───────────────────────────────────────────────
+async function startArenaBattle(defenderCharId) {
+  if (getArenaFightsLeft() <= 0) {
+    showToast('⏳', 'Keine Kämpfe mehr heute!');
+    return;
+  }
+  const defender = _arenaRanking.find(r => r.character_id === defenderCharId);
+  if (!defender) return;
+
+  const myEntry  = _arenaRanking.find(r => r.character_id === character?.id);
+  const myRank   = myEntry?.rank || 'E';
+  const playerLv = character?.level || 1;
+
+  // Kampf simulieren (Stats-basiert, kein Seitenwechsel)
+  const playerWins = simulateArenaBattle(character, defender);
+
+  const order = ['S','A','B','C','D','E'];
+  const rel = order.indexOf(defender.rank) < order.indexOf(myRank) ? 'higher'
+            : order.indexOf(defender.rank) > order.indexOf(myRank) ? 'lower' : 'equal';
+
+  let ruhmChange = 0, goldChange = 0, expChange = 0, defRuhmChange = 0;
+
+  if (playerWins) {
+    ruhmChange    = rel==='higher' ? ARENA_RUHM_WIN_HIGHER
+                  : rel==='lower'  ? ARENA_RUHM_WIN_LOWER
+                  : ARENA_RUHM_WIN_EQUAL;
+    const reward  = calcArenaFightReward(playerLv);
+    goldChange    = reward.gold;
+    expChange     = reward.exp;
+    defRuhmChange = -Math.round(ruhmChange * 0.5);
+  } else {
+    // Niederlage: EXP-Trost, Gold-Verlust
+    expChange  = Math.round(calcArenaFightReward(playerLv).exp * 0.3);
+    goldChange = -Math.max(1, Math.round((character.gold||0) * 0.001));
+    ruhmChange = ARENA_RUHM_LOSS_ATK;
+    defRuhmChange = Math.round(ARENA_RUHM_WIN_EQUAL * 0.5);
+  }
+
+  // Kämpfe-Zähler
+  const today = new Date().toISOString().split('T')[0];
+  const wasToday = _arenaStats?.last_fight_date === today;
+  const newFightsToday = wasToday ? (_arenaStats?.fights_today||0)+1 : 1;
+
+  try {
+    // Supabase: Ruhm aktualisieren via RPC-Funktion
+    await sb.rpc('update_arena_ruhm', {
+      p_attacker_id: character.id,
+      p_defender_id: defenderCharId,
+      p_attacker_ruhm_change: ruhmChange,
+      p_defender_ruhm_change: defRuhmChange,
+      p_attacker_fights_today: newFightsToday,
+      p_season_id: ARENA_SEASON_ID,
+    });
+
+    // Kampf-Eintrag speichern
+    await sb.from('arena_battles').insert([{
+      attacker_id: character.id,
+      defender_id: defenderCharId,
+      winner_id: playerWins ? character.id : defenderCharId,
+      ruhm_attacker_change: ruhmChange,
+      ruhm_defender_change: defRuhmChange,
+      gold_reward: goldChange,
+      exp_reward: expChange,
+      season_id: ARENA_SEASON_ID,
+    }]);
+
+    // Gold/EXP auf Charakter anwenden
+    const { data: chars } = await sb.from('characters')
+      .select('id, level, xp, gold').eq('user_id', (await sb.auth.getSession()).data.session.user.id)
+      .order('created_at',{ascending:false}).limit(1);
+    if (chars?.[0]) {
+      let newXP   = Math.max(0, (chars[0].xp||0) + expChange);
+      let newGold = Math.max(0, (chars[0].gold||0) + goldChange);
+      let newLv   = chars[0].level||1;
+      while(true){ const needed=expRequired(newLv+1); if(newXP>=needed&&newLv<9999){newXP-=needed;newLv++;}else break; }
+      await sb.from('characters').update({xp:newXP,gold:newGold,level:newLv}).eq('id',chars[0].id);
+      if(character){ character.gold=newGold; character.level=newLv; }
+      updateHUD();
+    }
+
+    // _arenaStats lokal aktualisieren
+    if (_arenaStats) {
+      _arenaStats.ruhm = Math.max(0, (_arenaStats.ruhm||0) + ruhmChange);
+      _arenaStats.fights_today = newFightsToday;
+      _arenaStats.last_fight_date = today;
+    }
+    await loadArenaData();
+    renderArena();
+
+    // Ergebnis-Toast
+    if (playerWins) {
+      showToast('⚔️', `Sieg gegen ${defender.name}! +${ruhmChange}⭐ +${goldChange}💰 +${expChange}EXP`);
+    } else {
+      showToast('💀', `Niederlage gegen ${defender.name}. ${Math.abs(goldChange)}💰 verloren. +${expChange}EXP`);
+    }
+
+  } catch(err) {
+    console.error('Arena-Kampf Fehler:', err);
+    showToast('⚠️', 'Fehler beim Kampf: ' + err.message);
+  }
+}
+
+// Schnell-Kampfsimulation (stat-basiert, kein Seitenwechsel)
+function simulateArenaBattle(player, opponent) {
+  // Angreifer-Stats aus gespeichertem Charakter
+  const pStats = {
+    staerke:      player.staerke||1, gewandheit: player.gewandheit||1,
+    intelligenz:  player.intelligenz||1, schnelligkeit: player.schnelligkeit||1,
+    ausdauer:     player.ausdauer||1, lebenskraft: player.lebenskraft||1,
+    level: player.level||1,
+  };
+  // Verteidiger hat nur Level + Rang – schätze Stats aus Level
+  const oLv  = opponent.level||1;
+  const oMult= 0.8 + (opponent.rank==='S'?1.2:opponent.rank==='A'?0.9:
+               opponent.rank==='B'?0.6:opponent.rank==='C'?0.3:
+               opponent.rank==='D'?0.1:0);
+  const oBase = Math.round(oLv * 0.6 * (1 + oMult));
+  const oStats = { staerke:oBase, gewandheit:oBase, intelligenz:oBase,
+                   schnelligkeit:oBase, ausdauer:oBase, lebenskraft:Math.round(oBase*0.8), level:oLv };
+
+  // Vereinfachte Schadens/LP Berechnung
+  function calcHP(s)  { return 70 + s.lebenskraft*6 + s.level*9; }
+  function calcDmgVal(s) { const main=Math.max(s.staerke,s.gewandheit,s.intelligenz);
+    return main*2.2 + s.schnelligkeit*0.5 + s.level*0.5; }
+  function calcDefVal(s) { return s.ausdauer/(s.ausdauer+15) + s.schnelligkeit/(s.schnelligkeit+45)*0.15; }
+
+  let hpP = calcHP(pStats), hpO = calcHP(oStats);
+  const dmgP = calcDmgVal(pStats), dmgO = calcDmgVal(oStats);
+  const defP = calcDefVal(pStats), defO = calcDefVal(oStats);
+
+  for (let r=0; r<100 && hpP>0 && hpO>0; r++) {
+    hpO -= Math.max(1, dmgP*(1-defO));
+    if (hpO <= 0) break;
+    hpP -= Math.max(1, dmgO*(1-defP));
+  }
+  return hpP > 0;
+}
+
+// ── Season-Belohnung abholen ──────────────────────────────────
+async function claimSeasonReward() {
+  if (!_arenaStats || _arenaStats.season_reward_claimed) return;
+  const myEntry = _arenaRanking.find(r => r.character_id === character?.id);
+  const myRank  = myEntry?.rank || 'E';
+  const reward  = calcSeasonReward(myRank, character?.level||1);
+
+  // Zufälliges Arena-Item für diesen Rang + Klasse
+  const cls   = character?.class||'warrior';
+  const slots = Object.keys(ARENA_ITEM_BASES[cls]);
+  const slot  = slots[Math.floor(Math.random()*slots.length)];
+  const item  = getArenaItem(myRank, cls, slot);
+  const level = character?.level||1;
+
+  try {
+    const { data:{ session } } = await sb.auth.getSession();
+    if (!session) return;
+
+    const { data: chars } = await sb.from('characters')
+      .select('id,level,xp,gold').eq('user_id',session.user.id)
+      .order('created_at',{ascending:false}).limit(1);
+    if (!chars?.[0]) return;
+
+    let newXP=Math.max(0,(chars[0].xp||0)+reward.exp), newGold=(chars[0].gold||0)+reward.gold, newLv=chars[0].level||1;
+    while(true){const needed=expRequired(newLv+1);if(newXP>=needed&&newLv<9999){newXP-=needed;newLv++;}else break;}
+    await sb.from('characters').update({xp:newXP,gold:newGold,level:newLv}).eq('id',chars[0].id);
+
+    // Item ins Inventar
+    if (item) {
+      const stats = Object.fromEntries(Object.entries(item.stats).map(([k,v])=>[k,itemStat(v,level)]));
+      const dmg = item.damage?.[0] ? itemDmg(item.damage[0],item.damage[1],level) : null;
+      await sb.from('inventory').insert([{
+        character_id: character.id, item_name:item.name, item_type:item.type,
+        item_icon:item.icon, item_slot:item.slot, stat_bonus:stats,
+        description: item.desc+(dmg?` Schaden: ${dmg[0]}-${dmg[1]}`:''), quantity:1
+      }]);
+    }
+
+    // Season-Belohnung als abgeholt markieren
+    await sb.from('arena_stats').update({season_reward_claimed:true}).eq('character_id',character.id);
+    if(_arenaStats) _arenaStats.season_reward_claimed = true;
+    if(character){character.gold=newGold;character.level=newLv;}
+    updateHUD();
+    renderArena();
+    showToast('🏆',`Season-Belohnung erhalten! +${reward.gold}💰 +${reward.exp}EXP${item?' + '+item.name:''}`);
+  } catch(err) {
+    console.error('Season-Belohnung Fehler:', err);
+    showToast('⚠️','Fehler: '+err.message);
+  }
 }
 
 
