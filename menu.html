@@ -2446,6 +2446,9 @@ function renderWorkoutSection(){
     <div class="mission-card ${q.done?'':'exp-focus'}" style="${q.done?'opacity:.5':''}">
       <div class="mc-title">${q.icon} ${q.title} ${q.done?'✅':''}</div>
       <div class="mc-desc">Trainiere heute und erhalte Statpunkte für deinen Charakter.</div>
+      <div style="font-size:.72rem;color:var(--dim);margin:4px 0 6px">
+        ⚠️ Nur einmal täglich einlösbar – stelle sicher, dass dein Training für heute abgeschlossen ist!
+      </div>
       <div style="font-size:.8rem;color:var(--gold-l);margin:6px 0">${statusTxt}</div>
       <div style="font-size:.72rem;color:var(--dim);margin-bottom:8px">
         🕐 10-29 Min → 1 Pkt &nbsp;|&nbsp; 30-59 Min → 3 Pkt &nbsp;|&nbsp; 60+ Min → 5 Pkt
@@ -2469,8 +2472,36 @@ function renderWorkoutSection(){
 function openWorkoutManualDialog() {
   const q = WORKOUT_QUEST;
   if (!q || q.done) return;
+  // Sicherheitsabfrage: Training wirklich abgeschlossen?
   document.getElementById('workoutOverlay').classList.add('active');
-  showWorkoutStep1();
+  document.getElementById('workoutDialogContent').innerHTML = `
+    <div style="font-family:Cinzel,serif;font-size:.75rem;letter-spacing:.1em;
+      color:var(--gold-l);text-transform:uppercase;margin-bottom:16px">
+      ⚠️ Hinweis
+    </div>
+    <div style="font-size:.9rem;color:var(--text);margin-bottom:10px;line-height:1.6">
+      Die Workout-Belohnung kann nur <strong>einmal täglich</strong> eingelöst werden.
+    </div>
+    <div style="font-size:.82rem;color:var(--dim);margin-bottom:20px;line-height:1.6">
+      Bitte stelle sicher, dass du dein Training für heute
+      <strong style="color:var(--text)">vollständig abgeschlossen</strong> hast –
+      du kannst die Belohnung nicht ein zweites Mal einlösen,
+      auch wenn du später noch trainierst.
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button onclick="showWorkoutStep1()"
+        style="padding:12px;background:linear-gradient(135deg,var(--gold-d),var(--gold));
+        border:none;border-radius:3px;color:#1a1200;font-family:Cinzel,serif;
+        font-size:.7rem;font-weight:600;letter-spacing:.1em;cursor:pointer">
+        ✅ Ja, mein Training ist abgeschlossen
+      </button>
+      <button onclick="closeOverlay('workoutOverlay')"
+        style="padding:12px;background:transparent;border:1px solid var(--border);
+        border-radius:3px;color:var(--dim);font-family:Cinzel,serif;
+        font-size:.65rem;letter-spacing:.08em;cursor:pointer">
+        ← Zurück, ich trainiere noch
+      </button>
+    </div>`;
 }
 
 function showWorkoutStep1() {
