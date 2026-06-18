@@ -359,14 +359,14 @@ body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text)}
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
-  padding: 6px 2px;
+  gap: 2px;
+  padding: 4px 1px;
   background: transparent;
   border: none;
   border-radius: 6px;
   cursor: pointer;
   transition: background .15s, transform .1s;
-  min-height: 52px; /* Touch-Target */
+  min-height: 52px;
   -webkit-tap-highlight-color: transparent;
 }
 .pnav-btn:active {
@@ -374,7 +374,7 @@ body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text)}
   transform: scale(.93);
 }
 
-/* Mittlerer Button (Missionen) hervorgehoben */
+/* Mittlerer Button hervorgehoben */
 .pnav-center {
   background: rgba(201,168,76,.08);
   border: 1px solid rgba(201,168,76,.2);
@@ -391,14 +391,14 @@ body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text)}
 }
 
 .pnav-icon {
-  font-size: 1.4rem;
+  font-size: 1.15rem;
   line-height: 1;
   filter: drop-shadow(0 0 4px rgba(201,168,76,.3));
 }
 .pnav-label {
   font-family: 'Cinzel', serif;
-  font-size: .48rem;
-  letter-spacing: .1em;
+  font-size: .42rem;
+  letter-spacing: .06em;
   text-transform: uppercase;
   color: var(--dim);
   white-space: nowrap;
@@ -729,9 +729,13 @@ body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text)}
       <span class="pnav-icon">⚔️</span>
       <span class="pnav-label">Waffen</span>
     </button>
-    <button class="pnav-btn" onclick="openKnight()">
-      <span class="pnav-icon">🪖</span>
-      <span class="pnav-label">Aufgaben</span>
+    <button class="pnav-btn" onclick="openShop('potions')">
+      <span class="pnav-icon">🧪</span>
+      <span class="pnav-label">Tränke</span>
+    </button>
+    <button class="pnav-btn" onclick="openDungeons()">
+      <span class="pnav-icon">🌀</span>
+      <span class="pnav-label">Dungeon</span>
     </button>
     <button class="pnav-btn pnav-center" onclick="openArena()">
       <span class="pnav-icon">🏟️</span>
@@ -740,6 +744,10 @@ body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text)}
     <button class="pnav-btn" onclick="openMissions()">
       <span class="pnav-icon">📜</span>
       <span class="pnav-label">Missionen</span>
+    </button>
+    <button class="pnav-btn" onclick="openKnight()">
+      <span class="pnav-icon">🪖</span>
+      <span class="pnav-label">Aufgaben</span>
     </button>
     <button class="pnav-btn" onclick="openHero()">
       <span class="pnav-icon">🦸</span>
@@ -1721,36 +1729,78 @@ async function openHero(){
   document.getElementById('heroMetaClass').textContent= `${clsNames[character.class]||'Held'} • Level ${lvl}`;
   document.getElementById('heroPanelTitle').textContent = character.pronoun==='heldin'?'👑 Heldinnenmenü':'⚔️ Heldenmenü';
 
-  // Stats
-  const statLabels={lp:'Lebenskraft',staerke:'Stärke',gewandheit:'Gewandheit',
-    intelligenz:'Intelligenz',schnelligkeit:'Schnelligkeit',ausdauer:'Ausdauer',
-    krit_chance:'Krit-Chance',krit_schaden:'Krit-Schaden'};
-  const statIcons={lp:'❤️',staerke:'⚔️',gewandheit:'🌿',intelligenz:'🔮',schnelligkeit:'⚡',ausdauer:'🛡️',
-    krit_chance:'🎯',krit_schaden:'💥'};
-  // Krit-Formeln für Anzeige
-  function critChanceDisplay(stat){ return Math.round((1 - 1/(1+stat*0.01125))*100); }
-  function critDmgDisplay(stat)   { return (1 + 1*(1 - 1/(1+stat*0.05))).toFixed(2); }
-
-  document.getElementById('heroStatsGrid').innerHTML =
-    Object.entries(statLabels).map(([k,l])=>{
-      let val = character[k]||0;
-      let extra = '';
-      if(k==='krit_chance')  extra = `<div style="font-size:.6rem;color:var(--gold);margin-top:1px">${critChanceDisplay(val)}% Chance</div>`;
-      if(k==='krit_schaden') extra = `<div style="font-size:.6rem;color:var(--gold);margin-top:1px">${critDmgDisplay(val)}× Schaden</div>`;
-      return `<div class="stat-item">
-        <div class="stat-item-name">${statIcons[k]} ${l}</div>
-        <div class="stat-item-val">${val}</div>
-        ${extra}
-      </div>`;
-    }).join('');
-
-  // Inventar laden
+  // Inventar zuerst laden (wird für Item-Boni in der Stat-Anzeige benötigt)
   _invItems = [];
   try {
     const {data:inv} = await sb.from('inventory').select('*')
       .eq('character_id',character.id).order('created_at',{ascending:false});
     if(inv) _invItems = inv;
   } catch(e){ console.log('Inventar Fehler:',e); }
+
+  // Stats (mit Item-Boni der ausgerüsteten Items)
+  const statLabels={lp:'Lebenskraft',staerke:'Stärke',gewandheit:'Gewandheit',
+    intelligenz:'Intelligenz',schnelligkeit:'Schnelligkeit',ausdauer:'Ausdauer',
+    krit_chance:'Krit-Chance',krit_schaden:'Krit-Schaden'};
+  const statIcons={lp:'❤️',staerke:'⚔️',gewandheit:'🌿',intelligenz:'🔮',schnelligkeit:'⚡',ausdauer:'🛡️',
+    krit_chance:'🎯',krit_schaden:'💥'};
+
+  // Item-Boni der ausgerüsteten Items summieren
+  const itemBoni = {};
+  _invItems.filter(i => i.equipped_slot).forEach(i => {
+    const bonus = i.stat_bonus || {};
+    Object.entries(bonus).forEach(([k,v]) => {
+      itemBoni[k] = (itemBoni[k]||0) + (Number(v)||0);
+    });
+  });
+
+  function critChanceDisplay(stat){ return Math.round((1 - 1/(1+stat*0.01125))*100); }
+  function critDmgDisplay(stat)   { return (1 + 1*(1 - 1/(1+stat*0.05))).toFixed(2); }
+
+  document.getElementById('heroStatsGrid').innerHTML = `
+    <!-- Abschnitts-Header: Charakter-Stats -->
+    <div style="grid-column:1/-1;font-family:Cinzel,serif;font-size:.6rem;letter-spacing:.12em;
+      text-transform:uppercase;color:var(--dim);padding:4px 0 2px;
+      border-bottom:1px solid var(--border);margin-bottom:4px">
+      👤 Charakter-Stats
+    </div>
+    ${Object.entries(statLabels).map(([k,l]) => {
+      const base = character[k]||0;
+      const bonus = itemBoni[k]||0;
+      const total = base + bonus;
+      let extra = '';
+      if(k==='krit_chance')  extra = `<div style="font-size:.58rem;color:var(--gold);margin-top:1px">${critChanceDisplay(total)}% Chance</div>`;
+      if(k==='krit_schaden') extra = `<div style="font-size:.58rem;color:var(--gold);margin-top:1px">${critDmgDisplay(total)}× Schaden</div>`;
+      return `<div class="stat-item">
+        <div class="stat-item-name">${statIcons[k]} ${l}</div>
+        <div style="text-align:right">
+          <div class="stat-item-val" style="color:${bonus>0?'var(--gold-l)':'var(--text)'}">
+            ${total}
+          </div>
+          ${bonus > 0 ? `<div style="font-size:.6rem;color:var(--dim);margin-top:1px">
+            ${base} <span style="color:#70c070">+${bonus}</span>
+          </div>` : ''}
+          ${extra}
+        </div>
+      </div>`;
+    }).join('')}
+
+    <!-- Abschnitts-Header: Item-Boni -->
+    <div style="grid-column:1/-1;font-family:Cinzel,serif;font-size:.6rem;letter-spacing:.12em;
+      text-transform:uppercase;color:var(--dim);padding:8px 0 2px;
+      border-bottom:1px solid var(--border);margin-bottom:4px">
+      🎒 Item-Boni (ausgerüstet)
+    </div>
+    ${Object.keys(itemBoni).length === 0
+      ? `<div style="grid-column:1/-1;font-size:.75rem;color:var(--dim);
+          text-align:center;padding:8px">Keine Items ausgerüstet</div>`
+      : Object.entries(statLabels)
+          .filter(([k]) => (itemBoni[k]||0) > 0)
+          .map(([k,l]) => `
+        <div class="stat-item">
+          <div class="stat-item-name">${statIcons[k]} ${l}</div>
+          <div class="stat-item-val" style="color:#70c070">+${itemBoni[k]}</div>
+        </div>`).join('')
+    }`;
 
   renderEquipSlots();
   renderBag();
