@@ -1379,6 +1379,8 @@ function startDungeon(num){
   };
 
   sessionStorage.setItem('dungeonSession', JSON.stringify(session));
+  // Echte Stats in sessionStorage speichern
+  sessionStorage.setItem('playerCombatStats', JSON.stringify(getPlayerCombatStats()));
   // Versuch sofort verbrauchen (auch bei Niederlage gezählt)
   useDungeonAttempt();
   window.location.href = `kampf.html?mode=dungeon`;
@@ -1782,25 +1784,7 @@ async function openHero(){
           ${extra}
         </div>
       </div>`;
-    }).join('')}
-
-    <!-- Abschnitts-Header: Item-Boni -->
-    <div style="grid-column:1/-1;font-family:Cinzel,serif;font-size:.6rem;letter-spacing:.12em;
-      text-transform:uppercase;color:var(--dim);padding:8px 0 2px;
-      border-bottom:1px solid var(--border);margin-bottom:4px">
-      🎒 Item-Boni (ausgerüstet)
-    </div>
-    ${Object.keys(itemBoni).length === 0
-      ? `<div style="grid-column:1/-1;font-size:.75rem;color:var(--dim);
-          text-align:center;padding:8px">Keine Items ausgerüstet</div>`
-      : Object.entries(statLabels)
-          .filter(([k]) => (itemBoni[k]||0) > 0)
-          .map(([k,l]) => `
-        <div class="stat-item">
-          <div class="stat-item-name">${statIcons[k]} ${l}</div>
-          <div class="stat-item-val" style="color:#70c070">+${itemBoni[k]}</div>
-        </div>`).join('')
-    }`;
+    }).join('')}`;
 
   renderEquipSlots();
   renderBag();
@@ -2330,6 +2314,30 @@ async function buyItem(itemName, price, icon, desc) {
   alert('Bitte nutze den Shop-Button.');
 }
 
+// ── Spieler-Kampfstats berechnen (Charakter + Item-Boni) ─────
+// Wird vor jedem Kampf aufgerufen und in sessionStorage gespeichert,
+// damit kampf.html die echten Stats nutzen kann.
+function getPlayerCombatStats() {
+  if (!character) return null;
+  const stats = {
+    staerke:      character.staerke      || 0,
+    gewandheit:   character.gewandheit   || 0,
+    intelligenz:  character.intelligenz  || 0,
+    schnelligkeit:character.schnelligkeit|| 0,
+    ausdauer:     character.ausdauer     || 0,
+    lebenskraft:  character.lebenskraft  || 0,
+    krit_chance:  character.krit_chance  || 0,
+    krit_schaden: character.krit_schaden || 0,
+  };
+  // Item-Boni der ausgerüsteten Items addieren
+  _invItems.filter(i => i.equipped_slot).forEach(i => {
+    Object.entries(i.stat_bonus || {}).forEach(([k, v]) => {
+      if (k in stats) stats[k] = (stats[k] || 0) + (Number(v) || 0);
+    });
+  });
+  return stats;
+}
+
 function startMission(type){
   const BASE_MISSIONS={
     goblin:{enemy:'warrior', enemykey:'goblin',  exp:100, gold:10, item:null},
@@ -2341,6 +2349,10 @@ function startMission(type){
   const lvl  = character?.level||1;
   const rewards = getMissionRewards(base, lvl);
   const elvl = getEnemyLevel(lvl);
+
+  // Echte Stats in sessionStorage speichern
+  sessionStorage.setItem('playerCombatStats', JSON.stringify(getPlayerCombatStats()));
+
   window.location.href=`kampf.html?player=${cls}&level=${lvl}&enemy=${base.enemy}&enemykey=${base.enemykey}&elvl=${elvl}&exp=${rewards.exp}&gold=${rewards.gold}${rewards.item?'&item='+encodeURIComponent(rewards.item):''}`;
 }
 
@@ -2989,7 +3001,7 @@ const WORKOUT_FREE_STATS = [
   {id:'intelligenz',   label:'🔮 Intelligenz'},
   {id:'schnelligkeit', label:'⚡ Schnelligkeit'},
   {id:'ausdauer',      label:'🛡️ Ausdauer'},
-  {id:'lp',            label:'❤️ Lebenskraft'},
+  {id:'lebenskraft',   label:'❤️ Lebenskraft'},
 ];
 
 // Berechnet Statpunkte und feste/freie Aufteilung anhand Trainingsminuten
@@ -3433,7 +3445,8 @@ async function applyWorkoutStats() {
     }
 
     if (Object.keys(updates).length > 0) {
-      await sb.from('characters').update(updates).eq('id', char.id);
+      const { error: updateErr } = await sb.from('characters').update(updates).eq('id', char.id);
+      if (updateErr) throw updateErr;
       // Lokalen Charakter aktualisieren
       for (const [stat, val] of Object.entries(updates)) {
         if (character) character[stat] = val;
@@ -3443,7 +3456,7 @@ async function applyWorkoutStats() {
 
     // Übersicht der vergebenen Stats
     const statNames = {staerke:'Stärke',gewandheit:'Gewandheit',intelligenz:'Intelligenz',
-      schnelligkeit:'Schnelligkeit',ausdauer:'Ausdauer',lp:'Lebenskraft'};
+      schnelligkeit:'Schnelligkeit',ausdauer:'Ausdauer',lebenskraft:'Lebenskraft'};
     const summary = Object.entries(statsChosen)
       .filter(([,v])=>v>0)
       .map(([k,v])=>`+${v} ${statNames[k]||k}`)

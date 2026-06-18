@@ -455,6 +455,19 @@ if (MODE === 'dungeon') {
 // clsA/lvA: Spieler. clsB/lvB/sB: aktueller Gegner (wird bei Dungeons pro Kampf neu gesetzt)
 let clsA, lvA, clsB, lvB, enemyKey, sA, sB;
 
+// Lädt echte Spieler-Stats (Charakter + Items) aus sessionStorage,
+// fällt auf CLASSES-Startwerte zurück wenn nicht vorhanden
+function loadPlayerStats(cls) {
+  try {
+    const stored = JSON.parse(sessionStorage.getItem('playerCombatStats') || 'null');
+    if (stored) {
+      // Klassen-Metadaten (Name, Icon, Farbe) aus CLASSES, Stats vom Spieler
+      return { ...CLASSES[cls], ...stored };
+    }
+  } catch(e) {}
+  return CLASSES[cls];
+}
+
 function setupFighters(){
   if (MODE === 'dungeon') {
     clsA = dungeonSession.player;
@@ -466,12 +479,13 @@ function setupFighters(){
   } else {
     clsA = params.get('player') || 'warrior';
     clsB = params.get('enemy')  || 'archer';
-    enemyKey = params.get('enemykey') || null; // z.B. 'goblin', 'bandit', 'wichtel'
+    enemyKey = params.get('enemykey') || null;
     lvA = parseInt(params.get('level')||'1');
     lvB = parseInt(params.get('elvl') || String(getEnemyLevel(lvA)));
   }
-  sA = CLASSES[clsA];
-  // Wenn ein spezieller Gegner definiert ist, nutze dessen Stats
+  // Spieler: echte Stats aus sessionStorage (inkl. Training + Items)
+  sA = loadPlayerStats(clsA);
+  // Gegner: ENEMIES für benannte Gegner, sonst CLASSES (Gegner haben keine Item-Stats)
   sB = enemyKey && ENEMIES[enemyKey] ? ENEMIES[enemyKey] : CLASSES[clsB];
 }
 setupFighters();
