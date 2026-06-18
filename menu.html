@@ -1746,16 +1746,8 @@ async function openHero(){
   const statIcons={lp:'❤️',staerke:'⚔️',gewandheit:'🌿',intelligenz:'🔮',schnelligkeit:'⚡',ausdauer:'🛡️',
     krit_chance:'🎯',krit_schaden:'💥'};
 
-  // Item-Boni der ausgerüsteten Items summieren
-  // Items speichern Lebenskraft als 'lp', characters-Tabelle als 'lebenskraft'
-  const itemBoni = {};
-  _invItems.filter(i => i.equipped_slot).forEach(i => {
-    const bonus = i.stat_bonus || {};
-    Object.entries(bonus).forEach(([k,v]) => {
-      const key = k === 'lp' ? 'lebenskraft' : k;
-      itemBoni[key] = (itemBoni[key]||0) + (Number(v)||0);
-    });
-  });
+  // Item-Boni der ausgerüsteten Items summieren (lp → lebenskraft normalisiert)
+  const itemBoni = getEquippedItemBoni();
 
   function critChanceDisplay(stat){ return Math.round((1 - 1/(1+stat*0.01125))*100); }
   function critDmgDisplay(stat)   { return (1 + 1*(1 - 1/(1+stat*0.05))).toFixed(2); }
@@ -2316,7 +2308,22 @@ async function buyItem(itemName, price, icon, desc) {
   alert('Bitte nutze den Shop-Button.');
 }
 
-// ── Spieler-Kampfstats berechnen (Charakter + Item-Boni) ─────
+// ── Stat-Key Normalisierung ───────────────────────────────────
+// 'lp' ist ein Alias für 'lebenskraft' (Items speichern 'lp',
+// characters-Tabelle hat 'lebenskraft'). Immer normalizeStat nutzen.
+function normalizeStat(k) { return k === 'lp' ? 'lebenskraft' : k; }
+
+// Summiert Item-Boni aller ausgerüsteten Items, normalisiert lp→lebenskraft
+function getEquippedItemBoni() {
+  const boni = {};
+  _invItems.filter(i => i.equipped_slot).forEach(i => {
+    Object.entries(i.stat_bonus || {}).forEach(([k, v]) => {
+      const key = normalizeStat(k);
+      boni[key] = (boni[key] || 0) + (Number(v) || 0);
+    });
+  });
+  return boni;
+}
 // Wird vor jedem Kampf aufgerufen und in sessionStorage gespeichert,
 // damit kampf.html die echten Stats nutzen kann.
 function getPlayerCombatStats() {
@@ -2331,13 +2338,9 @@ function getPlayerCombatStats() {
     krit_chance:  character.krit_chance  || 0,
     krit_schaden: character.krit_schaden || 0,
   };
-  // Item-Boni der ausgerüsteten Items addieren
-  // Items speichern Lebenskraft als 'lp', characters-Tabelle als 'lebenskraft'
-  _invItems.filter(i => i.equipped_slot).forEach(i => {
-    Object.entries(i.stat_bonus || {}).forEach(([k, v]) => {
-      const key = k === 'lp' ? 'lebenskraft' : k; // lp → lebenskraft normalisieren
-      if (key in stats) stats[key] = (stats[key] || 0) + (Number(v) || 0);
-    });
+  const boni = getEquippedItemBoni();
+  Object.entries(boni).forEach(([k, v]) => {
+    if (k in stats) stats[k] = (stats[k] || 0) + v;
   });
   return stats;
 }
@@ -3423,25 +3426,24 @@ async function applyWorkoutStats() {
   const q = WORKOUT_QUEST;
   if (!q || q.done) return;
 
-  const { statsChosen, points } = _workoutState;
+  const { statsChosen } = _workoutState;
   const totalPoints = Object.values(statsChosen).reduce((a,b)=>a+b, 0);
-  q.done = true;
-  q.statPoints = totalPoints;
+  // q.done erst NACH erfolgreichem Speichern setzen
   _workoutState = null;
-  renderDailyQuests();
 
   try {
     const { data:{session} } = await sb.auth.getSession();
-    if (!session) return;
+    if (!session) { closeOverlay('workoutOverlay'); return; }
 
-    const { data: chars } = await sb
+    const { data: chars, error: loadErr } = await sb
       .from('characters')
       .select('id, staerke, gewandheit, intelligenz, schnelligkeit, ausdauer, lebenskraft, krit_chance, krit_schaden')
       .eq('user_id', session.user.id)
       .order('created_at', {ascending:false})
       .limit(1);
 
-    if (!chars || !chars.length) return;
+    if (loadErr) throw new Error('Laden fehlgeschlagen: ' + loadErr.message);
+    if (!chars || !chars.length) throw new Error('Kein Charakter gefunden');
     const char = chars[0];
 
     // Stats addieren
@@ -3452,13 +3454,19 @@ async function applyWorkoutStats() {
 
     if (Object.keys(updates).length > 0) {
       const { error: updateErr } = await sb.from('characters').update(updates).eq('id', char.id);
-      if (updateErr) throw updateErr;
+      if (updateErr) throw new Error('Speichern fehlgeschlagen: ' + updateErr.message);
+
       // Lokalen Charakter aktualisieren
       for (const [stat, val] of Object.entries(updates)) {
         if (character) character[stat] = val;
       }
       updateHUD();
     }
+
+    // Erst nach erfolgreichem Speichern als erledigt markieren
+    q.done = true;
+    q.statPoints = totalPoints;
+    renderDailyQuests();
 
     // Übersicht der vergebenen Stats
     const statNames = {staerke:'Stärke',gewandheit:'Gewandheit',intelligenz:'Intelligenz',
@@ -3472,7 +3480,8 @@ async function applyWorkoutStats() {
 
   } catch(err) {
     console.error('Workout-Quest Fehler:', err);
-    q.done = false;
+    showToast('⚠️', 'Fehler beim Speichern: ' + err.message);
+    // Quest bleibt offen damit der Spieler es nochmal versuchen kann
     renderDailyQuests();
   }
 }
