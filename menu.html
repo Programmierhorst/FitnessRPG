@@ -1747,11 +1747,13 @@ async function openHero(){
     krit_chance:'🎯',krit_schaden:'💥'};
 
   // Item-Boni der ausgerüsteten Items summieren
+  // Items speichern Lebenskraft als 'lp', characters-Tabelle als 'lebenskraft'
   const itemBoni = {};
   _invItems.filter(i => i.equipped_slot).forEach(i => {
     const bonus = i.stat_bonus || {};
     Object.entries(bonus).forEach(([k,v]) => {
-      itemBoni[k] = (itemBoni[k]||0) + (Number(v)||0);
+      const key = k === 'lp' ? 'lebenskraft' : k;
+      itemBoni[key] = (itemBoni[key]||0) + (Number(v)||0);
     });
   });
 
@@ -2330,9 +2332,11 @@ function getPlayerCombatStats() {
     krit_schaden: character.krit_schaden || 0,
   };
   // Item-Boni der ausgerüsteten Items addieren
+  // Items speichern Lebenskraft als 'lp', characters-Tabelle als 'lebenskraft'
   _invItems.filter(i => i.equipped_slot).forEach(i => {
     Object.entries(i.stat_bonus || {}).forEach(([k, v]) => {
-      if (k in stats) stats[k] = (stats[k] || 0) + (Number(v) || 0);
+      const key = k === 'lp' ? 'lebenskraft' : k; // lp → lebenskraft normalisieren
+      if (key in stats) stats[key] = (stats[key] || 0) + (Number(v) || 0);
     });
   });
   return stats;
@@ -3002,6 +3006,8 @@ const WORKOUT_FREE_STATS = [
   {id:'schnelligkeit', label:'⚡ Schnelligkeit'},
   {id:'ausdauer',      label:'🛡️ Ausdauer'},
   {id:'lebenskraft',   label:'❤️ Lebenskraft'},
+  {id:'krit_chance',   label:'🎯 Krit-Chance'},
+  {id:'krit_schaden',  label:'💥 Krit-Schaden'},
 ];
 
 // Berechnet Statpunkte und feste/freie Aufteilung anhand Trainingsminuten
@@ -3430,7 +3436,7 @@ async function applyWorkoutStats() {
 
     const { data: chars } = await sb
       .from('characters')
-      .select('id, staerke, gewandheit, intelligenz, schnelligkeit, ausdauer, lebenskraft')
+      .select('id, staerke, gewandheit, intelligenz, schnelligkeit, ausdauer, lebenskraft, krit_chance, krit_schaden')
       .eq('user_id', session.user.id)
       .order('created_at', {ascending:false})
       .limit(1);
@@ -3456,7 +3462,8 @@ async function applyWorkoutStats() {
 
     // Übersicht der vergebenen Stats
     const statNames = {staerke:'Stärke',gewandheit:'Gewandheit',intelligenz:'Intelligenz',
-      schnelligkeit:'Schnelligkeit',ausdauer:'Ausdauer',lebenskraft:'Lebenskraft'};
+      schnelligkeit:'Schnelligkeit',ausdauer:'Ausdauer',lebenskraft:'Lebenskraft',
+      krit_chance:'Krit-Chance',krit_schaden:'Krit-Schaden'};
     const summary = Object.entries(statsChosen)
       .filter(([,v])=>v>0)
       .map(([k,v])=>`+${v} ${statNames[k]||k}`)
