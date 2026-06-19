@@ -1128,7 +1128,7 @@ const sb = supabase.createClient(
 
 const CLASS_ICONS = {warrior:'⚔️',archer:'🏹',mage:'🔮'};
 const CLASS_NAMES = {warrior:'Krieger',archer:'Bogenschütze',mage:'Magier'};
-const STAT_ICONS  = {lp:'❤️',staerke:'⚔️',gewandheit:'🌿',intelligenz:'🔮',schnelligkeit:'⚡',ausdauer:'🛡️',lebenskraft:'💗'};
+const STAT_ICONS  = {lebenskraft:'❤️',staerke:'⚔️',gewandheit:'🌿',intelligenz:'🔮',schnelligkeit:'⚡',ausdauer:'🛡️',lebenskraft:'💗'};
 
 let character = null;
 let firstMissionOpen = true;
@@ -1424,13 +1424,13 @@ const ITEM_DATABASE = {
   'schwert_stahl':   { name:'Stahlschwert',    icon:'⚔️', type:'weapon', slot:'weapon1', classes:['warrior'], damage:[7,11],  stats:{staerke:3}, price:40,  desc:'Gut ausbalanciert und scharf.' },
   'schwert_ritter':  { name:'Ritterschwert',   icon:'⚔️', type:'weapon', slot:'weapon1', classes:['warrior'], damage:[11,16], stats:{staerke:4, ausdauer:1}, price:90, desc:'Schwert der königlichen Garde.' },
   'axt_eisen':       { name:'Eisenaxt',        icon:'🪓', type:'weapon', slot:'weapon1', classes:['warrior'], damage:[5,9],   stats:{staerke:3}, price:18,  desc:'Wuchtig aber langsam.' },
-  'keule_eisen':     { name:'Eisenkeule',      icon:'🏏', type:'weapon', slot:'weapon1', classes:['warrior'], damage:[4,8],   stats:{staerke:2, lp:1}, price:14, desc:'Bricht Rüstungen leicht.' },
+  'keule_eisen':     { name:'Eisenkeule',      icon:'🏏', type:'weapon', slot:'weapon1', classes:['warrior'], damage:[4,8],   stats:{staerke:2, lebenskraft:1}, price:14, desc:'Bricht Rüstungen leicht.' },
 
   // Krieger Slot 2: Zweitwaffe oder Schild
   'dolch_eisen':     { name:'Eisendolch',      icon:'🔪', type:'weapon', slot:'weapon2', classes:['warrior'], damage:[2,4],   stats:{schnelligkeit:1}, price:10, desc:'Schnelle Zweitwaffe.' },
-  'schild_holz':     { name:'Holzschild',      icon:'🛡️', type:'shield', slot:'weapon2', classes:['warrior'], damage:[0,0],   stats:{ausdauer:2, lp:1}, price:12, desc:'Einfacher Schutz.' },
-  'schild_eisen':    { name:'Eisenschild',     icon:'🛡️', type:'shield', slot:'weapon2', classes:['warrior'], damage:[0,0],   stats:{ausdauer:3, lp:2}, price:30, desc:'Solider Metallschild.' },
-  'schild_turm':     { name:'Turmschild',      icon:'🛡️', type:'shield', slot:'weapon2', classes:['warrior'], damage:[0,0],   stats:{ausdauer:5, lp:3}, price:70, desc:'Maximaler Schutz, schwer.' },
+  'schild_holz':     { name:'Holzschild',      icon:'🛡️', type:'shield', slot:'weapon2', classes:['warrior'], damage:[0,0],   stats:{ausdauer:2, lebenskraft:1}, price:12, desc:'Einfacher Schutz.' },
+  'schild_eisen':    { name:'Eisenschild',     icon:'🛡️', type:'shield', slot:'weapon2', classes:['warrior'], damage:[0,0],   stats:{ausdauer:3, lebenskraft:2}, price:30, desc:'Solider Metallschild.' },
+  'schild_turm':     { name:'Turmschild',      icon:'🛡️', type:'shield', slot:'weapon2', classes:['warrior'], damage:[0,0],   stats:{ausdauer:5, lebenskraft:3}, price:70, desc:'Maximaler Schutz, schwer.' },
 
   // ── BOGENSCHÜTZE WAFFEN ────────────────────────────────────────
   'bogen_holz':      { name:'Holzbogen',       icon:'🏹', type:'weapon', slot:'weapon1', classes:['archer'],  damage:[2,5],   stats:{gewandheit:1}, price:5,   desc:'Ein einfacher Jagdbogen.' },
@@ -1455,54 +1455,54 @@ const ITEM_DATABASE = {
   'rolle_wasser':    { name:'Wasserrolle',     icon:'💧', type:'scroll', slot:'weapon2', classes:['mage'],    damage:[2,6],   stats:{ausdauer:1}, price:10,    desc:'Beschwört Wasserwellen.' },
   'rolle_blitz':     { name:'Blitzrolle',      icon:'⚡', type:'scroll', slot:'weapon2', classes:['mage'],    damage:[4,8],   stats:{schnelligkeit:1}, price:18, desc:'Schleudert Blitze.' },
   'rolle_eis':       { name:'Eisrolle',        icon:'❄️', type:'scroll', slot:'weapon2', classes:['mage'],    damage:[3,6],   stats:{intelligenz:1, gewandheit:1}, price:15, desc:'Gefriert den Feind.' },
-  'rolle_erde':      { name:'Erdrolle',        icon:'🪨', type:'scroll', slot:'weapon2', classes:['mage'],    damage:[2,5],   stats:{lp:1}, price:12, desc:'Erschüttert den Boden.' },
+  'rolle_erde':      { name:'Erdrolle',        icon:'🪨', type:'scroll', slot:'weapon2', classes:['mage'],    damage:[2,5],   stats:{lebenskraft:1}, price:12, desc:'Erschüttert den Boden.' },
 
   // ── HELME (alle Klassen, aber verschiedene Stile) ──────────────
-  'helm_leder':      { name:'Lederkappe',      icon:'🪖', type:'helmet', slot:'helmet', classes:['warrior','archer','mage'], stats:{lp:1}, price:8,   desc:'Leichter Kopfschutz.' },
-  'helm_kette':      { name:'Kettenhaube',     icon:'🪖', type:'helmet', slot:'helmet', classes:['warrior','archer'],       stats:{lp:2, ausdauer:1}, price:20, desc:'Guter Schutz, mittelschwer.' },
-  'helm_eisen':      { name:'Eisenhelm',       icon:'🪖', type:'helmet', slot:'helmet', classes:['warrior'],                stats:{lp:3, ausdauer:2}, price:40, desc:'Schwerer Stahlhelm.' },
-  'kapuze_magier':   { name:'Magierkapuze',    icon:'🎩', type:'helmet', slot:'helmet', classes:['mage'],                   stats:{intelligenz:2, lp:1}, price:25, desc:'Mit Runen bestickt.' },
+  'helm_leder':      { name:'Lederkappe',      icon:'🪖', type:'helmet', slot:'helmet', classes:['warrior','archer','mage'], stats:{lebenskraft:1}, price:8,   desc:'Leichter Kopfschutz.' },
+  'helm_kette':      { name:'Kettenhaube',     icon:'🪖', type:'helmet', slot:'helmet', classes:['warrior','archer'],       stats:{lebenskraft:2, ausdauer:1}, price:20, desc:'Guter Schutz, mittelschwer.' },
+  'helm_eisen':      { name:'Eisenhelm',       icon:'🪖', type:'helmet', slot:'helmet', classes:['warrior'],                stats:{lebenskraft:3, ausdauer:2}, price:40, desc:'Schwerer Stahlhelm.' },
+  'kapuze_magier':   { name:'Magierkapuze',    icon:'🎩', type:'helmet', slot:'helmet', classes:['mage'],                   stats:{intelligenz:2, lebenskraft:1}, price:25, desc:'Mit Runen bestickt.' },
   'hut_waldläufer':  { name:'Waldläuferhut',   icon:'👒', type:'helmet', slot:'helmet', classes:['archer'],                 stats:{gewandheit:2, schnelligkeit:1}, price:22, desc:'Leicht und praktisch.' },
 
   // ── BRUST ──────────────────────────────────────────────────────
-  'brust_leder':     { name:'Lederrüstung',    icon:'🥋', type:'chest', slot:'chest', classes:['warrior','archer','mage'],  stats:{lp:2}, price:10,  desc:'Einfacher Körperschutz.' },
-  'brust_kette':     { name:'Kettenhemd',      icon:'🥋', type:'chest', slot:'chest', classes:['warrior','archer'],         stats:{lp:3, ausdauer:1}, price:28, desc:'Flexibel und schützend.' },
-  'brust_platten':   { name:'Plattenrüstung',  icon:'🛡️', type:'chest', slot:'chest', classes:['warrior'],                 stats:{lp:5, ausdauer:3}, price:70, desc:'Maximaler Schutz.' },
-  'robe_magier':     { name:'Magiererrobe',    icon:'👘', type:'chest', slot:'chest', classes:['mage'],                    stats:{intelligenz:2, lp:2}, price:35, desc:'Magisch verstärkt.' },
+  'brust_leder':     { name:'Lederrüstung',    icon:'🥋', type:'chest', slot:'chest', classes:['warrior','archer','mage'],  stats:{lebenskraft:2}, price:10,  desc:'Einfacher Körperschutz.' },
+  'brust_kette':     { name:'Kettenhemd',      icon:'🥋', type:'chest', slot:'chest', classes:['warrior','archer'],         stats:{lebenskraft:3, ausdauer:1}, price:28, desc:'Flexibel und schützend.' },
+  'brust_platten':   { name:'Plattenrüstung',  icon:'🛡️', type:'chest', slot:'chest', classes:['warrior'],                 stats:{lebenskraft:5, ausdauer:3}, price:70, desc:'Maximaler Schutz.' },
+  'robe_magier':     { name:'Magiererrobe',    icon:'👘', type:'chest', slot:'chest', classes:['mage'],                    stats:{intelligenz:2, lebenskraft:2}, price:35, desc:'Magisch verstärkt.' },
   'weste_waldläufer':{ name:'Waldläuferweste', icon:'🥋', type:'chest', slot:'chest', classes:['archer'],                  stats:{gewandheit:2, schnelligkeit:1}, price:30, desc:'Leicht und beweglich.' },
 
   // ── HANDSCHUHE ─────────────────────────────────────────────────
   'handsch_leder':   { name:'Lederhandschuhe', icon:'🧤', type:'gloves', slot:'gloves', classes:['warrior','archer','mage'], stats:{staerke:1}, price:8, desc:'Einfache Lederhandschuhe.' },
-  'handsch_eisen':   { name:'Eisenhandschuhe', icon:'🧤', type:'gloves', slot:'gloves', classes:['warrior'],                 stats:{staerke:2, lp:1}, price:22, desc:'Schützende Metallhandschuhe.' },
+  'handsch_eisen':   { name:'Eisenhandschuhe', icon:'🧤', type:'gloves', slot:'gloves', classes:['warrior'],                 stats:{staerke:2, lebenskraft:1}, price:22, desc:'Schützende Metallhandschuhe.' },
   'handsch_bogner':  { name:'Bognerhandschuh', icon:'🧤', type:'gloves', slot:'gloves', classes:['archer'],                  stats:{gewandheit:2, schnelligkeit:1}, price:18, desc:'Für präzises Schießen.' },
   'handsch_magier':  { name:'Magierhandschuhe',icon:'🧤', type:'gloves', slot:'gloves', classes:['mage'],                   stats:{intelligenz:2}, price:20, desc:'Kanalisieren Magie.' },
 
   // ── HOSEN ──────────────────────────────────────────────────────
   'hose_leder':      { name:'Lederhose',       icon:'👖', type:'pants', slot:'pants', classes:['warrior','archer','mage'],   stats:{schnelligkeit:1}, price:8, desc:'Strapazierfähige Lederhose.' },
-  'hose_kette':      { name:'Kettenhose',      icon:'👖', type:'pants', slot:'pants', classes:['warrior'],                   stats:{lp:2, ausdauer:1}, price:25, desc:'Schützende Kettenhose.' },
+  'hose_kette':      { name:'Kettenhose',      icon:'👖', type:'pants', slot:'pants', classes:['warrior'],                   stats:{lebenskraft:2, ausdauer:1}, price:25, desc:'Schützende Kettenhose.' },
   'hose_waldläufer': { name:'Waldläuferhose',  icon:'👖', type:'pants', slot:'pants', classes:['archer'],                    stats:{schnelligkeit:2, gewandheit:1}, price:22, desc:'Leicht und flexibel.' },
   'hose_magier':     { name:'Magiergewand',    icon:'👘', type:'pants', slot:'pants', classes:['mage'],                      stats:{intelligenz:1, ausdauer:1}, price:20, desc:'Langes Magiergewand.' },
 
   // ── GÜRTEL ─────────────────────────────────────────────────────
-  'guertel_leder':   { name:'Ledergürtel',     icon:'📿', type:'belt', slot:'belt', classes:['warrior','archer','mage'],     stats:{lp:1}, price:6,  desc:'Einfacher Ledergürtel.' },
-  'guertel_krieger': { name:'Kriegergürtel',   icon:'📿', type:'belt', slot:'belt', classes:['warrior'],                     stats:{staerke:1, lp:1}, price:15, desc:'Breiter Kampfgürtel.' },
-  'guertel_magier':  { name:'Magiergürtel',    icon:'📿', type:'belt', slot:'belt', classes:['mage'],                        stats:{intelligenz:1, lp:1}, price:15, desc:'Mit Zaubertaschen.' },
+  'guertel_leder':   { name:'Ledergürtel',     icon:'📿', type:'belt', slot:'belt', classes:['warrior','archer','mage'],     stats:{lebenskraft:1}, price:6,  desc:'Einfacher Ledergürtel.' },
+  'guertel_krieger': { name:'Kriegergürtel',   icon:'📿', type:'belt', slot:'belt', classes:['warrior'],                     stats:{staerke:1, lebenskraft:1}, price:15, desc:'Breiter Kampfgürtel.' },
+  'guertel_magier':  { name:'Magiergürtel',    icon:'📿', type:'belt', slot:'belt', classes:['mage'],                        stats:{intelligenz:1, lebenskraft:1}, price:15, desc:'Mit Zaubertaschen.' },
 
   // ── STIEFEL ────────────────────────────────────────────────────
   'stiefel_leder':   { name:'Lederstiefel',    icon:'👢', type:'boots', slot:'boots', classes:['warrior','archer','mage'],   stats:{schnelligkeit:1}, price:8,  desc:'Bequeme Lederstiefel.' },
-  'stiefel_eisen':   { name:'Eisenstiefel',    icon:'👢', type:'boots', slot:'boots', classes:['warrior'],                   stats:{lp:1, ausdauer:1}, price:22, desc:'Schwere Stahlstiefel.' },
+  'stiefel_eisen':   { name:'Eisenstiefel',    icon:'👢', type:'boots', slot:'boots', classes:['warrior'],                   stats:{lebenskraft:1, ausdauer:1}, price:22, desc:'Schwere Stahlstiefel.' },
   'stiefel_fllink':  { name:'Flinke Stiefel',  icon:'👢', type:'boots', slot:'boots', classes:['archer'],                    stats:{schnelligkeit:3}, price:30, desc:'Für schnelle Bewegungen.' },
   'stiefel_magier':  { name:'Magierslippers',  icon:'👟', type:'boots', slot:'boots', classes:['mage'],                      stats:{intelligenz:1, schnelligkeit:1}, price:18, desc:'Leise und magisch.' },
 
   // ── RINGE ──────────────────────────────────────────────────────
-  'ring_einfach':    { name:'Eisenring',       icon:'💍', type:'ring', slot:'ring', classes:['warrior','archer','mage'],      stats:{lp:1}, price:10, desc:'Einfacher Metallring.' },
-  'ring_geflochten': { name:'Geflochtener Ring',icon:'💍', type:'ring', slot:'ring', classes:['warrior','archer','mage'],     stats:{lp:1}, price:0,  desc:'Von einem kleinen Mädchen gefertigt.' },
+  'ring_einfach':    { name:'Eisenring',       icon:'💍', type:'ring', slot:'ring', classes:['warrior','archer','mage'],      stats:{lebenskraft:1}, price:10, desc:'Einfacher Metallring.' },
+  'ring_geflochten': { name:'Geflochtener Ring',icon:'💍', type:'ring', slot:'ring', classes:['warrior','archer','mage'],     stats:{lebenskraft:1}, price:0,  desc:'Von einem kleinen Mädchen gefertigt.' },
   'ring_staerke':    { name:'Ring der Stärke', icon:'💍', type:'ring', slot:'ring', classes:['warrior'],                      stats:{staerke:2}, price:35, desc:'Stärkt die Muskeln.' },
   'ring_praezision': { name:'Ring der Präzision',icon:'💍',type:'ring', slot:'ring', classes:['archer'],                      stats:{gewandheit:2}, price:35, desc:'Verbessert die Zielgenauigkeit.' },
   'ring_weisheit':   { name:'Ring der Weisheit',icon:'💍', type:'ring', slot:'ring', classes:['mage'],                       stats:{intelligenz:2}, price:35, desc:'Verstärkt die Magie.' },
 
   // ── HALSKETTEN ─────────────────────────────────────────────────
-  'kette_leder':     { name:'Lederkordel',     icon:'📿', type:'necklace', slot:'necklace', classes:['warrior','archer','mage'], stats:{lp:1}, price:8, desc:'Einfache Lederkordel.' },
+  'kette_leder':     { name:'Lederkordel',     icon:'📿', type:'necklace', slot:'necklace', classes:['warrior','archer','mage'], stats:{lebenskraft:1}, price:8, desc:'Einfache Lederkordel.' },
   'amulett_tapfer':  { name:'Amulett der Tapferkeit',icon:'📿',type:'necklace',slot:'necklace',classes:['warrior'],           stats:{staerke:1, ausdauer:1}, price:30, desc:'Für mutige Krieger.' },
   'amulett_wachsam': { name:'Amulett der Wachsamkeit',icon:'📿',type:'necklace',slot:'necklace',classes:['archer'],           stats:{gewandheit:1, schnelligkeit:1}, price:30, desc:'Schärft die Sinne.' },
   'amulett_weisheit':{ name:'Amulett der Weisheit',icon:'📿',type:'necklace',slot:'necklace',classes:['mage'],               stats:{intelligenz:1, ausdauer:1}, price:30, desc:'Bündelt magische Energie.' },
@@ -1524,7 +1524,7 @@ const ITEM_DATABASE = {
   'axt_drachen':        { name:'Drachenschlächter',  icon:'🐲', type:'weapon', slot:'weapon1', classes:['warrior'], damage:[18,28],  stats:{staerke:10, krit_schaden:3}, price:300, desc:'Geschmiedet aus Drachenzähnen. Unvorstellbar scharf.', legendary:true },
 
   // ── LEGENDÄRE KRIEGER-SCHILDE ─────────────────────────────────
-  'schild_goetterwall': { name:'Götterwall',          icon:'🌟', type:'shield', slot:'weapon2', classes:['warrior'], damage:[0,0],   stats:{ausdauer:10, lp:5, krit_chance:2}, price:250, desc:'Kein Angriff durchdringt diesen Schild.', legendary:true },
+  'schild_goetterwall': { name:'Götterwall',          icon:'🌟', type:'shield', slot:'weapon2', classes:['warrior'], damage:[0,0],   stats:{ausdauer:10, lebenskraft:5, krit_chance:2}, price:250, desc:'Kein Angriff durchdringt diesen Schild.', legendary:true },
 
   // ── LEGENDÄRE BOGENSCHÜTZEN-WAFFEN ───────────────────────────
   'bogen_schicksal':    { name:'Bogen des Schicksals', icon:'🌠', type:'weapon', slot:'weapon1', classes:['archer'],  damage:[24,36],  stats:{gewandheit:8, krit_chance:5}, price:280,  desc:'Jeder Pfeil findet sein Ziel. Immer.', legendary:true },
@@ -1539,14 +1539,14 @@ const ITEM_DATABASE = {
   'rolle_apokalypse':   { name:'Apokalypse-Rolle',    icon:'💫', type:'scroll', slot:'weapon2', classes:['mage'],    damage:[16,24],  stats:{intelligenz:5, krit_schaden:4}, price:180, desc:'Vernichtet alles was sie berührt.', legendary:true },
 
   // ── LEGENDÄRE HELME ──────────────────────────────────────────
-  'helm_drachen_krieger':  { name:'Drachenhelm',       icon:'🐉', type:'helmet', slot:'helmet', classes:['warrior'],               stats:{lp:6, ausdauer:4, krit_schaden:2}, price:220, desc:'Aus einem Drachenschädel gefertigt.', legendary:true },
+  'helm_drachen_krieger':  { name:'Drachenhelm',       icon:'🐉', type:'helmet', slot:'helmet', classes:['warrior'],               stats:{lebenskraft:6, ausdauer:4, krit_schaden:2}, price:220, desc:'Aus einem Drachenschädel gefertigt.', legendary:true },
   'helm_adler':            { name:'Adlerhaube',         icon:'🦅', type:'helmet', slot:'helmet', classes:['archer'],                stats:{gewandheit:4, schnelligkeit:4, krit_chance:3}, price:210, desc:'Leicht wie eine Feder, scharf wie Adleraugen.', legendary:true },
   'helm_sternenkrone':     { name:'Sternenkrone',       icon:'👑', type:'helmet', slot:'helmet', classes:['mage'],                  stats:{intelligenz:5, krit_chance:3, krit_schaden:2}, price:230, desc:'Eine Krone aus gefrorenem Sternenlicht.', legendary:true },
 
   // ── LEGENDÄRE BRUSTPANZER ────────────────────────────────────
-  'brust_himmelsschmied':  { name:'Himmelsgeschmiedete Rüstung', icon:'✨', type:'chest', slot:'chest', classes:['warrior'],        stats:{lp:10, ausdauer:6}, price:280, desc:'Im Blitz eines Gewitters geschmiedet.', legendary:true },
-  'brust_waldgeist':       { name:'Waldgeist-Rüstung',  icon:'🌿', type:'chest', slot:'chest', classes:['archer'],                 stats:{gewandheit:5, schnelligkeit:4, lp:4}, price:260, desc:'Lebt und atmet wie ein Wald.', legendary:true },
-  'brust_astraler_mantel': { name:'Astraler Mantel',    icon:'🌌', type:'chest', slot:'chest', classes:['mage'],                   stats:{intelligenz:6, ausdauer:4, lp:5}, price:270, desc:'Gewebt aus den Fäden des Universums.', legendary:true },
+  'brust_himmelsschmied':  { name:'Himmelsgeschmiedete Rüstung', icon:'✨', type:'chest', slot:'chest', classes:['warrior'],        stats:{lebenskraft:10, ausdauer:6}, price:280, desc:'Im Blitz eines Gewitters geschmiedet.', legendary:true },
+  'brust_waldgeist':       { name:'Waldgeist-Rüstung',  icon:'🌿', type:'chest', slot:'chest', classes:['archer'],                 stats:{gewandheit:5, schnelligkeit:4, lebenskraft:4}, price:260, desc:'Lebt und atmet wie ein Wald.', legendary:true },
+  'brust_astraler_mantel': { name:'Astraler Mantel',    icon:'🌌', type:'chest', slot:'chest', classes:['mage'],                   stats:{intelligenz:6, ausdauer:4, lebenskraft:5}, price:270, desc:'Gewebt aus den Fäden des Universums.', legendary:true },
 
   // ── LEGENDÄRE HANDSCHUHE ─────────────────────────────────────
   'handsch_titan':         { name:'Titanengriff',       icon:'⚡', type:'gloves', slot:'gloves', classes:['warrior'],              stats:{staerke:5, krit_schaden:3}, price:200, desc:'Mit diesen Handschuhen brichst du Felsen.', legendary:true },
@@ -1554,12 +1554,12 @@ const ITEM_DATABASE = {
   'handsch_arkan':         { name:'Arkanhandschuhe',    icon:'🔮', type:'gloves', slot:'gloves', classes:['mage'],                 stats:{intelligenz:5, krit_chance:4}, price:200, desc:'Kanalisieren Magie direkt aus dem Kosmos.', legendary:true },
 
   // ── LEGENDÄRE HOSEN ──────────────────────────────────────────
-  'hose_titan':            { name:'Titanenbeinschienen', icon:'⚙️', type:'pants', slot:'pants', classes:['warrior'],              stats:{lp:5, ausdauer:5}, price:190, desc:'Unzerstörbar wie der Titan selbst.', legendary:true },
+  'hose_titan':            { name:'Titanenbeinschienen', icon:'⚙️', type:'pants', slot:'pants', classes:['warrior'],              stats:{lebenskraft:5, ausdauer:5}, price:190, desc:'Unzerstörbar wie der Titan selbst.', legendary:true },
   'hose_jaguar':           { name:'Jaguarhose',          icon:'🐆', type:'pants', slot:'pants', classes:['archer'],               stats:{schnelligkeit:6, gewandheit:3}, price:180, desc:'Schnell wie ein jagender Jaguar.', legendary:true },
   'hose_sternenstaub':     { name:'Sternenstaub-Gewand', icon:'⭐', type:'pants', slot:'pants', classes:['mage'],                 stats:{intelligenz:4, ausdauer:4}, price:185, desc:'Hinterlässt eine Spur aus Sternenstaub.', legendary:true },
 
   // ── LEGENDÄRE GÜRTEL ─────────────────────────────────────────
-  'guertel_held':          { name:'Gürtel des Helden',  icon:'🏆', type:'belt', slot:'belt', classes:['warrior','archer','mage'], stats:{lp:3, krit_chance:2, krit_schaden:2}, price:160, desc:'Nur wahre Helden dürfen ihn tragen.', legendary:true },
+  'guertel_held':          { name:'Gürtel des Helden',  icon:'🏆', type:'belt', slot:'belt', classes:['warrior','archer','mage'], stats:{lebenskraft:3, krit_chance:2, krit_schaden:2}, price:160, desc:'Nur wahre Helden dürfen ihn tragen.', legendary:true },
 
   // ── LEGENDÄRE STIEFEL ────────────────────────────────────────
   'stiefel_sturm':         { name:'Sturmstiefel',        icon:'⚡', type:'boots', slot:'boots', classes:['warrior'],              stats:{schnelligkeit:5, ausdauer:3}, price:195, desc:'Schnell wie ein Blitzeinschlag.', legendary:true },
@@ -1567,11 +1567,11 @@ const ITEM_DATABASE = {
   'stiefel_levitation':    { name:'Levitations-Schlappen',icon:'🌠', type:'boots', slot:'boots', classes:['mage'],                stats:{intelligenz:3, schnelligkeit:4, ausdauer:2}, price:190, desc:'Schweben einen Zentimeter über dem Boden.', legendary:true },
 
   // ── LEGENDÄRE RINGE ──────────────────────────────────────────
-  'ring_unsterblich':      { name:'Ring der Unsterblichkeit', icon:'♾️', type:'ring', slot:'ring', classes:['warrior','archer','mage'], stats:{lp:8, ausdauer:3}, price:300, desc:'Solange du ihn trägst kannst du nicht sterben.', legendary:true },
+  'ring_unsterblich':      { name:'Ring der Unsterblichkeit', icon:'♾️', type:'ring', slot:'ring', classes:['warrior','archer','mage'], stats:{lebenskraft:8, ausdauer:3}, price:300, desc:'Solange du ihn trägst kannst du nicht sterben.', legendary:true },
   'ring_schicksal':        { name:'Ring des Schicksals',  icon:'🌀', type:'ring', slot:'ring', classes:['warrior','archer','mage'], stats:{krit_chance:5, krit_schaden:4}, price:320, desc:'Bestimmt das Schicksal deiner Feinde.', legendary:true },
 
   // ── LEGENDÄRE HALSKETTEN ─────────────────────────────────────
-  'kette_drachen':         { name:'Drachenskalenamulett', icon:'🐉', type:'necklace', slot:'necklace', classes:['warrior'],       stats:{lp:5, staerke:4, ausdauer:3}, price:240, desc:'Aus einer Drachenschuppe gefertigt.', legendary:true },
+  'kette_drachen':         { name:'Drachenskalenamulett', icon:'🐉', type:'necklace', slot:'necklace', classes:['warrior'],       stats:{lebenskraft:5, staerke:4, ausdauer:3}, price:240, desc:'Aus einer Drachenschuppe gefertigt.', legendary:true },
   'kette_phaenix':         { name:'Phönix-Amulett',       icon:'🔥', type:'necklace', slot:'necklace', classes:['archer'],        stats:{gewandheit:4, krit_chance:4, schnelligkeit:3}, price:250, desc:'Gibt dir die Kraft des Phönix.', legendary:true },
   'kette_kosmisch':        { name:'Kosmisches Amulett',   icon:'🌌', type:'necklace', slot:'necklace', classes:['mage'],          stats:{intelligenz:6, krit_schaden:4}, price:260, desc:'Verbindet dich mit dem Kosmos.', legendary:true },
 
@@ -1594,32 +1594,32 @@ Object.assign(ITEM_DATABASE, {
   'dg_schwert_knochen':     { name:'Knochenklinge',         icon:'🦴', type:'weapon', slot:'weapon1', classes:['warrior'], damage:[14,20], stats:{staerke:5, ausdauer:1}, price:130, desc:'Aus den Knochen gefallener Krieger geschmiedet.', dungeon_drop:true },
   'dg_schwert_verflucht':   { name:'Verfluchte Klinge',     icon:'🗡️', type:'weapon', slot:'weapon1', classes:['warrior'], damage:[26,38], stats:{staerke:11, krit_schaden:4}, price:340, desc:'Flüstert die Namen ihrer früheren Träger.', dungeon_drop:true, legendary:true },
 
-  'dg_schild_skelett':      { name:'Skelettschild',         icon:'🛡️', type:'shield', slot:'weapon2', classes:['warrior'], damage:[0,0], stats:{ausdauer:6, lp:3}, price:115, desc:'Zusammengesetzt aus Rippenknochen.', dungeon_drop:true },
-  'dg_schild_abyss':        { name:'Abyssaler Schildwall',  icon:'🌑', type:'shield', slot:'weapon2', classes:['warrior'], damage:[0,0], stats:{ausdauer:12, lp:6, krit_chance:3}, price:330, desc:'Verschluckt jedes Licht, das ihn berührt.', dungeon_drop:true, legendary:true },
+  'dg_schild_skelett':      { name:'Skelettschild',         icon:'🛡️', type:'shield', slot:'weapon2', classes:['warrior'], damage:[0,0], stats:{ausdauer:6, lebenskraft:3}, price:115, desc:'Zusammengesetzt aus Rippenknochen.', dungeon_drop:true },
+  'dg_schild_abyss':        { name:'Abyssaler Schildwall',  icon:'🌑', type:'shield', slot:'weapon2', classes:['warrior'], damage:[0,0], stats:{ausdauer:12, lebenskraft:6, krit_chance:3}, price:330, desc:'Verschluckt jedes Licht, das ihn berührt.', dungeon_drop:true, legendary:true },
 
-  'dg_helm_minotaurus':     { name:'Minotaurushelm',        icon:'🐂', type:'helmet', slot:'helmet', classes:['warrior'], stats:{lp:4, ausdauer:3}, price:120, desc:'Mit den Hörnern eines Labyrinthwächters.', dungeon_drop:true },
-  'dg_helm_obsidian':       { name:'Obsidiankrone',         icon:'👑', type:'helmet', slot:'helmet', classes:['warrior'], stats:{lp:7, ausdauer:5, krit_schaden:3}, price:310, desc:'Aus dem Herzen eines erloschenen Vulkans.', dungeon_drop:true, legendary:true },
+  'dg_helm_minotaurus':     { name:'Minotaurushelm',        icon:'🐂', type:'helmet', slot:'helmet', classes:['warrior'], stats:{lebenskraft:4, ausdauer:3}, price:120, desc:'Mit den Hörnern eines Labyrinthwächters.', dungeon_drop:true },
+  'dg_helm_obsidian':       { name:'Obsidiankrone',         icon:'👑', type:'helmet', slot:'helmet', classes:['warrior'], stats:{lebenskraft:7, ausdauer:5, krit_schaden:3}, price:310, desc:'Aus dem Herzen eines erloschenen Vulkans.', dungeon_drop:true, legendary:true },
 
-  'dg_brust_eisengolem':    { name:'Golemplatte',           icon:'⚙️', type:'chest', slot:'chest', classes:['warrior'], stats:{lp:6, ausdauer:4}, price:135, desc:'Gebrochen vom Panzer eines Eisengolems.', dungeon_drop:true },
-  'dg_brust_drachenschuppe':{ name:'Drachenschuppenrüstung',icon:'🐲', type:'chest', slot:'chest', classes:['warrior'], stats:{lp:12, ausdauer:7}, price:340, desc:'Jede Schuppe glüht noch von innerer Hitze.', dungeon_drop:true, legendary:true },
+  'dg_brust_eisengolem':    { name:'Golemplatte',           icon:'⚙️', type:'chest', slot:'chest', classes:['warrior'], stats:{lebenskraft:6, ausdauer:4}, price:135, desc:'Gebrochen vom Panzer eines Eisengolems.', dungeon_drop:true },
+  'dg_brust_drachenschuppe':{ name:'Drachenschuppenrüstung',icon:'🐲', type:'chest', slot:'chest', classes:['warrior'], stats:{lebenskraft:12, ausdauer:7}, price:340, desc:'Jede Schuppe glüht noch von innerer Hitze.', dungeon_drop:true, legendary:true },
 
   'dg_handsch_kralle':      { name:'Krallenhandschuhe',     icon:'🧤', type:'gloves', slot:'gloves', classes:['warrior'], stats:{staerke:3, krit_chance:1}, price:110, desc:'Aus den Klauen einer Höhlenbestie.', dungeon_drop:true },
   'dg_handsch_titanenfaust':{ name:'Titanenfaust',          icon:'👊', type:'gloves', slot:'gloves', classes:['warrior'], stats:{staerke:6, krit_schaden:4}, price:290, desc:'Ein einziger Schlag erschüttert den Boden.', dungeon_drop:true, legendary:true },
 
-  'dg_hose_kerker':         { name:'Kerkerwächterhose',     icon:'👖', type:'pants', slot:'pants', classes:['warrior'], stats:{lp:4, ausdauer:3}, price:115, desc:'Getragen von den ewigen Wächtern der Tiefe.', dungeon_drop:true },
-  'dg_hose_lavagestein':    { name:'Lavagestein-Beinschienen',icon:'🌋', type:'pants', slot:'pants', classes:['warrior'], stats:{lp:7, ausdauer:6}, price:300, desc:'Noch immer warm vom Feuer der Tiefe.', dungeon_drop:true, legendary:true },
+  'dg_hose_kerker':         { name:'Kerkerwächterhose',     icon:'👖', type:'pants', slot:'pants', classes:['warrior'], stats:{lebenskraft:4, ausdauer:3}, price:115, desc:'Getragen von den ewigen Wächtern der Tiefe.', dungeon_drop:true },
+  'dg_hose_lavagestein':    { name:'Lavagestein-Beinschienen',icon:'🌋', type:'pants', slot:'pants', classes:['warrior'], stats:{lebenskraft:7, ausdauer:6}, price:300, desc:'Noch immer warm vom Feuer der Tiefe.', dungeon_drop:true, legendary:true },
 
-  'dg_guertel_eisenwall':   { name:'Eisenwallgürtel',       icon:'📿', type:'belt', slot:'belt', classes:['warrior'], stats:{staerke:2, lp:2}, price:100, desc:'Geschmiedet aus den Toren einer gefallenen Festung.', dungeon_drop:true },
-  'dg_guertel_titanenring': { name:'Titanenkettengürtel',   icon:'⛓️', type:'belt', slot:'belt', classes:['warrior'], stats:{lp:5, krit_chance:2, krit_schaden:2}, price:270, desc:'Soll die Ketten eines Titanen gehalten haben.', dungeon_drop:true, legendary:true },
+  'dg_guertel_eisenwall':   { name:'Eisenwallgürtel',       icon:'📿', type:'belt', slot:'belt', classes:['warrior'], stats:{staerke:2, lebenskraft:2}, price:100, desc:'Geschmiedet aus den Toren einer gefallenen Festung.', dungeon_drop:true },
+  'dg_guertel_titanenring': { name:'Titanenkettengürtel',   icon:'⛓️', type:'belt', slot:'belt', classes:['warrior'], stats:{lebenskraft:5, krit_chance:2, krit_schaden:2}, price:270, desc:'Soll die Ketten eines Titanen gehalten haben.', dungeon_drop:true, legendary:true },
 
-  'dg_stiefel_oger':        { name:'Ogerschreiter',         icon:'👢', type:'boots', slot:'boots', classes:['warrior'], stats:{lp:2, ausdauer:3}, price:110, desc:'Jeder Schritt erzittert wie ein Erdstoß.', dungeon_drop:true },
+  'dg_stiefel_oger':        { name:'Ogerschreiter',         icon:'👢', type:'boots', slot:'boots', classes:['warrior'], stats:{lebenskraft:2, ausdauer:3}, price:110, desc:'Jeder Schritt erzittert wie ein Erdstoß.', dungeon_drop:true },
   'dg_stiefel_magma':       { name:'Magmastapfer',          icon:'🌋', type:'boots', slot:'boots', classes:['warrior'], stats:{schnelligkeit:4, ausdauer:5}, price:280, desc:'Hinterlassen glühende Fußspuren.', dungeon_drop:true, legendary:true },
 
   'dg_ring_kerkerlord':     { name:'Ring des Kerkerlords',  icon:'💍', type:'ring', slot:'ring', classes:['warrior'], stats:{staerke:3, ausdauer:1}, price:120, desc:'Einst am Finger eines gefallenen Lords.', dungeon_drop:true },
   'dg_ring_drachenfeuer':   { name:'Ring des Drachenfeuers',icon:'💍', type:'ring', slot:'ring', classes:['warrior'], stats:{staerke:6, krit_schaden:4}, price:310, desc:'Brennt heiß, doch nur für Feinde.', dungeon_drop:true, legendary:true },
 
-  'dg_kette_knochenjaeger': { name:'Knochenjägeramulett',   icon:'📿', type:'necklace', slot:'necklace', classes:['warrior'], stats:{staerke:2, lp:2}, price:115, desc:'Aus den Reißzähnen eines Untiers.', dungeon_drop:true },
-  'dg_kette_drachenherz':   { name:'Drachenherz-Amulett',   icon:'❤️‍🔥', type:'necklace', slot:'necklace', classes:['warrior'], stats:{lp:8, staerke:5, ausdauer:3}, price:330, desc:'Schlägt noch immer leise im Takt.', dungeon_drop:true, legendary:true },
+  'dg_kette_knochenjaeger': { name:'Knochenjägeramulett',   icon:'📿', type:'necklace', slot:'necklace', classes:['warrior'], stats:{staerke:2, lebenskraft:2}, price:115, desc:'Aus den Reißzähnen eines Untiers.', dungeon_drop:true },
+  'dg_kette_drachenherz':   { name:'Drachenherz-Amulett',   icon:'❤️‍🔥', type:'necklace', slot:'necklace', classes:['warrior'], stats:{lebenskraft:8, staerke:5, ausdauer:3}, price:330, desc:'Schlägt noch immer leise im Takt.', dungeon_drop:true, legendary:true },
 
   // ── BOGENSCHÜTZE – DUNGEON-BEUTE ─────────────────────────────
   'dg_bogen_spinnenseide':  { name:'Spinnenseidenbogen',    icon:'🕷️', type:'weapon', slot:'weapon1', classes:['archer'], damage:[16,24], stats:{gewandheit:6, schnelligkeit:1}, price:135, desc:'Die Sehne webt sich selbst nach.', dungeon_drop:true },
@@ -1631,8 +1631,8 @@ Object.assign(ITEM_DATABASE, {
   'dg_helm_waldgeist':      { name:'Waldgeisthaube',        icon:'🍃', type:'helmet', slot:'helmet', classes:['archer'], stats:{gewandheit:3, schnelligkeit:2}, price:120, desc:'Flüstert mit den Bäumen des Dungeons.', dungeon_drop:true },
   'dg_helm_phoenixfeder':   { name:'Phönixfederkrone',      icon:'🪶', type:'helmet', slot:'helmet', classes:['archer'], stats:{gewandheit:5, schnelligkeit:5, krit_chance:3}, price:310, desc:'Glüht sanft, als würde sie nie verbrennen.', dungeon_drop:true, legendary:true },
 
-  'dg_brust_spinnenchitin': { name:'Spinnenchitinpanzer',   icon:'🕸️', type:'chest', slot:'chest', classes:['archer'], stats:{gewandheit:4, lp:3}, price:130, desc:'Leicht wie Seide, hart wie Stahl.', dungeon_drop:true },
-  'dg_brust_schattentuch':  { name:'Schattentuchmantel',    icon:'🌑', type:'chest', slot:'chest', classes:['archer'], stats:{gewandheit:6, schnelligkeit:6, lp:4}, price:340, desc:'Verschwindet fast völlig im Dunkeln.', dungeon_drop:true, legendary:true },
+  'dg_brust_spinnenchitin': { name:'Spinnenchitinpanzer',   icon:'🕸️', type:'chest', slot:'chest', classes:['archer'], stats:{gewandheit:4, lebenskraft:3}, price:130, desc:'Leicht wie Seide, hart wie Stahl.', dungeon_drop:true },
+  'dg_brust_schattentuch':  { name:'Schattentuchmantel',    icon:'🌑', type:'chest', slot:'chest', classes:['archer'], stats:{gewandheit:6, schnelligkeit:6, lebenskraft:4}, price:340, desc:'Verschwindet fast völlig im Dunkeln.', dungeon_drop:true, legendary:true },
 
   'dg_handsch_klauengriff': { name:'Klauengriff',           icon:'🧤', type:'gloves', slot:'gloves', classes:['archer'], stats:{gewandheit:3, krit_chance:1}, price:110, desc:'Erinnert an die Pranke einer Bestie.', dungeon_drop:true },
   'dg_handsch_windreissend':{ name:'Windreißerhandschuhe',  icon:'💨', type:'gloves', slot:'gloves', classes:['archer'], stats:{gewandheit:5, schnelligkeit:6}, price:295, desc:'Lassen jeden Pfeil dem Wind entgleiten.', dungeon_drop:true, legendary:true },
@@ -1659,11 +1659,11 @@ Object.assign(ITEM_DATABASE, {
   'dg_rolle_schattenbann':   { name:'Schattenbannrolle',    icon:'📜', type:'scroll', slot:'weapon2', classes:['mage'], damage:[10,16], stats:{intelligenz:3}, price:110, desc:'Beschwört kurz die Dunkelheit selbst.', dungeon_drop:true },
   'dg_rolle_sternenkollaps': { name:'Sternenkollapsrolle',  icon:'💫', type:'scroll', slot:'weapon2', classes:['mage'], damage:[18,26], stats:{intelligenz:6, krit_schaden:4}, price:325, desc:'Lässt einen kleinen Stern in sich zusammenfallen.', dungeon_drop:true, legendary:true },
 
-  'dg_helm_geisterkrone':    { name:'Geisterkrone',         icon:'👻', type:'helmet', slot:'helmet', classes:['mage'], stats:{intelligenz:3, lp:1}, price:120, desc:'Flüstert Erinnerungen vergangener Magier.', dungeon_drop:true },
+  'dg_helm_geisterkrone':    { name:'Geisterkrone',         icon:'👻', type:'helmet', slot:'helmet', classes:['mage'], stats:{intelligenz:3, lebenskraft:1}, price:120, desc:'Flüstert Erinnerungen vergangener Magier.', dungeon_drop:true },
   'dg_helm_kosmoskrone':     { name:'Kosmoskrone',          icon:'👑', type:'helmet', slot:'helmet', classes:['mage'], stats:{intelligenz:6, krit_chance:3, krit_schaden:3}, price:310, desc:'Trägt einen Splitter eines Sternenkerns.', dungeon_drop:true, legendary:true },
 
-  'dg_robe_void':            { name:'Voidgewebte Robe',     icon:'🌑', type:'chest', slot:'chest', classes:['mage'], stats:{intelligenz:4, lp:3}, price:130, desc:'Webt sich aus den Fäden der Leere.', dungeon_drop:true },
-  'dg_robe_sternensturz':    { name:'Sternensturzrobe',     icon:'☄️', type:'chest', slot:'chest', classes:['mage'], stats:{intelligenz:7, ausdauer:5, lp:4}, price:340, desc:'Funkelt wie ein fallender Meteor.', dungeon_drop:true, legendary:true },
+  'dg_robe_void':            { name:'Voidgewebte Robe',     icon:'🌑', type:'chest', slot:'chest', classes:['mage'], stats:{intelligenz:4, lebenskraft:3}, price:130, desc:'Webt sich aus den Fäden der Leere.', dungeon_drop:true },
+  'dg_robe_sternensturz':    { name:'Sternensturzrobe',     icon:'☄️', type:'chest', slot:'chest', classes:['mage'], stats:{intelligenz:7, ausdauer:5, lebenskraft:4}, price:340, desc:'Funkelt wie ein fallender Meteor.', dungeon_drop:true, legendary:true },
 
   'dg_handsch_runenweber':   { name:'Runenweberhandschuhe', icon:'🧤', type:'gloves', slot:'gloves', classes:['mage'], stats:{intelligenz:3}, price:110, desc:'Jede Geste zeichnet eine Rune in die Luft.', dungeon_drop:true },
   'dg_handsch_arkanstrum':   { name:'Arkanstromhandschuhe', icon:'⚡', type:'gloves', slot:'gloves', classes:['mage'], stats:{intelligenz:6, krit_chance:4}, price:295, desc:'Magie fließt ungebremst durch sie hindurch.', dungeon_drop:true, legendary:true },
@@ -1671,7 +1671,7 @@ Object.assign(ITEM_DATABASE, {
   'dg_hose_nebelschritt':    { name:'Nebelschrittgewand',   icon:'👘', type:'pants', slot:'pants', classes:['mage'], stats:{intelligenz:2, ausdauer:2}, price:115, desc:'Lässt dich halb im Nebel verschwinden.', dungeon_drop:true },
   'dg_hose_sternenweber':    { name:'Sternenwebergewand',   icon:'⭐', type:'pants', slot:'pants', classes:['mage'], stats:{intelligenz:5, ausdauer:5}, price:300, desc:'Gewebt aus den Fäden ferner Galaxien.', dungeon_drop:true, legendary:true },
 
-  'dg_guertel_runengeflecht':{ name:'Runengeflechtgürtel',  icon:'📿', type:'belt', slot:'belt', classes:['mage'], stats:{intelligenz:2, lp:1}, price:100, desc:'Hält uralte Schutzrunen verwoben.', dungeon_drop:true },
+  'dg_guertel_runengeflecht':{ name:'Runengeflechtgürtel',  icon:'📿', type:'belt', slot:'belt', classes:['mage'], stats:{intelligenz:2, lebenskraft:1}, price:100, desc:'Hält uralte Schutzrunen verwoben.', dungeon_drop:true },
   'dg_guertel_arkanzirkel':  { name:'Arkanzirkelgürtel',    icon:'🔮', type:'belt', slot:'belt', classes:['mage'], stats:{intelligenz:4, krit_chance:2, krit_schaden:2}, price:275, desc:'Ein Zirkel ewiger Magie, um die Hüfte gelegt.', dungeon_drop:true, legendary:true },
 
   'dg_stiefel_geisterschritt':{ name:'Geisterschrittschuhe',icon:'👟', type:'boots', slot:'boots', classes:['mage'], stats:{intelligenz:1, schnelligkeit:2}, price:110, desc:'Lassen kaum eine Spur zurück.', dungeon_drop:true },
@@ -1681,7 +1681,7 @@ Object.assign(ITEM_DATABASE, {
   'dg_ring_kosmosauge':      { name:'Ring des Kosmosauges', icon:'💍', type:'ring', slot:'ring', classes:['mage'], stats:{intelligenz:6, krit_chance:4}, price:315, desc:'Sieht durch Wirklichkeit hindurch.', dungeon_drop:true, legendary:true },
 
   'dg_kette_schattenweber':  { name:'Schattenweberamulett',icon:'📿', type:'necklace', slot:'necklace', classes:['mage'], stats:{intelligenz:2, ausdauer:2}, price:115, desc:'Spinnt sich aus den Schatten des Dungeons.', dungeon_drop:true },
-  'dg_kette_sternengeist':   { name:'Sternengeistamulett', icon:'✨', type:'necklace', slot:'necklace', classes:['mage'], stats:{intelligenz:6, krit_schaden:4, lp:3}, price:330, desc:'Beherbergt den Funken eines toten Sterns.', dungeon_drop:true, legendary:true },
+  'dg_kette_sternengeist':   { name:'Sternengeistamulett', icon:'✨', type:'necklace', slot:'necklace', classes:['mage'], stats:{intelligenz:6, krit_schaden:4, lebenskraft:3}, price:330, desc:'Beherbergt den Funken eines toten Sterns.', dungeon_drop:true, legendary:true },
 
 });
 
@@ -1740,13 +1740,13 @@ async function openHero(){
   } catch(e){ console.log('Inventar Fehler:',e); }
 
   // Stats (mit Item-Boni der ausgerüsteten Items)
-  const statLabels={lp:'Lebenskraft',staerke:'Stärke',gewandheit:'Gewandheit',
+  const statLabels={lebenskraft:'Lebenskraft',staerke:'Stärke',gewandheit:'Gewandheit',
     intelligenz:'Intelligenz',schnelligkeit:'Schnelligkeit',ausdauer:'Ausdauer',
     krit_chance:'Krit-Chance',krit_schaden:'Krit-Schaden'};
-  const statIcons={lp:'❤️',staerke:'⚔️',gewandheit:'🌿',intelligenz:'🔮',schnelligkeit:'⚡',ausdauer:'🛡️',
+  const statIcons={lebenskraft:'❤️',staerke:'⚔️',gewandheit:'🌿',intelligenz:'🔮',schnelligkeit:'⚡',ausdauer:'🛡️',
     krit_chance:'🎯',krit_schaden:'💥'};
 
-  // Item-Boni der ausgerüsteten Items summieren (lp → lebenskraft normalisiert)
+  // Item-Boni der ausgerüsteten Items summieren
   const itemBoni = getEquippedItemBoni();
 
   function critChanceDisplay(stat){ return Math.round((1 - 1/(1+stat*0.01125))*100); }
@@ -1839,7 +1839,7 @@ function showItemInfo(itemId){
 
   // Stats anzeigen
   const bonus = item.stat_bonus || {};
-  const statNames={lp:'Lebenspunkte',staerke:'Stärke',gewandheit:'Gewandheit',
+  const statNames={lebenskraft:'Lebenspunkte',staerke:'Stärke',gewandheit:'Gewandheit',
     intelligenz:'Intelligenz',schnelligkeit:'Schnelligkeit',ausdauer:'Ausdauer'};
   // Damage range aus ITEM_DATABASE holen
   const dbItem = Object.values(ITEM_DATABASE).find(d=>d.name===item.item_name);
@@ -2142,7 +2142,7 @@ function renderShop(type, forceRefresh=false){
   document.getElementById('shopTitle').innerHTML = titles[type] || 'Shop';
 
   const items = getShopItemsForToday(type, cls, level);
-  const statNames={lp:'LP',staerke:'STR',gewandheit:'GEW',intelligenz:'INT',schnelligkeit:'SCH',ausdauer:'AUS'};
+  const statNames={lebenskraft:'LP',staerke:'STR',gewandheit:'GEW',intelligenz:'INT',schnelligkeit:'SCH',ausdauer:'AUS'};
 
   // Refresh-Leiste
   const refreshBar = `
@@ -2259,7 +2259,7 @@ async function buyShopItem(itemKey) {
     return;
   }
 
-  const statNames={lp:'LP',staerke:'STR',gewandheit:'GEW',intelligenz:'INT',schnelligkeit:'SCH',ausdauer:'AUS'};
+  const statNames={lebenskraft:'LP',staerke:'STR',gewandheit:'GEW',intelligenz:'INT',schnelligkeit:'SCH',ausdauer:'AUS'};
   const statStr = Object.entries(stats).map(([k,v])=>`+${v} ${statNames[k]||k}`).join(', ');
   const dmgStr  = dmg  ? `⚔️ ${dmg[0]}-${dmg[1]}` : '';
   const healStr = heal ? `❤️ +${heal} LP` : '';
@@ -2309,17 +2309,12 @@ async function buyItem(itemName, price, icon, desc) {
 }
 
 // ── Stat-Key Normalisierung ───────────────────────────────────
-// 'lp' ist ein Alias für 'lebenskraft' (Items speichern 'lp',
-// characters-Tabelle hat 'lebenskraft'). Immer normalizeStat nutzen.
-function normalizeStat(k) { return k === 'lp' ? 'lebenskraft' : k; }
-
-// Summiert Item-Boni aller ausgerüsteten Items, normalisiert lp→lebenskraft
+// Summiert Item-Boni aller ausgerüsteten Items
 function getEquippedItemBoni() {
   const boni = {};
   _invItems.filter(i => i.equipped_slot).forEach(i => {
     Object.entries(i.stat_bonus || {}).forEach(([k, v]) => {
-      const key = normalizeStat(k);
-      boni[key] = (boni[key] || 0) + (Number(v) || 0);
+      boni[k] = (boni[k] || 0) + (Number(v) || 0);
     });
   });
   return boni;
@@ -2334,7 +2329,7 @@ function getPlayerCombatStats() {
     intelligenz:  character.intelligenz  || 0,
     schnelligkeit:character.schnelligkeit|| 0,
     ausdauer:     character.ausdauer     || 0,
-    lebenskraft:  character.lebenskraft  || 0,
+    lebenskraft:           character.lebenskraft           || 0,
     krit_chance:  character.krit_chance  || 0,
     krit_schaden: character.krit_schaden || 0,
   };
@@ -2496,21 +2491,21 @@ const ARENA_RANK_COLOR = { E:'#5a5a5a', D:'#7a8a6a', C:'#cd7f32', B:'#a8b4c0', A
 const ARENA_ITEM_BASES = {
   warrior: {
     weapon1: { name:'Arenaschwert',    icon:'⚔️',  type:'weapon',   slot:'weapon1', damage:[18,26], stats:{staerke:7}, price:200 },
-    weapon2: { name:'Arenaschild',     icon:'🛡️',  type:'shield',   slot:'weapon2', damage:[0,0],   stats:{ausdauer:8, lp:4}, price:180 },
-    helmet:  { name:'Arenahelm',       icon:'🪖',  type:'helmet',   slot:'helmet',  stats:{lp:5, ausdauer:4}, price:170 },
-    chest:   { name:'Arenapanzer',     icon:'🦺',  type:'chest',    slot:'chest',   stats:{lp:8, ausdauer:5}, price:190 },
+    weapon2: { name:'Arenaschild',     icon:'🛡️',  type:'shield',   slot:'weapon2', damage:[0,0],   stats:{ausdauer:8, lebenskraft:4}, price:180 },
+    helmet:  { name:'Arenahelm',       icon:'🪖',  type:'helmet',   slot:'helmet',  stats:{lebenskraft:5, ausdauer:4}, price:170 },
+    chest:   { name:'Arenapanzer',     icon:'🦺',  type:'chest',    slot:'chest',   stats:{lebenskraft:8, ausdauer:5}, price:190 },
     gloves:  { name:'Arenahandschuhe', icon:'🥊',  type:'gloves',   slot:'gloves',  stats:{staerke:4, krit_chance:1}, price:150 },
-    pants:   { name:'Arenahose',       icon:'👖',  type:'pants',    slot:'pants',   stats:{lp:5, ausdauer:4}, price:155 },
-    belt:    { name:'Arenagürtel',     icon:'📿',  type:'belt',     slot:'belt',    stats:{staerke:3, lp:3}, price:140 },
+    pants:   { name:'Arenahose',       icon:'👖',  type:'pants',    slot:'pants',   stats:{lebenskraft:5, ausdauer:4}, price:155 },
+    belt:    { name:'Arenagürtel',     icon:'📿',  type:'belt',     slot:'belt',    stats:{staerke:3, lebenskraft:3}, price:140 },
     boots:   { name:'Arenastiefel',    icon:'👢',  type:'boots',    slot:'boots',   stats:{schnelligkeit:4, ausdauer:3}, price:145 },
     ring:    { name:'Arenasiegerring', icon:'💍',  type:'ring',     slot:'ring',    stats:{staerke:4, krit_chance:2}, price:160 },
-    necklace:{ name:'Arenamed.',       icon:'📿',  type:'necklace', slot:'necklace',stats:{staerke:3, lp:4}, price:155 },
+    necklace:{ name:'Arenamed.',       icon:'📿',  type:'necklace', slot:'necklace',stats:{staerke:3, lebenskraft:4}, price:155 },
   },
   archer: {
     weapon1: { name:'Arenabogen',      icon:'🏹',  type:'weapon',   slot:'weapon1', damage:[20,30], stats:{gewandheit:7}, price:200 },
     weapon2: { name:'Arenapfeile',     icon:'🪃',  type:'arrows',   slot:'weapon2', damage:[8,12],  stats:{krit_schaden:3}, price:170 },
     helmet:  { name:'Arenakappe',      icon:'🎭',  type:'helmet',   slot:'helmet',  stats:{gewandheit:4, schnelligkeit:3}, price:170 },
-    chest:   { name:'Arenalederwams',  icon:'🥋',  type:'chest',    slot:'chest',   stats:{gewandheit:5, lp:4}, price:185 },
+    chest:   { name:'Arenalederwams',  icon:'🥋',  type:'chest',    slot:'chest',   stats:{gewandheit:5, lebenskraft:4}, price:185 },
     gloves:  { name:'Arenaschützhand', icon:'🧤',  type:'gloves',   slot:'gloves',  stats:{gewandheit:4, krit_chance:1}, price:150 },
     pants:   { name:'Arenajägerhose',  icon:'👖',  type:'pants',    slot:'pants',   stats:{schnelligkeit:5, gewandheit:3}, price:155 },
     belt:    { name:'Arenajägergurt',  icon:'📿',  type:'belt',     slot:'belt',    stats:{gewandheit:3, schnelligkeit:2}, price:140 },
@@ -2522,7 +2517,7 @@ const ARENA_ITEM_BASES = {
     weapon1: { name:'Arenastab',       icon:'🔮',  type:'weapon',   slot:'weapon1', damage:[22,32], stats:{intelligenz:7}, price:200 },
     weapon2: { name:'Arenarune',       icon:'📜',  type:'scroll',   slot:'weapon2', damage:[12,18], stats:{intelligenz:4, krit_schaden:2}, price:175 },
     helmet:  { name:'Arenamagierhut',  icon:'🎩',  type:'helmet',   slot:'helmet',  stats:{intelligenz:4, ausdauer:2}, price:170 },
-    chest:   { name:'Arenarobe',       icon:'👘',  type:'chest',    slot:'chest',   stats:{intelligenz:6, lp:3}, price:185 },
+    chest:   { name:'Arenarobe',       icon:'👘',  type:'chest',    slot:'chest',   stats:{intelligenz:6, lebenskraft:3}, price:185 },
     gloves:  { name:'Arenamagierhands.',icon:'🧤', type:'gloves',   slot:'gloves',  stats:{intelligenz:4, krit_chance:1}, price:150 },
     pants:   { name:'Arenamagegewand', icon:'👘',  type:'pants',    slot:'pants',   stats:{intelligenz:4, ausdauer:3}, price:155 },
     belt:    { name:'Arenazirkelgurt', icon:'🔮',  type:'belt',     slot:'belt',    stats:{intelligenz:3, krit_chance:1}, price:140 },
