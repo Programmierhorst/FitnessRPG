@@ -611,8 +611,8 @@ function renderStats(id,cls,s){
   const icons={warrior:'⚔️',archer:'🏹',mage:'🔮'};
   document.getElementById(id).innerHTML=`
     <div class="f-stat">${icons[cls]} Angriff <span>${(m*2.2).toFixed(0)}</span></div>
-    <div class="f-stat">❤️ LP <span>${maxLP(s.lebenskraft,1)}</span></div>
-    <div class="f-stat">⚡ Initiative <span>${s.schnelligkeit}</span></div>
+    <div class="f-stat">❤️ Lebenskraft <span>${s.lebenskraft}</span></div>
+    <div class="f-stat">⚡ Schnelligkeit <span>${s.schnelligkeit}</span></div>
     <div class="f-stat">🛡️ Ausdauer <span>${s.ausdauer}</span></div>`;
 }
 
