@@ -1188,6 +1188,16 @@ async function loadCharacter(){
     .order('created_at',{ascending:false}).limit(1);
   if(!data||!data.length){ window.location.href='charakter.html'; return; }
   character = data[0];
+
+  // Inventar direkt beim Start laden, damit Item-Boni immer
+  // für Kämpfe (startMission/startDungeon) verfügbar sind.
+  try {
+    const {data:inv} = await sb.from('inventory').select('*')
+      .eq('character_id', character.id)
+      .order('created_at',{ascending:false});
+    if(inv) _invItems = inv;
+  } catch(e){ console.warn('Inventar vorladen fehlgeschlagen:', e); }
+
   updateHUD();
 }
 
