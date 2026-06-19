@@ -609,11 +609,17 @@ function initUI(){
 function renderStats(id,cls,s){
   const m=gmain(cls,s);
   const icons={warrior:'⚔️',archer:'🏹',mage:'🔮'};
+  const critC = Math.round((1 - 1/(1 + (s.krit_chance||0)*0.01125))*100);
+  const critD = (1 + 1*(1 - 1/(1 + (s.krit_schaden||0)*0.05))).toFixed(2);
   document.getElementById(id).innerHTML=`
-    <div class="f-stat">${icons[cls]} Angriff <span>${(m*2.2).toFixed(0)}</span></div>
-    <div class="f-stat">❤️ Lebenskraft <span>${s.lebenskraft}</span></div>
-    <div class="f-stat">⚡ Schnelligkeit <span>${s.schnelligkeit}</span></div>
-    <div class="f-stat">🛡️ Ausdauer <span>${s.ausdauer}</span></div>`;
+    <div class="f-stat">${icons[cls]} Stärke <span>${s.staerke||0}</span></div>
+    <div class="f-stat">🌿 Gewandheit <span>${s.gewandheit||0}</span></div>
+    <div class="f-stat">🔮 Intelligenz <span>${s.intelligenz||0}</span></div>
+    <div class="f-stat">⚡ Schnelligkeit <span>${s.schnelligkeit||0}</span></div>
+    <div class="f-stat">🛡️ Ausdauer <span>${s.ausdauer||0}</span></div>
+    <div class="f-stat">❤️ Lebenskraft <span>${s.lebenskraft||0}</span></div>
+    <div class="f-stat">🎯 Krit-Chance <span>${critC}%</span></div>
+    <div class="f-stat">💥 Krit-Schaden <span>${critD}×</span></div>`;
 }
 
 function updateHP(id,cur,max){
