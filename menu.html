@@ -320,6 +320,7 @@ body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text)}
 
 @keyframes toastIn  { from{opacity:0;transform:translateX(-50%) translateY(20px)} to{opacity:1;transform:translateX(-50%) translateY(0)} }
 @keyframes toastOut { from{opacity:1;transform:translateX(-50%) translateY(0)} to{opacity:0;transform:translateX(-50%) translateY(20px)} }
+@keyframes loadBar  { 0%{width:0%;margin-left:0%} 50%{width:60%;margin-left:20%} 100%{width:0%;margin-left:100%} }
 
 /* ══════════════════════════════════════════
    PORTRAIT NAVIGATION BAR
@@ -407,6 +408,19 @@ body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text)}
 </head>
 <body>
 <div class="scene" id="scene">
+
+  <!-- Ladeoverlay: blockiert Klicks bis Charakter + Inventar geladen -->
+  <div id="loadingOverlay" style="position:fixed;inset:0;z-index:9999;
+    background:rgba(10,8,4,.92);display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:16px">
+    <div style="font-size:2.5rem">⚔️</div>
+    <div style="font-family:Cinzel,serif;font-size:.8rem;letter-spacing:.15em;
+      text-transform:uppercase;color:var(--gold-l)">Lade Charakterdaten...</div>
+    <div style="width:120px;height:3px;background:rgba(255,255,255,.1);border-radius:2px;overflow:hidden">
+      <div style="height:100%;background:var(--gold);border-radius:2px;
+        animation:loadBar 1.2s ease-in-out infinite"></div>
+    </div>
+  </div>
 
   <!-- HUD -->
   <div class="hud">
@@ -1199,6 +1213,9 @@ async function loadCharacter(){
   } catch(e){ console.warn('Inventar vorladen fehlgeschlagen:', e); }
 
   updateHUD();
+  // Ladeindikator entfernen – Szene freigeben
+  const overlay = document.getElementById('loadingOverlay');
+  if(overlay) overlay.style.display = 'none';
 }
 
 function updateHUD(){
@@ -2611,7 +2628,7 @@ async function loadArenaData() {
       .eq('season_id', ARENA_SEASON_ID)
       .order('ruhm', { ascending: false });
 
-    // 3. Charakter-Namen und Level laden
+    // 3. Charakter-Namen und Level für alle Arena-Teilnehmer laden
     const charIds = (allStats||[]).map(s => s.character_id);
     let charMap = {};
     if (charIds.length > 0) {
@@ -2620,12 +2637,15 @@ async function loadArenaData() {
       (chars||[]).forEach(c => charMap[c.id] = c);
     }
 
+    // Eigener Charakter immer in charMap (auch wenn noch kein Arena-Eintrag)
+    if (character) charMap[character.id] = character;
+
     const total = (allStats||[]).length;
     _arenaRanking = (allStats||[]).map((s, idx) => ({
       character_id: s.character_id,
       ruhm: s.ruhm,
       rank: calcArenaRank(idx, total),
-      name: charMap[s.character_id]?.name || '???',
+      name:  charMap[s.character_id]?.name  || 'Unbekannter Held',
       level: charMap[s.character_id]?.level || 1,
       class: charMap[s.character_id]?.class || 'warrior',
     }));
@@ -2900,14 +2920,18 @@ async function startArenaBattle(defenderCharId) {
 
 // Schnell-Kampfsimulation (stat-basiert, kein Seitenwechsel)
 function simulateArenaBattle(player, opponent) {
-  // Angreifer-Stats aus gespeichertem Charakter
+  // Echte Spieler-Stats inkl. ausgerüsteter Items
+  const realStats = getPlayerCombatStats();
   const pStats = {
-    staerke:      player.staerke||1, gewandheit: player.gewandheit||1,
-    intelligenz:  player.intelligenz||1, schnelligkeit: player.schnelligkeit||1,
-    ausdauer:     player.ausdauer||1, lebenskraft: player.lebenskraft||1,
+    staerke:       realStats?.staerke||1,
+    gewandheit:    realStats?.gewandheit||1,
+    intelligenz:   realStats?.intelligenz||1,
+    schnelligkeit: realStats?.schnelligkeit||1,
+    ausdauer:      realStats?.ausdauer||1,
+    lebenskraft:   realStats?.lebenskraft||1,
     level: player.level||1,
   };
-  // Verteidiger hat nur Level + Rang – schätze Stats aus Level
+  // Verteidiger: Stats aus Level + Rang geschätzt
   const oLv  = opponent.level||1;
   const oMult= 0.8 + (opponent.rank==='S'?1.2:opponent.rank==='A'?0.9:
                opponent.rank==='B'?0.6:opponent.rank==='C'?0.3:
@@ -2916,8 +2940,8 @@ function simulateArenaBattle(player, opponent) {
   const oStats = { staerke:oBase, gewandheit:oBase, intelligenz:oBase,
                    schnelligkeit:oBase, ausdauer:oBase, lebenskraft:Math.round(oBase*0.8), level:oLv };
 
-  // Vereinfachte Schadens/LP Berechnung
-  function calcHP(s)  { return 70 + s.lebenskraft*6 + s.level*9; }
+  // Kampfsimulation
+  function calcHP(s)     { return 70 + s.lebenskraft*6 + s.level*9; }
   function calcDmgVal(s) { const main=Math.max(s.staerke,s.gewandheit,s.intelligenz);
     return main*2.2 + s.schnelligkeit*0.5 + s.level*0.5; }
   function calcDefVal(s) { return s.ausdauer/(s.ausdauer+15) + s.schnelligkeit/(s.schnelligkeit+45)*0.15; }
