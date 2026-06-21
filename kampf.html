@@ -217,6 +217,17 @@ body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text);disp
   </div>
 </div>
 
+<!-- ARENA REWARDS overlay -->
+<div class="overlay" id="arenaResultOverlay">
+  <div class="overlay-card">
+    <span class="ov-icon" id="arenaResultIcon">⚔️</span>
+    <div class="ov-title" id="arenaResultTitle">Kampf beendet</div>
+    <div class="ov-text" id="arenaResultText"></div>
+    <div class="ov-rewards" id="arenaResultRewardsBox"></div>
+    <button class="btn-ov" id="arenaResultBtn" onclick="acceptArenaResult()">✅ Belohnung annehmen</button>
+  </div>
+</div>
+
 <!-- WIN overlay -->
 <div class="overlay" id="winOverlay">
   <div class="overlay-card">
@@ -452,6 +463,17 @@ if (MODE === 'dungeon') {
   }
 }
 
+// ── Arena-Session laden ───────────────────────────────────────
+let arenaSession = null;
+if (MODE === 'arena') {
+  try {
+    arenaSession = JSON.parse(sessionStorage.getItem('arenaSession') || 'null');
+  } catch(e) { arenaSession = null; }
+  if (!arenaSession) {
+    window.location.href = 'menu.html';
+  }
+}
+
 // clsA/lvA: Spieler. clsB/lvB/sB: aktueller Gegner (wird bei Dungeons pro Kampf neu gesetzt)
 let clsA, lvA, clsB, lvB, enemyKey, sA, sB;
 
@@ -476,6 +498,12 @@ function setupFighters(){
     clsB = enemy.cls;
     lvB  = enemy.level;
     enemyKey = null;
+  } else if (MODE === 'arena') {
+    clsA = String(arenaSession.playerClass || 'warrior');
+    lvA  = arenaSession.playerLevel || 1;
+    clsB = String(arenaSession.defenderClass || 'warrior');
+    lvB  = arenaSession.defenderLevel || 1;
+    enemyKey = null;
   } else {
     clsA = params.get('player') || 'warrior';
     clsB = params.get('enemy')  || 'archer';
@@ -485,8 +513,18 @@ function setupFighters(){
   }
   // Spieler: echte Stats aus sessionStorage (inkl. Training + Items)
   sA = loadPlayerStats(clsA);
-  // Gegner: ENEMIES für benannte Gegner, sonst CLASSES (Gegner haben keine Item-Stats)
-  sB = enemyKey && ENEMIES[enemyKey] ? ENEMIES[enemyKey] : CLASSES[clsB];
+  // Gegner: Arena nutzt echte geladene Stats, sonst ENEMIES/CLASSES
+  if (MODE === 'arena') {
+    // WICHTIG: CLASSES[clsB] zuerst, danach opponentStats überschreiben NUR die Stat-Werte,
+    // nicht name/icon/color (die kommen von der Klasse), außer dem expliziten Anzeigenamen.
+    sB = {
+      ...CLASSES[clsB],
+      ...arenaSession.opponentStats,
+      displayName: arenaSession.defenderName,
+    };
+  } else {
+    sB = enemyKey && ENEMIES[enemyKey] ? ENEMIES[enemyKey] : CLASSES[clsB];
+  }
 }
 setupFighters();
 
@@ -571,10 +609,10 @@ function initUI(){
   window._maxB=sim.maxB;
   window._finalHpA=sim.finalHpA;
 
-  document.getElementById('nameA').textContent=sA.name;
+  document.getElementById('nameA').textContent= MODE==='arena' ? (arenaSession.playerName||sA.name) : sA.name;
   document.getElementById('nameA').className='f-name '+clsA;
   document.getElementById('avatarA').textContent=sA.icon;
-  document.getElementById('nameB').textContent=sB.name;
+  document.getElementById('nameB').textContent= MODE==='arena' ? (sB.displayName||sB.name) : sB.name;
   document.getElementById('nameB').className='f-name '+clsB;
   document.getElementById('avatarB').textContent=sB.icon;
 
@@ -599,6 +637,10 @@ function initUI(){
     if (isBossFight && dungeonFightIdx > 0) {
       addLog('<span class="log-round">── Du wurdest vor dem Endgegner vollständig geheilt! ──</span>');
     }
+  }
+  if (MODE === 'arena') {
+    document.getElementById('roundBadge').textContent =
+      `⚔️ Arena-Kampf gegen ${arenaSession.defenderRank}-Rang`;
   }
 
   roundIdx = 0;
@@ -656,7 +698,7 @@ function playRound(){
     return;
   }
   const rd=allRounds[roundIdx++];
-  if (MODE !== 'dungeon') {
+  if (MODE !== 'dungeon' && MODE !== 'arena') {
     document.getElementById('roundBadge').textContent=`Runde ${rd.r}`;
   }
   addLog(`<span class="log-round">── Runde ${rd.r} ──</span>`);
@@ -707,6 +749,10 @@ function showResult(){
     showDungeonResult();
     return;
   }
+  if (MODE === 'arena') {
+    showArenaResult();
+    return;
+  }
   if(window._winner==='A'){
     // WIN
     document.getElementById('winText').textContent=`Du hast ${sB.name} besiegt!`;
@@ -717,6 +763,120 @@ function showResult(){
     document.getElementById('winOverlay').classList.add('active');
   } else {
     document.getElementById('loseOverlay').classList.add('active');
+  }
+}
+
+// ── Arena: Ergebnis des Kampfes ───────────────────────────────
+function showArenaResult(){
+  const playerWins = window._winner === 'A';
+
+  let ruhmChange, goldChange, expChange, defRuhmChange;
+  if (playerWins) {
+    ruhmChange    = arenaSession.ruhmOnWin;
+    goldChange    = arenaSession.rewardGold;
+    expChange     = arenaSession.rewardExp;
+    defRuhmChange = -Math.round(ruhmChange * 0.5);
+  } else {
+    expChange     = Math.round(arenaSession.rewardExp * 0.3);
+    const playerGold = arenaSession.playerGold || 0;
+    goldChange    = -Math.max(1, Math.round(playerGold * 0.001));
+    ruhmChange    = -40;
+    defRuhmChange = 50;
+  }
+
+  // Ergebnis für acceptArenaResult merken
+  window._arenaOutcome = { playerWins, ruhmChange, goldChange, expChange, defRuhmChange };
+
+  document.getElementById('arenaResultIcon').textContent = playerWins ? '🏆' : '💀';
+  document.getElementById('arenaResultTitle').textContent = playerWins ? 'Sieg!' : 'Niederlage';
+  document.getElementById('arenaResultTitle').className = 'ov-title ' + (playerWins?'win':'lose');
+  const oppName = sB.displayName || sB.name;
+  document.getElementById('arenaResultText').textContent = playerWins
+    ? `Du hast ${oppName} (Lvl ${lvB}) in der Arena besiegt!`
+    : `Du wurdest von ${oppName} (Lvl ${lvB}) besiegt.`;
+
+  document.getElementById('arenaResultRewardsBox').innerHTML = `
+    <div class="ov-reward-row"><span class="ov-reward-label">⭐ Ruhm</span><span class="ov-reward-val">${ruhmChange>=0?'+':''}${ruhmChange}</span></div>
+    <div class="ov-reward-row"><span class="ov-reward-label">✨ Erfahrung</span><span class="ov-reward-val">+${expChange} EXP</span></div>
+    <div class="ov-reward-row"><span class="ov-reward-label">💰 Gold</span><span class="ov-reward-val">${goldChange>=0?'+':''}${goldChange} Gold</span></div>`;
+
+  document.getElementById('arenaResultOverlay').classList.add('active');
+}
+
+async function acceptArenaResult(){
+  const btn = document.getElementById('arenaResultBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid rgba(0,0,0,.3);border-top-color:#1a1200;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:6px"></span>Wird gespeichert...';
+
+  const { ruhmChange, goldChange, expChange, defRuhmChange } = window._arenaOutcome;
+
+  try {
+    const { data:{ session } } = await sb.auth.getSession();
+    if (!session) { window.location.href='menu.html'; return; }
+
+    // 1. Charakter laden (für aktuellen Stand)
+    const { data: chars, error: loadErr } = await sb.from('characters')
+      .select('id, level, xp, gold')
+      .eq('user_id', session.user.id)
+      .order('created_at', {ascending:false}).limit(1);
+    if (loadErr || !chars?.length) throw new Error(loadErr?.message || 'Charakter nicht gefunden');
+    const char = chars[0];
+
+    // 2. Eigene arena_stats laden für Kämpfe-Zähler
+    const { data: myArenaStats } = await sb.from('arena_stats')
+      .select('*').eq('character_id', char.id).limit(1);
+    const today = new Date().toISOString().split('T')[0];
+    const wasToday = myArenaStats?.[0]?.last_fight_date === today;
+    const newFightsToday = wasToday ? (myArenaStats?.[0]?.fights_today||0)+1 : 1;
+
+    // 3. Ruhm via RPC aktualisieren (Angreifer + Verteidiger)
+    const { error: rpcErr } = await sb.rpc('update_arena_ruhm', {
+      p_attacker_id: char.id,
+      p_defender_id: arenaSession.defenderCharId,
+      p_attacker_ruhm_change: ruhmChange,
+      p_defender_ruhm_change: defRuhmChange,
+      p_attacker_fights_today: newFightsToday,
+      p_season_id: 1,
+    });
+    if (rpcErr) {
+      console.error('RPC update_arena_ruhm Fehler:', rpcErr);
+      throw new Error('Ruhm-Update fehlgeschlagen: ' + rpcErr.message + ' (Code: ' + (rpcErr.code||'?') + ')');
+    }
+
+    // 4. Kampf-Eintrag speichern
+    await sb.from('arena_battles').insert([{
+      attacker_id: char.id,
+      defender_id: arenaSession.defenderCharId,
+      winner_id: window._arenaOutcome.playerWins ? char.id : arenaSession.defenderCharId,
+      ruhm_attacker_change: ruhmChange,
+      ruhm_defender_change: defRuhmChange,
+      gold_reward: goldChange,
+      exp_reward: expChange,
+      season_id: 1,
+    }]);
+
+    // 5. Gold/EXP/Level auf Charakter anwenden
+    let newXP   = Math.max(0, (char.xp||0) + expChange);
+    let newGold = Math.max(0, (char.gold||0) + goldChange);
+    let newLv   = char.level||1;
+    while(true){
+      const needed = expRequired(newLv+1);
+      if (newXP>=needed && newLv<9999) { newXP-=needed; newLv++; } else break;
+    }
+    const { error: updateErr } = await sb.from('characters')
+      .update({xp:newXP, gold:newGold, level:newLv}).eq('id', char.id);
+    if (updateErr) throw new Error('Speichern fehlgeschlagen: ' + updateErr.message);
+
+    sessionStorage.removeItem('arenaSession');
+    sessionStorage.setItem('openArenaOnLoad', '1');
+    btn.textContent = '✅ Gespeichert!';
+    setTimeout(() => { window.location.href = 'menu.html'; }, 700);
+
+  } catch(err) {
+    console.error('Arena-Ergebnis Fehler:', err);
+    btn.disabled = false;
+    btn.textContent = '✅ Belohnung annehmen';
+    alert('Fehler beim Speichern: ' + err.message);
   }
 }
 

@@ -2884,6 +2884,8 @@ async function startArenaBattle(defenderCharId) {
       defenderClass: defChar.class || 'warrior',
       playerClass: character.class || 'warrior',
       playerLevel: character.level || 1,
+      playerName: character.name || 'Held',
+      playerGold: character.gold || 0,
       opponentStats,
       ruhmOnWin,
       rewardGold: reward.gold,
@@ -3518,6 +3520,11 @@ async function completeQuest(id){
 loadCharacter().then(() => {
   if (window.FlutterBridge) {
     window.FlutterBridge.postMessage('ready');
+  }
+  // Nach Arena-Kampf automatisch zur Arena zurückkehren
+  if (sessionStorage.getItem('openArenaOnLoad') === '1') {
+    sessionStorage.removeItem('openArenaOnLoad');
+    openArena();
   }
 });
 </script>
