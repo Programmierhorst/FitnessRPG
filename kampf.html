@@ -694,7 +694,7 @@ function floatDmg(side,val){
 
 function playRound(){
   if(roundIdx>=allRounds.length){
-    setTimeout(showResult,600);
+    animTimer=setTimeout(showResult,600);
     return;
   }
   const rd=allRounds[roundIdx++];
@@ -735,6 +735,7 @@ function toggleSpeed(){
 }
 
 function skipAll(){
+  if(!running) return; // bereits übersprungen/beendet -> doppelten Aufruf verhindern
   if(animTimer) clearTimeout(animTimer);
   running=false;
   const last=allRounds[allRounds.length-1];
@@ -744,7 +745,10 @@ function skipAll(){
   showResult();
 }
 
+let _resultShown = false;
 function showResult(){
+  if(_resultShown) return; // verhindert doppelte Overlay-Anzeige / doppelte Belohnung
+  _resultShown = true;
   if (MODE === 'dungeon') {
     showDungeonResult();
     return;
@@ -1063,7 +1067,10 @@ function showDungeonItemResult(itemResult, newLevelIfUp){
   document.getElementById('dungeonItemOverlay').classList.add('active');
 }
 
+let _rewardsAccepted = false;
 async function acceptRewards(){
+  if(_rewardsAccepted) return; // verhindert doppelte Gutschrift bei Mehrfachklick
+  _rewardsAccepted = true;
   const btn = document.querySelector('#winOverlay .btn-ov');
   btn.disabled = true;
   btn.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid rgba(0,0,0,.3);border-top-color:#1a1200;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:6px"></span>Wird gespeichert...';
@@ -1115,6 +1122,7 @@ async function acceptRewards(){
 
     if (updateErr) {
       console.error('Update fehlgeschlagen:', updateErr);
+      _rewardsAccepted = false;
       btn.disabled = false;
       btn.textContent = '✅ Belohnungen annehmen';
       alert('Fehler beim Speichern (Update): ' + updateErr.message + '\nCode: ' + updateErr.code);
@@ -1145,6 +1153,7 @@ async function acceptRewards(){
 
   } catch(err) {
     console.error('Fehler:', err);
+    _rewardsAccepted = false;
     btn.disabled = false;
     btn.textContent = '✅ Belohnungen annehmen';
     alert('Technischer Fehler: ' + (err.message || JSON.stringify(err)));
