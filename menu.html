@@ -2829,133 +2829,75 @@ async function startArenaBattle(defenderCharId) {
   const myRank   = myEntry?.rank || 'E';
   const playerLv = character?.level || 1;
 
-  // Kampf simulieren (Stats-basiert, kein Seitenwechsel)
-  const playerWins = simulateArenaBattle(character, defender);
-
   const order = ['S','A','B','C','D','E'];
   const rel = order.indexOf(defender.rank) < order.indexOf(myRank) ? 'higher'
             : order.indexOf(defender.rank) > order.indexOf(myRank) ? 'lower' : 'equal';
+  const ruhmOnWin = rel==='higher' ? ARENA_RUHM_WIN_HIGHER
+                   : rel==='lower'  ? ARENA_RUHM_WIN_LOWER
+                   : ARENA_RUHM_WIN_EQUAL;
+  const reward = calcArenaFightReward(playerLv);
 
-  let ruhmChange = 0, goldChange = 0, expChange = 0, defRuhmChange = 0;
-
-  if (playerWins) {
-    ruhmChange    = rel==='higher' ? ARENA_RUHM_WIN_HIGHER
-                  : rel==='lower'  ? ARENA_RUHM_WIN_LOWER
-                  : ARENA_RUHM_WIN_EQUAL;
-    const reward  = calcArenaFightReward(playerLv);
-    goldChange    = reward.gold;
-    expChange     = reward.exp;
-    defRuhmChange = -Math.round(ruhmChange * 0.5);
-  } else {
-    // Niederlage: EXP-Trost, Gold-Verlust
-    expChange  = Math.round(calcArenaFightReward(playerLv).exp * 0.3);
-    goldChange = -Math.max(1, Math.round((character.gold||0) * 0.001));
-    ruhmChange = ARENA_RUHM_LOSS_ATK;
-    defRuhmChange = Math.round(ARENA_RUHM_WIN_EQUAL * 0.5);
-  }
-
-  // Kämpfe-Zähler
-  const today = new Date().toISOString().split('T')[0];
-  const wasToday = _arenaStats?.last_fight_date === today;
-  const newFightsToday = wasToday ? (_arenaStats?.fights_today||0)+1 : 1;
+  showToast('⏳', 'Lade Gegner-Daten...');
 
   try {
-    // Supabase: Ruhm aktualisieren via RPC-Funktion
-    await sb.rpc('update_arena_ruhm', {
-      p_attacker_id: character.id,
-      p_defender_id: defenderCharId,
-      p_attacker_ruhm_change: ruhmChange,
-      p_defender_ruhm_change: defRuhmChange,
-      p_attacker_fights_today: newFightsToday,
-      p_season_id: ARENA_SEASON_ID,
+    // Echten Charakter des Gegners laden (Stats)
+    const { data: defenderChars, error: defErr } = await sb.from('characters')
+      .select('staerke, gewandheit, intelligenz, schnelligkeit, ausdauer, lebenskraft, krit_chance, krit_schaden, class, level, name')
+      .eq('id', defenderCharId).limit(1);
+
+    if (defErr || !defenderChars?.length) {
+      showToast('⚠️', 'Gegner-Daten konnten nicht geladen werden.');
+      return;
+    }
+    const defChar = defenderChars[0];
+
+    // Echtes Inventar des Gegners laden (für Item-Boni)
+    const { data: defenderInv } = await sb.from('inventory')
+      .select('stat_bonus, equipped_slot')
+      .eq('character_id', defenderCharId);
+
+    const defenderBoni = {};
+    (defenderInv || []).filter(i => i.equipped_slot).forEach(i => {
+      Object.entries(i.stat_bonus || {}).forEach(([k, v]) => {
+        defenderBoni[k] = (defenderBoni[k] || 0) + (Number(v) || 0);
+      });
     });
 
-    // Kampf-Eintrag speichern
-    await sb.from('arena_battles').insert([{
-      attacker_id: character.id,
-      defender_id: defenderCharId,
-      winner_id: playerWins ? character.id : defenderCharId,
-      ruhm_attacker_change: ruhmChange,
-      ruhm_defender_change: defRuhmChange,
-      gold_reward: goldChange,
-      exp_reward: expChange,
-      season_id: ARENA_SEASON_ID,
-    }]);
+    // Echte Gegner-Stats = Basis-Charakterstats + Item-Boni
+    const opponentStats = {
+      staerke:       (defChar.staerke||0)       + (defenderBoni.staerke||0),
+      gewandheit:    (defChar.gewandheit||0)    + (defenderBoni.gewandheit||0),
+      intelligenz:   (defChar.intelligenz||0)   + (defenderBoni.intelligenz||0),
+      schnelligkeit: (defChar.schnelligkeit||0) + (defenderBoni.schnelligkeit||0),
+      ausdauer:      (defChar.ausdauer||0)      + (defenderBoni.ausdauer||0),
+      lebenskraft:   (defChar.lebenskraft||0)   + (defenderBoni.lebenskraft||0),
+      krit_chance:   (defChar.krit_chance||0)   + (defenderBoni.krit_chance||0),
+      krit_schaden:  (defChar.krit_schaden||0)  + (defenderBoni.krit_schaden||0),
+    };
 
-    // Gold/EXP auf Charakter anwenden
-    const { data: chars } = await sb.from('characters')
-      .select('id, level, xp, gold').eq('user_id', (await sb.auth.getSession()).data.session.user.id)
-      .order('created_at',{ascending:false}).limit(1);
-    if (chars?.[0]) {
-      let newXP   = Math.max(0, (chars[0].xp||0) + expChange);
-      let newGold = Math.max(0, (chars[0].gold||0) + goldChange);
-      let newLv   = chars[0].level||1;
-      while(true){ const needed=expRequired(newLv+1); if(newXP>=needed&&newLv<9999){newXP-=needed;newLv++;}else break; }
-      await sb.from('characters').update({xp:newXP,gold:newGold,level:newLv}).eq('id',chars[0].id);
-      if(character){ character.gold=newGold; character.level=newLv; }
-      updateHUD();
-    }
+    // Session für kampf.html ablegen
+    const session = {
+      defenderCharId,
+      defenderName: defChar.name || defender.name,
+      defenderLevel: defChar.level || defender.level || 1,
+      defenderRank: defender.rank,
+      defenderClass: defChar.class || 'warrior',
+      playerClass: character.class || 'warrior',
+      playerLevel: character.level || 1,
+      opponentStats,
+      ruhmOnWin,
+      rewardGold: reward.gold,
+      rewardExp: reward.exp,
+    };
+    sessionStorage.setItem('arenaSession', JSON.stringify(session));
+    sessionStorage.setItem('playerCombatStats', JSON.stringify(getPlayerCombatStats()));
 
-    // _arenaStats lokal aktualisieren
-    if (_arenaStats) {
-      _arenaStats.ruhm = Math.max(0, (_arenaStats.ruhm||0) + ruhmChange);
-      _arenaStats.fights_today = newFightsToday;
-      _arenaStats.last_fight_date = today;
-    }
-    await loadArenaData();
-    renderArena();
-
-    // Ergebnis-Toast
-    if (playerWins) {
-      showToast('⚔️', `Sieg gegen ${defender.name}! +${ruhmChange}⭐ +${goldChange}💰 +${expChange}EXP`);
-    } else {
-      showToast('💀', `Niederlage gegen ${defender.name}. ${Math.abs(goldChange)}💰 verloren. +${expChange}EXP`);
-    }
+    window.location.href = 'kampf.html?mode=arena';
 
   } catch(err) {
-    console.error('Arena-Kampf Fehler:', err);
-    showToast('⚠️', 'Fehler beim Kampf: ' + err.message);
+    console.error('Arena-Kampf Vorbereitung fehlgeschlagen:', err);
+    showToast('⚠️', 'Fehler: ' + err.message);
   }
-}
-
-// Schnell-Kampfsimulation (stat-basiert, kein Seitenwechsel)
-function simulateArenaBattle(player, opponent) {
-  // Echte Spieler-Stats inkl. ausgerüsteter Items
-  const realStats = getPlayerCombatStats();
-  const pStats = {
-    staerke:       realStats?.staerke||1,
-    gewandheit:    realStats?.gewandheit||1,
-    intelligenz:   realStats?.intelligenz||1,
-    schnelligkeit: realStats?.schnelligkeit||1,
-    ausdauer:      realStats?.ausdauer||1,
-    lebenskraft:   realStats?.lebenskraft||1,
-    level: player.level||1,
-  };
-  // Verteidiger: Stats aus Level + Rang geschätzt
-  const oLv  = opponent.level||1;
-  const oMult= 0.8 + (opponent.rank==='S'?1.2:opponent.rank==='A'?0.9:
-               opponent.rank==='B'?0.6:opponent.rank==='C'?0.3:
-               opponent.rank==='D'?0.1:0);
-  const oBase = Math.round(oLv * 0.6 * (1 + oMult));
-  const oStats = { staerke:oBase, gewandheit:oBase, intelligenz:oBase,
-                   schnelligkeit:oBase, ausdauer:oBase, lebenskraft:Math.round(oBase*0.8), level:oLv };
-
-  // Kampfsimulation
-  function calcHP(s)     { return 70 + s.lebenskraft*6 + s.level*9; }
-  function calcDmgVal(s) { const main=Math.max(s.staerke,s.gewandheit,s.intelligenz);
-    return main*2.2 + s.schnelligkeit*0.5 + s.level*0.5; }
-  function calcDefVal(s) { return s.ausdauer/(s.ausdauer+15) + s.schnelligkeit/(s.schnelligkeit+45)*0.15; }
-
-  let hpP = calcHP(pStats), hpO = calcHP(oStats);
-  const dmgP = calcDmgVal(pStats), dmgO = calcDmgVal(oStats);
-  const defP = calcDefVal(pStats), defO = calcDefVal(oStats);
-
-  for (let r=0; r<100 && hpP>0 && hpO>0; r++) {
-    hpO -= Math.max(1, dmgP*(1-defO));
-    if (hpO <= 0) break;
-    hpP -= Math.max(1, dmgO*(1-defP));
-  }
-  return hpP > 0;
 }
 
 // ── Season-Belohnung abholen ──────────────────────────────────
