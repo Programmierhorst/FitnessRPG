@@ -1868,17 +1868,20 @@ function showItemInfo(itemId){
   const bonus = item.stat_bonus || {};
   const statNames={lebenskraft:'Lebenskraft',staerke:'Stärke',gewandheit:'Gewandheit',
     intelligenz:'Intelligenz',schnelligkeit:'Schnelligkeit',ausdauer:'Ausdauer'};
-  // Damage range aus ITEM_DATABASE holen
+  // Damage range aus ITEM_DATABASE holen und mit aktuellem Charakterlevel skalieren,
+  // damit derselbe Wert wie im Shop angezeigt wird (vorher: unskalierter Rohwert -> Bug).
   const dbItem = Object.values(ITEM_DATABASE).find(d=>d.name===item.item_name);
-  const dmgRow = dbItem?.damage ? `
+  const overlayLevel = character?.level||1;
+  const dmgScaled = dbItem?.damage ? scaledDmg(dbItem.damage[0], dbItem.damage[1], overlayLevel) : null;
+  const dmgRow = dmgScaled ? `
     <div style="display:flex;justify-content:space-between;font-size:.88rem;padding:3px 0;border-bottom:1px solid rgba(201,168,76,.1)">
       <span style="color:var(--dim)">⚔️ Schaden</span>
-      <span style="color:var(--gold-l);font-family:Cinzel,serif">${dbItem.damage[0]}-${dbItem.damage[1]}</span>
+      <span style="color:var(--gold-l);font-family:Cinzel,serif">${dmgScaled[0]}-${dmgScaled[1]}</span>
     </div>` : '';
   const healRow = dbItem?.heal ? `
     <div style="display:flex;justify-content:space-between;font-size:.88rem;padding:3px 0;border-bottom:1px solid rgba(201,168,76,.1)">
       <span style="color:var(--dim)">❤️ Heilung</span>
-      <span style="color:var(--gold-l);font-family:Cinzel,serif">+${dbItem.heal} LP</span>
+      <span style="color:var(--gold-l);font-family:Cinzel,serif">+${scaledStat(dbItem.heal, overlayLevel)} LP</span>
     </div>` : '';
 
   const statsHtml = dmgRow + healRow + (Object.entries(bonus).length > 0
