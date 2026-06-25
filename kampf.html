@@ -342,6 +342,45 @@ function itemStat(base, level)  { return Math.max(1, Math.round(base * itemMult(
 function itemDmg(min, max, level) { const m=itemMult(level); return [Math.round(min*m), Math.round(max*m)]; }
 function itemPrice(base, level) { return Math.round(base * itemMult(level)); }
 
+// ── Zufälliges Item-Stat-System (identisch mit menu.html) ─────
+const STAT_PROB_TABLE = {
+  warrior: [
+    {k:'staerke',      p:0.25},{k:'schnelligkeit',p:0.15},{k:'ausdauer',    p:0.15},
+    {k:'lebenskraft',  p:0.15},{k:'krit_chance',  p:0.10},{k:'krit_schaden',p:0.10},
+    {k:'gewandheit',   p:0.05},{k:'intelligenz',  p:0.05}
+  ],
+  archer: [
+    {k:'gewandheit',   p:0.25},{k:'schnelligkeit',p:0.15},{k:'ausdauer',    p:0.15},
+    {k:'lebenskraft',  p:0.15},{k:'krit_chance',  p:0.10},{k:'krit_schaden',p:0.10},
+    {k:'staerke',      p:0.05},{k:'intelligenz',  p:0.05}
+  ],
+  mage: [
+    {k:'intelligenz',  p:0.25},{k:'schnelligkeit',p:0.15},{k:'ausdauer',    p:0.15},
+    {k:'lebenskraft',  p:0.15},{k:'krit_chance',  p:0.10},{k:'krit_schaden',p:0.10},
+    {k:'staerke',      p:0.05},{k:'gewandheit',   p:0.05}
+  ]
+};
+function rollStatFromTable(cls, excl, rndFn) {
+  const table = STAT_PROB_TABLE[cls] || STAT_PROB_TABLE.warrior;
+  const avail = table.filter(e => !excl.includes(e.k));
+  const total = avail.reduce((s,e)=>s+e.p, 0);
+  let r = rndFn() * total;
+  for(const e of avail){ r -= e.p; if(r <= 0) return e.k; }
+  return avail[avail.length-1].k;
+}
+function rollItemStats(cls, isLegendary, level, rndFn) {
+  const slots = isLegendary ? 3 : 2;
+  const pts   = isLegendary ? 10 : 6;
+  const mult  = itemMult(level);
+  const excl  = [], result = {};
+  for(let i = 0; i < slots; i++){
+    const k = rollStatFromTable(cls, excl, rndFn);
+    excl.push(k);
+    result[k] = Math.max(1, Math.round(pts * mult));
+  }
+  return result;
+}
+
 // Spezielle Gegner-Definitionen (überschreiben Name+Icon wenn gesetzt)
 const ENEMIES = {
   goblin:  {name:'Goblin',   icon:'👺', color:'var(--warrior)', lebenskraft:1,staerke:1,gewandheit:1,intelligenz:1,schnelligkeit:1,ausdauer:1,krit_chance:1,krit_schaden:1},
@@ -544,14 +583,17 @@ function calcDmg(cls,s,r,lv,vsCls){
   const isCrit = Math.random() < cc;
   return {dmg: isCrit ? d*cm : d, isCrit};
 }
-function calcDef(ac,dc,dst,r,lv){
-  // Proportionale Verteidigung: Reduktion in Prozent, skaliert mit jedem Level gleich
-  const defStat = gmain(ac,dst);  // Verteidiger nutzt Angreifer-Stat-Typ
-  const spdStat = r<=5 ? dst.schnelligkeit : dst.ausdauer;
-  const defRed  = defStat / (defStat + 15);   // 50% bei Stat=15, max ~90%
-  const spdRed  = spdStat / (spdStat + 45);   // kleiner Bonus
-  const totalRed = Math.min(0.90, 1-(1-defRed)*(1-spdRed));
-  return totalRed; // Gibt Prozentsatz zurück, wird in simulateFull genutzt
+function calcDef(ac,dc,dst,ast,r,lv){
+  // Relative Verteidigung: defRed skaliert mit dem Angreifer-Hauptstat
+  // → 100 Def vs. 200 Atk = guter Schutz; 100 Def vs. 1000 Atk = schwacher Schutz
+  // Formel: defStat / (defStat + atkMain * 0.1)
+  // → bei defStat = 10% des atkMain: genau 50% Reduktion
+  const defStat  = gmain(ac,dst);          // Verteidiger-Stat vom Typ des Angreifers
+  const atkMain  = gmain(ac,ast);          // tatsächlicher Hauptstat des Angreifers
+  const spdStat  = r<=5 ? dst.schnelligkeit : dst.ausdauer;
+  const defRed   = defStat / (defStat + atkMain * 0.1);
+  const spdRed   = spdStat / (spdStat + 45);
+  return Math.min(0.90, 1-(1-defRed)*(1-spdRed));
 }
 
 // ── Pre-compute all rounds ───────────────────────────────────
@@ -573,7 +615,7 @@ function simulateFull(startHpA){
                   :[[clsB,sB,'B',clsA,sA],[clsA,sA,'A',clsB,sB]];
     for(const[ac,ast,aid,dc,dst] of pairs){
       const {dmg:rawDmg,isCrit}=calcDmg(ac,ast,r,aid==='A'?lvA:lvB,dc);
-      const df=calcDef(ac,dc,dst,r,aid==='B'?lvA:lvB);
+      const df=calcDef(ac,dc,dst,ast,r,aid==='B'?lvA:lvB);
       const net=Math.max(1,Math.round(rawDmg*(1-df)*10)/10);
       if(aid==='A'){hb-=net;}else{ha-=net;}
       events.push({atk:aid,name:CLASSES[ac].name,icon:CLASSES[ac].icon,dmg:net,def:df,isCrit});
@@ -1027,9 +1069,8 @@ async function rollDungeonItem(characterId, playerClass, level){
   const itemKey = keys[Math.floor(Math.random() * keys.length)];
   const item = DUNGEON_ITEM_DATABASE[itemKey];
 
-  const stats = Object.fromEntries(
-    Object.entries(item.stats||{}).map(([k,v]) => [k, itemStat(v, level)])
-  );
+  // Zufällige Stats würfeln (Normal: 2 Slots, Legendär: 3 Slots)
+  const stats = rollItemStats(playerClass, isLegendary, level, () => Math.random());
   const dmg = item.damage ? itemDmg(item.damage[0], item.damage[1], level) : null;
 
   try {
