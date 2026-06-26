@@ -1887,14 +1887,20 @@ function showItemInfo(itemId){
       <span style="color:var(--gold-l);font-family:Cinzel,serif">${dmgScaled[0]}-${dmgScaled[1]}</span>
     </div>`;
   }
-  const healRow = dbItem?.heal ? `
+  const healRow = (item.stat_bonus?.heilung != null)
+    ? `
+    <div style="display:flex;justify-content:space-between;font-size:.88rem;padding:3px 0;border-bottom:1px solid rgba(201,168,76,.1)">
+      <span style="color:var(--dim)">❤️ Heilung</span>
+      <span style="color:var(--gold-l);font-family:Cinzel,serif">+${item.stat_bonus.heilung} LP</span>
+    </div>`
+    : (dbItem?.heal ? `
     <div style="display:flex;justify-content:space-between;font-size:.88rem;padding:3px 0;border-bottom:1px solid rgba(201,168,76,.1)">
       <span style="color:var(--dim)">❤️ Heilung</span>
       <span style="color:var(--gold-l);font-family:Cinzel,serif">+${scaledStat(dbItem.heal, character?.level||1)} LP</span>
-    </div>` : '';
+    </div>` : '');
 
-  const statsHtml = dmgRow + healRow + (Object.entries(bonus).length > 0
-    ? Object.entries(bonus).map(([k,v])=>`
+  const statsHtml = dmgRow + healRow + (Object.entries(bonus).filter(([k])=>k!=='heilung').length > 0
+    ? Object.entries(bonus).filter(([k])=>k!=='heilung').map(([k,v])=>`
         <div style="display:flex;justify-content:space-between;font-size:.88rem;padding:3px 0">
           <span style="color:var(--dim)">${statNames[k]||k}</span>
           <span style="color:var(--gold-l);font-family:Cinzel,serif">+${v}</span>
@@ -2347,6 +2353,8 @@ async function buyShopItem(itemKey) {
   const dmg      = item.damage ? [Math.round(item.damage[0]*itemMult(level)),
                                    Math.round(item.damage[1]*itemMult(level))] : null;
   const heal     = item.heal   ? scaledStat(item.heal, level) : 0;
+  // Heilwert in stats einfrieren, damit er sich nach dem Kauf nicht mehr ändert
+  if (heal > 0) stats['heilung'] = heal;
   const gold     = character.gold || 0;
 
   if(gold < price){
