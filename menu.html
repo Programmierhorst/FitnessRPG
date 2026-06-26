@@ -2049,43 +2049,89 @@ function scaledDmg(min, max, level) {
 
 // ── Zufälliges Item-Stat-System ───────────────────────────────
 // Wahrscheinlichkeiten: Hauptstat 25%, SCH/AUS/LK je 15%, KC/KS je 10%, Nebenstats je 5%
-const STAT_PROB_TABLE = {
-  warrior: [
-    {k:'staerke',      p:0.25},{k:'schnelligkeit',p:0.15},{k:'ausdauer',    p:0.15},
-    {k:'lebenskraft',  p:0.15},{k:'krit_chance',  p:0.10},{k:'krit_schaden',p:0.10},
-    {k:'gewandheit',   p:0.05},{k:'intelligenz',  p:0.05}
+// ── Item-Stat-System: Slot-spezifische Punkte + Wahrscheinlichkeiten ────────
+// Klassen-Stats: löst main/sub1/sub2 in echte Stat-Keys auf
+const CLASS_STATS = {
+  warrior: {main:'staerke',    sub1:'gewandheit', sub2:'intelligenz'},
+  archer:  {main:'gewandheit', sub1:'staerke',    sub2:'intelligenz'},
+  mage:    {main:'intelligenz',sub1:'staerke',    sub2:'gewandheit'},
+};
+
+// Basispunkte pro Stat-Slot je nach Item-Slot (× itemMult beim Würfeln)
+// Normal: 2 Slots · Legendär: 3 Slots
+// Set-Total Normal: ~122 Pkt · Set-Total Legendär: ~309 Pkt
+const SLOT_POINTS = {
+  weapon1:  {normal:8,  legendary:13},
+  weapon2:  {normal:7,  legendary:12},
+  chest:    {normal:7,  legendary:12},
+  pants:    {normal:7,  legendary:12},
+  helmet:   {normal:6,  legendary:10},
+  gloves:   {normal:6,  legendary:10},
+  belt:     {normal:6,  legendary:10},
+  boots:    {normal:6,  legendary:10},
+  ring:     {normal:4,  legendary:7},
+  necklace: {normal:4,  legendary:7},
+};
+
+// Welcher Slot-Typ für welchen Slot gilt
+const SLOT_TYPE = {
+  weapon1:'weapon', weapon2:'weapon',
+  chest:'armor',  helmet:'armor',  pants:'armor',
+  gloves:'balanced', belt:'balanced',
+  boots:'boots',
+  ring:'crit', necklace:'crit',
+};
+
+// Wahrscheinlichkeiten pro Slot-Typ (main/sub1/sub2 = Platzhalter, werden per Klasse aufgelöst)
+const SLOT_PROB = {
+  weapon: [                                                           // Offensiv: Schaden zuerst
+    {k:'main',p:.30},{k:'krit_chance',p:.15},{k:'krit_schaden',p:.15},
+    {k:'schnelligkeit',p:.13},{k:'ausdauer',p:.13},{k:'lebenskraft',p:.08},
+    {k:'sub1',p:.03},{k:'sub2',p:.03}
   ],
-  archer: [
-    {k:'gewandheit',   p:0.25},{k:'schnelligkeit',p:0.15},{k:'ausdauer',    p:0.15},
-    {k:'lebenskraft',  p:0.15},{k:'krit_chance',  p:0.10},{k:'krit_schaden',p:0.10},
-    {k:'staerke',      p:0.05},{k:'intelligenz',  p:0.05}
+  armor: [                                                            // Defensiv: LP zuerst
+    {k:'lebenskraft',p:.35},{k:'main',p:.20},{k:'ausdauer',p:.15},
+    {k:'schnelligkeit',p:.10},{k:'krit_chance',p:.07},{k:'krit_schaden',p:.07},
+    {k:'sub1',p:.03},{k:'sub2',p:.03}
   ],
-  mage: [
-    {k:'intelligenz',  p:0.25},{k:'schnelligkeit',p:0.15},{k:'ausdauer',    p:0.15},
-    {k:'lebenskraft',  p:0.15},{k:'krit_chance',  p:0.10},{k:'krit_schaden',p:0.10},
-    {k:'staerke',      p:0.05},{k:'gewandheit',   p:0.05}
+  balanced: [                                                         // Ausgewogen (Gürtel, Handschuhe)
+    {k:'main',p:.25},{k:'schnelligkeit',p:.15},{k:'ausdauer',p:.15},
+    {k:'lebenskraft',p:.15},{k:'krit_chance',p:.10},{k:'krit_schaden',p:.10},
+    {k:'sub1',p:.05},{k:'sub2',p:.05}
+  ],
+  boots: [                                                            // Tempo: SCH + AUS zuerst
+    {k:'schnelligkeit',p:.30},{k:'ausdauer',p:.25},{k:'main',p:.15},
+    {k:'lebenskraft',p:.10},{k:'krit_chance',p:.08},{k:'krit_schaden',p:.08},
+    {k:'sub1',p:.02},{k:'sub2',p:.02}
+  ],
+  crit: [                                                             // Krit: KC + KS zuerst
+    {k:'krit_chance',p:.25},{k:'krit_schaden',p:.25},{k:'main',p:.20},
+    {k:'lebenskraft',p:.10},{k:'schnelligkeit',p:.05},{k:'ausdauer',p:.05},
+    {k:'sub1',p:.05},{k:'sub2',p:.05}
   ]
 };
 
-// Würfelt einen Stat (excl = bereits gewürfelte Stats, werden ausgeschlossen)
-function rollStatFromTable(cls, excl, rndFn) {
-  const table = STAT_PROB_TABLE[cls] || STAT_PROB_TABLE.warrior;
-  const avail = table.filter(e => !excl.includes(e.k));
-  const total = avail.reduce((s,e)=>s+e.p, 0);
+// Würfelt einen Stat (main/sub1/sub2 werden für die Klasse aufgelöst; excl = bereits gewürfelt)
+function rollStatFromTable(slotType, cls, excl, rndFn) {
+  const cs    = CLASS_STATS[cls] || CLASS_STATS.warrior;
+  const table = SLOT_PROB[slotType] || SLOT_PROB.balanced;
+  const resolved = table.map(e => ({k: cs[e.k] || e.k, p: e.p}));
+  const avail    = resolved.filter(e => !excl.includes(e.k));
+  const total    = avail.reduce((s,e) => s+e.p, 0);
   let r = rndFn() * total;
   for(const e of avail){ r -= e.p; if(r <= 0) return e.k; }
   return avail[avail.length-1].k;
 }
 
-// Würfelt alle Stats für ein Item:
-// Normal: 2 Slots à 6 Basispunkte · Legendär: 3 Slots à 10 Basispunkte (× itemMult)
-function rollItemStats(cls, isLegendary, level, rndFn) {
-  const slots = isLegendary ? 3 : 2;
-  const pts   = isLegendary ? 10 : 6;
-  const mult  = itemMult(level);
-  const excl  = [], result = {};
+// Würfelt alle Stats für ein Item (itemSlot = z.B. 'weapon1', 'chest', 'ring' …)
+function rollItemStats(cls, itemSlot, isLegendary, level, rndFn) {
+  const slotType = SLOT_TYPE[itemSlot]  || 'balanced';
+  const pts      = (SLOT_POINTS[itemSlot] || {normal:6, legendary:10})[isLegendary ? 'legendary' : 'normal'];
+  const slots    = isLegendary ? 3 : 2;
+  const mult     = itemMult(level);
+  const excl     = [], result = {};
   for(let i = 0; i < slots; i++){
-    const k = rollStatFromTable(cls, excl, rndFn);
+    const k = rollStatFromTable(slotType, cls, excl, rndFn);
     excl.push(k);
     result[k] = Math.max(1, Math.round(pts * mult));
   }
@@ -2259,7 +2305,7 @@ function renderShop(type, forceRefresh=false){
     const isPotion = item.type === 'potion';
     const scaledStats = isPotion
       ? Object.fromEntries(Object.entries(item.stats||{}).map(([k,v])=>[k, scaledStat(v,level)]))
-      : rollItemStats(cls, item.legendary||false, level, makeItemRng(getShopSeed(), item.key));
+      : rollItemStats(cls, item.slot, item.legendary||false, level, makeItemRng(getShopSeed(), item.key));
     const price = scaledPrice(item.price, level);
     const dmg   = item.damage ? scaledDmg(item.damage[0],item.damage[1],level) : null;
     const heal  = item.heal   ? scaledStat(item.heal, level) : null;
@@ -2349,7 +2395,7 @@ async function buyShopItem(itemKey) {
   const isPotion = item.type === 'potion';
   const stats    = isPotion
     ? Object.fromEntries(Object.entries(item.stats||{}).map(([k,v]) => [k, scaledStat(v, level)]))
-    : rollItemStats(cls, item.legendary||false, level, makeItemRng(getShopSeed(), itemKey));
+    : rollItemStats(cls, item.slot, item.legendary||false, level, makeItemRng(getShopSeed(), itemKey));
   const dmg      = item.damage ? [Math.round(item.damage[0]*itemMult(level)),
                                    Math.round(item.damage[1]*itemMult(level))] : null;
   const heal     = item.heal   ? scaledStat(item.heal, level) : 0;
@@ -3011,7 +3057,7 @@ async function claimSeasonReward() {
 
     // Item ins Inventar
     if (item) {
-      const stats = rollItemStats(cls, true, level, () => Math.random());
+      const stats = rollItemStats(cls, item.slot, true, level, () => Math.random());
       const dmg = item.damage?.[0] ? itemDmg(item.damage[0],item.damage[1],level) : null;
       await sb.from('inventory').insert([{
         character_id: character.id, item_name:item.name, item_type:item.type,
