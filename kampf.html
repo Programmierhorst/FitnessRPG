@@ -962,6 +962,9 @@ function showDungeonResult(){
 function proceedToNextFight(){
   document.getElementById('enemyDefeatedOverlay').classList.remove('active');
   dungeonFightIdx++;
+  // Sperrvariablen für den nächsten Kampf zurücksetzen
+  _resultShown = false;
+  running = true;
   setupFighters();
   // Log zurücksetzen für Übersicht
   document.getElementById('log').innerHTML = '';
