@@ -435,12 +435,12 @@ document.addEventListener('input', e => {
 
 // ── Class stats ─────────────────────────────────────────────
 const CLASS_STATS = {
-  warrior:{lp:3,staerke:3,gewandheit:1,intelligenz:1,schnelligkeit:1,ausdauer:1,krit_chance:2,krit_schaden:2},
-  archer: {lp:1,staerke:1,gewandheit:3,intelligenz:1,schnelligkeit:2,ausdauer:2,krit_chance:4,krit_schaden:1},
-  mage:   {lp:2,staerke:1,gewandheit:1,intelligenz:3,schnelligkeit:1,ausdauer:2,krit_chance:1,krit_schaden:3}
+  warrior:{lebenskraft:3,staerke:3,gewandheit:1,intelligenz:1,schnelligkeit:1,ausdauer:1,krit_chance:2,krit_schaden:2},
+  archer: {lebenskraft:1,staerke:1,gewandheit:3,intelligenz:1,schnelligkeit:2,ausdauer:2,krit_chance:4,krit_schaden:1},
+  mage:   {lebenskraft:2,staerke:1,gewandheit:1,intelligenz:3,schnelligkeit:1,ausdauer:2,krit_chance:1,krit_schaden:3}
 };
-const STAT_LABELS = {lp:'Lebenskraft',staerke:'Stärke',gewandheit:'Gewandheit',intelligenz:'Intelligenz',schnelligkeit:'Schnelligkeit',ausdauer:'Ausdauer',krit_chance:'Krit-Chance',krit_schaden:'Krit-Schaden'};
-const STAT_ICONS  = {lp:'❤️',staerke:'⚔️',gewandheit:'🌿',intelligenz:'🔮',schnelligkeit:'⚡',ausdauer:'🛡️',krit_chance:'🎯',krit_schaden:'💥'};
+const STAT_LABELS = {lebenskraft:'Lebenskraft',staerke:'Stärke',gewandheit:'Gewandheit',intelligenz:'Intelligenz',schnelligkeit:'Schnelligkeit',ausdauer:'Ausdauer',krit_chance:'Krit-Chance',krit_schaden:'Krit-Schaden'};
+const STAT_ICONS  = {lebenskraft:'❤️',staerke:'⚔️',gewandheit:'🌿',intelligenz:'🔮',schnelligkeit:'⚡',ausdauer:'🛡️',krit_chance:'🎯',krit_schaden:'💥'};
 
 // ── Colors ──────────────────────────────────────────────────
 const SKIN_COLORS  = ['#fddbb4','#f4c58a','#d4956a','#b5703a','#8d4a2a','#4a2c17'];
@@ -656,7 +656,7 @@ async function saveCharacter(){
     goal:       state.goal,
     level:      1,
     xp:         0,
-    lp:           stats.lp,
+    lebenskraft:  stats.lebenskraft,
     staerke:      stats.staerke,
     gewandheit:   stats.gewandheit,
     intelligenz:  stats.intelligenz,
