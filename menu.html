@@ -4285,31 +4285,41 @@ async function buyRaidBoost(weekKey, pct, cost){
 }
 
 // ── Chat ───────────────────────────────────────────────────────
-async function openGuildChat(){
-  await refreshGuildChat();
-  if (_guildChatTimer) clearInterval(_guildChatTimer);
-  _guildChatTimer = setInterval(refreshGuildChat, 6000);
-}
+let _guildChatLastSig = null; // erkennt, ob sich die Nachrichten seit dem letzten Abruf geändert haben
 
-async function refreshGuildChat(){
-  const {data} = await sb.from('guild_chat_messages').select('*')
-    .eq('guild_id', _myGuild.id).order('created_at', {ascending:true}).limit(100);
-  const msgs = data || [];
-  const tab = document.getElementById('guildChatTab');
-  const wasAtBottom = true; // einfache Variante: immer ans Ende scrollen
-  tab.innerHTML = `
-    <div class="guild-chat-msgs" style="flex:1;overflow-y:auto" id="guildChatMsgsInner">
-      ${msgs.map(m => `<div class="guild-chat-msg"><span class="gcm-name">${m.character_name}:</span>${escapeHtml(m.message)}
-        <span class="gcm-time">${new Date(m.created_at).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}</span></div>`).join('')
-        || '<div style="color:var(--dim);font-size:.85rem;text-align:center;padding:20px">Noch keine Nachrichten. Schreib die erste!</div>'}
-    </div>
+async function openGuildChat(){
+  // Chat-Gerüst (Nachrichtenliste + Eingabefeld) nur EINMAL aufbauen.
+  // Das Polling aktualisiert danach nur die Nachrichtenliste, damit angefangener Text erhalten bleibt.
+  document.getElementById('guildChatTab').innerHTML = `
+    <div class="guild-chat-msgs" style="flex:1;overflow-y:auto" id="guildChatMsgsInner"></div>
     <div class="guild-chat-input-row">
       <input type="text" id="guildChatInput" maxlength="300" placeholder="Nachricht an die Gilde..."
         onkeydown="if(event.key==='Enter') sendGuildChatMessage()"/>
       <button class="btn-buy" onclick="sendGuildChatMessage()">➤</button>
     </div>`;
+  _guildChatLastSig = null;
+  await refreshGuildChat(true);
+  if (_guildChatTimer) clearInterval(_guildChatTimer);
+  _guildChatTimer = setInterval(refreshGuildChat, 6000);
+}
+
+async function refreshGuildChat(forceScroll){
   const inner = document.getElementById('guildChatMsgsInner');
-  if (inner) inner.scrollTop = inner.scrollHeight;
+  if (!inner || !_myGuild) return; // Chat-Tab nicht aufgebaut/sichtbar
+  const {data} = await sb.from('guild_chat_messages').select('*')
+    .eq('guild_id', _myGuild.id).order('created_at', {ascending:true}).limit(100);
+  const msgs = data || [];
+  // Nichts neu zeichnen, wenn keine neuen Nachrichten da sind
+  const sig = msgs.length + ':' + (msgs.length ? msgs[msgs.length-1].id : '');
+  if (sig === _guildChatLastSig) return;
+  _guildChatLastSig = sig;
+
+  // Nur ans Ende scrollen, wenn man schon unten war (oder beim ersten Laden / nach dem Senden)
+  const wasNearBottom = inner.scrollHeight - inner.scrollTop - inner.clientHeight < 60;
+  inner.innerHTML = msgs.map(m => `<div class="guild-chat-msg"><span class="gcm-name">${escapeHtml(m.character_name)}:</span>${escapeHtml(m.message)}
+        <span class="gcm-time">${new Date(m.created_at).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}</span></div>`).join('')
+    || '<div style="color:var(--dim);font-size:.85rem;text-align:center;padding:20px">Noch keine Nachrichten. Schreib die erste!</div>';
+  if (forceScroll === true || wasNearBottom) inner.scrollTop = inner.scrollHeight;
 }
 
 function escapeHtml(str){
@@ -4327,7 +4337,8 @@ async function sendGuildChatMessage(){
     guild_id: _myGuild.id, character_id: character.id, character_name: character.name, message: msg
   }]);
   if (error) { showToast('⚠️', error.message); return; }
-  await refreshGuildChat();
+  await refreshGuildChat(true);
+  input.focus();
 }
 
 // Chat-Polling stoppen, wenn das Overlay geschlossen wird
