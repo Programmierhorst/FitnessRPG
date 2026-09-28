@@ -1097,6 +1097,17 @@ body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text)}
   </div>
 </div>
 
+<!-- ── GILDE: BEITRITTSANFRAGEN ── -->
+<div class="overlay" id="guildRequestsOverlay">
+  <div class="rp-panel" style="width:min(420px,94vw)">
+    <div class="rp-header">
+      <div class="rp-title">📥 Beitrittsanfragen</div>
+      <button class="btn-close" onclick="closeOverlay('guildRequestsOverlay')">✕</button>
+    </div>
+    <div class="rp-body" style="padding:12px 16px" id="guildRequestsList"></div>
+  </div>
+</div>
+
 <!-- ── GILDE: SPENDEN ── -->
 <div class="overlay" id="guildDonateOverlay" style="z-index:150">
   <div class="rp-panel" style="width:min(340px,92vw)">
@@ -3978,6 +3989,8 @@ async function renderGuildBrowseList(){
   try {
     const {data: guilds} = await sb.from('guilds').select('id,name,member_capacity,successful_raids');
     const {data: counts} = await sb.from('guild_members').select('guild_id');
+    const {data: myRequests} = await sb.from('guild_join_requests').select('guild_id').eq('character_id', character.id);
+    const requestedSet = new Set((myRequests||[]).map(r=>r.guild_id));
     const countMap = {};
     (counts||[]).forEach(c => countMap[c.guild_id] = (countMap[c.guild_id]||0)+1);
     if (!guilds || !guilds.length) {
@@ -3987,12 +4000,15 @@ async function renderGuildBrowseList(){
     list.innerHTML = guilds.map(g => {
       const cnt = countMap[g.id] || 0;
       const full = cnt >= g.member_capacity;
+      const requested = requestedSet.has(g.id);
+      const disabled = full || requested;
+      const label = full ? 'Voll' : requested ? '⏳ Angefragt' : 'Anfrage senden';
       return `
       <div class="mission-card" style="${full?'opacity:.5':''}">
         <div class="mc-title">🏰 ${g.name}</div>
         <div class="mc-desc">${cnt} / ${g.member_capacity} Mitglieder · +${g.successful_raids}% Gold/EXP-Bonus</div>
         <div style="text-align:right;margin-top:6px">
-          <button class="btn-buy" ${full?'disabled style="opacity:.5"':''} onclick="joinGuild('${g.id}')">${full?'Voll':'Beitreten'}</button>
+          <button class="btn-buy" ${disabled?'disabled style="opacity:.5"':''} onclick="requestJoinGuild('${g.id}')">${label}</button>
         </div>
       </div>`;
     }).join('');
@@ -4011,13 +4027,12 @@ async function createGuild(){
   } catch(e){ showToast('⚠️', e.message); }
 }
 
-async function joinGuild(guildId){
+async function requestJoinGuild(guildId){
   try {
-    const {error} = await sb.rpc('guild_join', {p_character_id: character.id, p_guild_id: guildId});
+    const {error} = await sb.rpc('guild_request_join', {p_character_id: character.id, p_guild_id: guildId});
     if (error) { showToast('⚠️', error.message); return; }
-    closeOverlay('guildBrowseOverlay');
-    showToast('🏰', 'Der Gilde beigetreten!');
-    await openGuild();
+    showToast('📥', 'Beitrittsanfrage gesendet – der Anführer/General muss sie noch annehmen.');
+    await renderGuildBrowseList();
   } catch(e){ showToast('⚠️', e.message); }
 }
 
@@ -4046,10 +4061,15 @@ function switchGuildTab(tab){
   else openGuildChat();
 }
 
-function renderGuildOverviewTab(){
+async function renderGuildOverviewTab(){
   const rankInfo = GUILD_RANK_INFO[_myMembership.rank] || GUILD_RANK_INFO.member;
   const isLeaderOrGeneral = ['leader','general'].includes(_myMembership.rank);
   const cnt = _guildMembers.length;
+  let pendingCount = 0;
+  if (isLeaderOrGeneral) {
+    const {data: reqs} = await sb.from('guild_join_requests').select('id').eq('guild_id', _myGuild.id);
+    pendingCount = reqs?.length || 0;
+  }
   document.getElementById('guildOverviewTab').innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border)">
       <div>
@@ -4068,6 +4088,7 @@ function renderGuildOverviewTab(){
       <div class="guild-action-btn" onclick="openGuildRaid()">⚔️ Raid</div>
       <div class="guild-action-btn" onclick="openGuildDonate()">💰 Spenden</div>
       ${isLeaderOrGeneral ? `<div class="guild-action-btn" onclick="guildExpandCapacity()">📈 Plätze erweitern</div>` : ''}
+      ${isLeaderOrGeneral ? `<div class="guild-action-btn" onclick="openGuildRequests()">📥 Anfragen${pendingCount>0?` (${pendingCount})`:''}</div>` : ''}
     </div>
     <div style="padding:0 16px 14px">
       <button onclick="leaveGuild()" style="width:100%;padding:9px;background:transparent;border:1px solid rgba(192,57,43,.4);
@@ -4089,10 +4110,51 @@ async function guildExpandCapacity(){
   showToast('📈','Gildenplätze erweitert!');
 }
 
+// ── Beitrittsanfragen (Anführer/General) ───────────────────────
+async function openGuildRequests(){
+  const list = document.getElementById('guildRequestsList');
+  list.innerHTML = '<div style="text-align:center;padding:16px;color:var(--dim)">⏳ Lade Anfragen...</div>';
+  document.getElementById('guildRequestsOverlay').classList.add('active');
+  const {data} = await sb.from('guild_join_requests').select('*, characters(name, level, class)').eq('guild_id', _myGuild.id);
+  const reqs = data || [];
+  list.innerHTML = reqs.length ? reqs.map(r => `
+    <div class="guild-member-row">
+      <span class="gmr-name">${r.characters?.name||'Unbekannt'} <span style="color:var(--dim);font-size:.65rem">Lvl ${r.characters?.level||1}</span></span>
+      <button class="btn-buy" style="padding:5px 10px;font-size:.55rem" onclick="acceptJoinRequest('${r.id}')">✅ Annehmen</button>
+      <button class="btn-buy" style="padding:5px 10px;font-size:.55rem;background:transparent;border:1px solid rgba(192,57,43,.4);color:#e87070" onclick="rejectJoinRequest('${r.id}')">✕ Ablehnen</button>
+    </div>`).join('') : '<div style="color:var(--dim);font-size:.85rem;text-align:center;padding:16px">Keine offenen Anfragen.</div>';
+}
+
+async function acceptJoinRequest(requestId){
+  const {error} = await sb.rpc('guild_accept_request', {p_actor_id: character.id, p_request_id: requestId});
+  if (error) { showToast('⚠️', error.message); return; }
+  showToast('✅','Beitrittsanfrage angenommen.');
+  await loadGuildMembers();
+  await openGuildRequests();
+}
+
+async function rejectJoinRequest(requestId){
+  const {error} = await sb.rpc('guild_reject_request', {p_actor_id: character.id, p_request_id: requestId});
+  if (error) { showToast('⚠️', error.message); return; }
+  showToast('✕','Beitrittsanfrage abgelehnt.');
+  await openGuildRequests();
+}
+
+async function kickMember(targetId, targetName){
+  const confirmed = await showConfirmDialog('🚪', `Möchtest du <strong>${targetName}</strong> wirklich aus der Gilde kicken?`, 'Kicken','Abbrechen');
+  if (!confirmed) return;
+  const {error} = await sb.rpc('guild_kick_member', {p_actor_id: character.id, p_target_id: targetId});
+  if (error) { showToast('⚠️', error.message); return; }
+  showToast('🚪', `${targetName} wurde aus der Gilde entfernt.`);
+  await openGuildMembers();
+}
+
 // ── Mitgliederliste ────────────────────────────────────────────
 async function openGuildMembers(){
   await loadGuildMembers();
-  const isLeader = _myMembership.rank === 'leader';
+  const myRank = _myMembership.rank;
+  const isLeader = myRank === 'leader';
+  const isGeneral = myRank === 'general';
   const generalCount = _guildMembers.filter(m=>m.rank==='general').length;
   const list = _guildMembers.slice().sort((a,b)=>{
     const order = {leader:0,general:1,honor:2,member:3};
@@ -4108,11 +4170,19 @@ async function openGuildMembers(){
         ? `<button class="btn-buy" style="padding:5px 10px;font-size:.55rem" onclick="setGeneral('${m.character_id}',true)">↑ General</button>` : '';
       else if (m.rank === 'general') actionBtn = `<button class="btn-buy" style="padding:5px 10px;font-size:.55rem" onclick="setGeneral('${m.character_id}',false)">↓ Mitglied</button>`;
     }
+    // Kick: Anführer jeden außer sich selbst; General nur Mitglied/Ehrenmitglied
+    let kickBtn = '';
+    const canKick = m.character_id !== character.id && m.rank !== 'leader'
+      && (isLeader || (isGeneral && (m.rank === 'member' || m.rank === 'honor')));
+    if (canKick) {
+      kickBtn = `<button class="btn-buy" style="padding:5px 8px;font-size:.55rem;background:transparent;border:1px solid rgba(192,57,43,.4);color:#e87070" onclick="kickMember('${m.character_id}','${name.replace(/'/g,"\\'")}')">🚪 Kick</button>`;
+    }
     return `<div class="guild-member-row">
       <span class="guild-rank-badge ${info.cls}">${info.icon}</span>
       <span class="gmr-name">${name} <span style="color:var(--dim);font-size:.65rem">Lvl ${lvl}</span></span>
       <span style="font-size:.65rem;color:var(--dim)">💰${m.gold_donated}</span>
       ${actionBtn}
+      ${kickBtn}
     </div>`;
   }).join('');
   document.getElementById('guildMembersOverlay').classList.add('active');
