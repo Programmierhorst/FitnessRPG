@@ -91,7 +91,9 @@ body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text)}
 .guild-rank-badge.general{background:rgba(91,127,232,.25);border:1px solid #5b7fe8;color:#8fa8e8}
 .guild-rank-badge.honor{background:rgba(142,68,173,.2);border:1px solid #8e44ad;color:#bb8fce}
 .guild-rank-badge.member{background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--dim)}
-.guild-chat-msgs{padding:10px 16px;display:flex;flex-direction:column;gap:6px;min-height:200px}
+.guild-chat-msgs{padding:10px 16px;display:flex;flex-direction:column;gap:6px;min-height:120px}
+/* Chat-Tab scrollt nicht selbst: nur die Nachrichtenliste scrollt, das Eingabefeld bleibt unten sichtbar */
+#guildChatTab{overflow:hidden}
 .guild-chat-msg{font-size:.85rem;line-height:1.4}
 .guild-chat-msg .gcm-name{color:var(--gold-l);font-family:'Cinzel',serif;font-size:.68rem;margin-right:6px}
 .guild-chat-msg .gcm-time{color:var(--dim);font-size:.6rem;margin-left:6px}
