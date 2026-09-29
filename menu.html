@@ -92,8 +92,8 @@ body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text)}
 .guild-rank-badge.honor{background:rgba(142,68,173,.2);border:1px solid #8e44ad;color:#bb8fce}
 .guild-rank-badge.member{background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--dim)}
 .guild-chat-msgs{padding:10px 16px;display:flex;flex-direction:column;gap:6px;min-height:120px}
-/* Chat-Tab scrollt nicht selbst: nur die Nachrichtenliste scrollt, das Eingabefeld bleibt unten sichtbar */
-#guildChatTab{overflow:hidden}
+/* #guildChatTab ist ein normales .rp-body (scrollt selbst); das Eingabefeld liegt als
+   eigenes Element (#guildChatFooter) AUSSERHALB davon und bleibt dadurch immer fix sichtbar. */
 .guild-chat-msg{font-size:.85rem;line-height:1.4}
 .guild-chat-msg .gcm-name{color:var(--gold-l);font-family:'Cinzel',serif;font-size:.68rem;margin-right:6px}
 .guild-chat-msg .gcm-time{color:var(--dim);font-size:.6rem;margin-left:6px}
@@ -1084,7 +1084,12 @@ body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text)}
       <button class="guild-tab-btn" id="guildTabChatBtn" onclick="switchGuildTab('chat')">💬 Chat</button>
     </div>
     <div class="rp-body" id="guildOverviewTab"></div>
-    <div class="rp-body" id="guildChatTab" style="display:none;flex-direction:column"></div>
+    <div class="rp-body" id="guildChatTab" style="display:none"></div>
+    <div class="guild-chat-input-row" id="guildChatFooter" style="display:none">
+      <input type="text" id="guildChatInput" maxlength="300" placeholder="Nachricht an die Gilde..."
+        onkeydown="if(event.key==='Enter') sendGuildChatMessage()"/>
+      <button class="btn-buy" onclick="sendGuildChatMessage()">➤</button>
+    </div>
   </div>
 </div>
 
@@ -4057,7 +4062,8 @@ function switchGuildTab(tab){
   document.getElementById('guildTabOverviewBtn').classList.toggle('active', tab==='overview');
   document.getElementById('guildTabChatBtn').classList.toggle('active', tab==='chat');
   document.getElementById('guildOverviewTab').style.display = tab==='overview' ? '' : 'none';
-  document.getElementById('guildChatTab').style.display = tab==='chat' ? 'flex' : 'none';
+  document.getElementById('guildChatTab').style.display = tab==='chat' ? '' : 'none';
+  document.getElementById('guildChatFooter').style.display = tab==='chat' ? 'flex' : 'none';
   document.getElementById('guildPanelTitle').textContent = `🏰 ${_myGuild.name}`;
   if (tab==='overview') renderGuildOverviewTab();
   else openGuildChat();
@@ -4290,23 +4296,17 @@ async function buyRaidBoost(weekKey, pct, cost){
 let _guildChatLastSig = null; // erkennt, ob sich die Nachrichten seit dem letzten Abruf geändert haben
 
 async function openGuildChat(){
-  // Chat-Gerüst (Nachrichtenliste + Eingabefeld) nur EINMAL aufbauen.
-  // Das Polling aktualisiert danach nur die Nachrichtenliste, damit angefangener Text erhalten bleibt.
-  document.getElementById('guildChatTab').innerHTML = `
-    <div class="guild-chat-msgs" style="flex:1;overflow-y:auto" id="guildChatMsgsInner"></div>
-    <div class="guild-chat-input-row">
-      <input type="text" id="guildChatInput" maxlength="300" placeholder="Nachricht an die Gilde..."
-        onkeydown="if(event.key==='Enter') sendGuildChatMessage()"/>
-      <button class="btn-buy" onclick="sendGuildChatMessage()">➤</button>
-    </div>`;
   _guildChatLastSig = null;
   await refreshGuildChat(true);
   if (_guildChatTimer) clearInterval(_guildChatTimer);
   _guildChatTimer = setInterval(refreshGuildChat, 6000);
 }
 
+// #guildChatTab ist selbst der scrollbare Bereich (ganz normales .rp-body, wie überall sonst
+// im Spiel) und enthält NUR die Nachrichten. Das Eingabefeld (#guildChatFooter) liegt als
+// eigenständiges Element daneben und wird nie neu aufgebaut oder mitgescrollt.
 async function refreshGuildChat(forceScroll){
-  const inner = document.getElementById('guildChatMsgsInner');
+  const inner = document.getElementById('guildChatTab');
   if (!inner || !_myGuild) return; // Chat-Tab nicht aufgebaut/sichtbar
   const {data} = await sb.from('guild_chat_messages').select('*')
     .eq('guild_id', _myGuild.id).order('created_at', {ascending:true}).limit(100);
@@ -4318,9 +4318,9 @@ async function refreshGuildChat(forceScroll){
 
   // Nur ans Ende scrollen, wenn man schon unten war (oder beim ersten Laden / nach dem Senden)
   const wasNearBottom = inner.scrollHeight - inner.scrollTop - inner.clientHeight < 60;
-  inner.innerHTML = msgs.map(m => `<div class="guild-chat-msg"><span class="gcm-name">${escapeHtml(m.character_name)}:</span>${escapeHtml(m.message)}
+  inner.innerHTML = '<div class="guild-chat-msgs">' + (msgs.map(m => `<div class="guild-chat-msg"><span class="gcm-name">${escapeHtml(m.character_name)}:</span>${escapeHtml(m.message)}
         <span class="gcm-time">${new Date(m.created_at).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}</span></div>`).join('')
-    || '<div style="color:var(--dim);font-size:.85rem;text-align:center;padding:20px">Noch keine Nachrichten. Schreib die erste!</div>';
+    || '<div style="color:var(--dim);font-size:.85rem;text-align:center;padding:20px">Noch keine Nachrichten. Schreib die erste!</div>') + '</div>';
   if (forceScroll === true || wasNearBottom) inner.scrollTop = inner.scrollHeight;
 }
 
