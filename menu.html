@@ -4311,17 +4311,28 @@ async function refreshGuildChat(forceScroll){
   const {data} = await sb.from('guild_chat_messages').select('*')
     .eq('guild_id', _myGuild.id).order('created_at', {ascending:true}).limit(100);
   const msgs = data || [];
-  // Nichts neu zeichnen, wenn keine neuen Nachrichten da sind
   const sig = msgs.length + ':' + (msgs.length ? msgs[msgs.length-1].id : '');
-  if (sig === _guildChatLastSig) return;
-  _guildChatLastSig = sig;
-
-  // Nur ans Ende scrollen, wenn man schon unten war (oder beim ersten Laden / nach dem Senden)
+  const changed = sig !== _guildChatLastSig;
+  // wasNearBottom am ALTEN Layout messen, bevor evtl. neu gezeichnet wird
   const wasNearBottom = inner.scrollHeight - inner.scrollTop - inner.clientHeight < 60;
-  inner.innerHTML = '<div class="guild-chat-msgs">' + (msgs.map(m => `<div class="guild-chat-msg"><span class="gcm-name">${escapeHtml(m.character_name)}:</span>${escapeHtml(m.message)}
+
+  if (changed) {
+    _guildChatLastSig = sig;
+    inner.innerHTML = '<div class="guild-chat-msgs">' + (msgs.map(m => `<div class="guild-chat-msg"><span class="gcm-name">${escapeHtml(m.character_name)}:</span>${escapeHtml(m.message)}
         <span class="gcm-time">${new Date(m.created_at).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}</span></div>`).join('')
-    || '<div style="color:var(--dim);font-size:.85rem;text-align:center;padding:20px">Noch keine Nachrichten. Schreib die erste!</div>') + '</div>';
-  if (forceScroll === true || wasNearBottom) inner.scrollTop = inner.scrollHeight;
+      || '<div style="color:var(--dim);font-size:.85rem;text-align:center;padding:20px">Noch keine Nachrichten. Schreib die erste!</div>') + '</div>';
+  }
+
+  // forceScroll wirkt IMMER, auch wenn ein zeitgleicher Hintergrund-Poll (alle 6 Sek.) die
+  // gleichen Nachrichten bereits gezeichnet und _guildChatLastSig gesetzt hat – sonst kann
+  // das erzwungene Scrollen nach dem eigenen Senden "verschluckt" werden. Doppeltes
+  // requestAnimationFrame stellt sicher, dass Layout/Schrift schon fertig berechnet sind,
+  // bevor gescrollt wird (sonst kann scrollHeight noch den alten, kleineren Wert liefern).
+  if (forceScroll === true || (changed && wasNearBottom)) {
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      inner.scrollTop = inner.scrollHeight;
+    }));
+  }
 }
 
 function escapeHtml(str){
