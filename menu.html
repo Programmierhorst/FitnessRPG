@@ -4294,12 +4294,23 @@ async function buyRaidBoost(weekKey, pct, cost){
 
 // ── Chat ───────────────────────────────────────────────────────
 let _guildChatLastSig = null; // erkennt, ob sich die Nachrichten seit dem letzten Abruf geändert haben
+let _guildChatRefreshChain = Promise.resolve(); // serialisiert alle Chat-Refreshes (verhindert Race Conditions)
+
+// Warteschlange statt direktem Aufruf: verhindert, dass ein zeitgleicher Hintergrund-Poll
+// (alle 6 Sek.) NACH dem eigenen, erzwungenen Refresh fertig wird und dessen Ergebnis
+// (z.B. die gerade gesendete Nachricht) wieder überschreibt ("runter, dann wieder hoch").
+function queueGuildChatRefresh(forceScroll){
+  _guildChatRefreshChain = _guildChatRefreshChain
+    .then(() => refreshGuildChat(forceScroll))
+    .catch(err => console.warn('Gildenchat-Refresh fehlgeschlagen:', err));
+  return _guildChatRefreshChain;
+}
 
 async function openGuildChat(){
   _guildChatLastSig = null;
-  await refreshGuildChat(true);
+  await queueGuildChatRefresh(true);
   if (_guildChatTimer) clearInterval(_guildChatTimer);
-  _guildChatTimer = setInterval(refreshGuildChat, 6000);
+  _guildChatTimer = setInterval(() => queueGuildChatRefresh(false), 6000);
 }
 
 // #guildChatTab ist selbst der scrollbare Bereich (ganz normales .rp-body, wie überall sonst
@@ -4350,7 +4361,7 @@ async function sendGuildChatMessage(){
     guild_id: _myGuild.id, character_id: character.id, character_name: character.name, message: msg
   }]);
   if (error) { showToast('⚠️', error.message); return; }
-  await refreshGuildChat(true);
+  await queueGuildChatRefresh(true);
   input.focus();
 }
 
