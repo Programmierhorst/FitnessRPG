@@ -70,6 +70,8 @@ body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text)}
   border-radius:2px;color:var(--gold-l);font-family:'Cinzel',serif;font-size:.6rem;letter-spacing:.1em;
   text-transform:uppercase;cursor:pointer;display:flex;align-items:center;gap:4px}
 .hud-guild-btn:hover{border-color:var(--gold);background:rgba(201,168,76,.18)}
+.guild-chat-dot{display:none;width:8px;height:8px;border-radius:50%;background:#e74c3c;
+  margin-left:5px;flex-shrink:0;box-shadow:0 0 5px rgba(231,76,60,.8)}
 
 /* ── GILDE ── */
 .guild-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0}
@@ -464,7 +466,7 @@ body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text)}
     <div>
       <div class="hud-name" id="hudName">Held</div>
       <div class="hud-level" id="hudLevel">Level 1</div>
-      <button class="hud-guild-btn" id="hudGuildBtn" onclick="openGuild()">🏰 <span id="hudGuildLabel">Gilde</span></button>
+      <button class="hud-guild-btn" id="hudGuildBtn" onclick="openGuild()">🏰 <span id="hudGuildLabel">Gilde</span><span class="guild-chat-dot" id="hudGuildDot"></span></button>
     </div>
     <div class="hud-gold">💰 <span id="hudGold">0</span> Gold</div>
     </div>
@@ -1081,7 +1083,7 @@ body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text)}
     </div>
     <div class="guild-tabs">
       <button class="guild-tab-btn active" id="guildTabOverviewBtn" onclick="switchGuildTab('overview')">📜 Übersicht</button>
-      <button class="guild-tab-btn" id="guildTabChatBtn" onclick="switchGuildTab('chat')">💬 Chat</button>
+      <button class="guild-tab-btn" id="guildTabChatBtn" onclick="switchGuildTab('chat')">💬 Chat<span class="guild-chat-dot" id="guildChatTabDot"></span></button>
     </div>
     <div class="rp-body" id="guildOverviewTab"></div>
     <div class="rp-body" id="guildChatTab" style="display:none"></div>
@@ -3949,9 +3951,38 @@ function updateGuildHudBadge(){
   lbl.textContent = _myGuild ? _myGuild.name : 'Gilde';
 }
 
+// ── Ungelesene Chat-Nachrichten: roter Punkt am Gilde-Button + am Chat-Tab ──────────────────
+function getGuildChatReadKey(guildId){ return 'guildChatRead_' + guildId; }
+function getGuildChatLastRead(guildId){
+  return localStorage.getItem(getGuildChatReadKey(guildId)) || '1970-01-01T00:00:00.000Z';
+}
+function markGuildChatRead(){
+  if (!_myGuild) return;
+  localStorage.setItem(getGuildChatReadKey(_myGuild.id), new Date().toISOString());
+  setGuildChatDots(false);
+}
+function setGuildChatDots(visible){
+  const hudDot = document.getElementById('hudGuildDot');
+  if (hudDot) hudDot.style.display = visible ? 'block' : 'none';
+  const tabDot = document.getElementById('guildChatTabDot');
+  if (tabDot) tabDot.style.display = visible ? 'block' : 'none';
+}
+// Fragt nur das Datum der neuesten Chat-Nachricht ab (kein voller Nachrichtenabruf) und
+// vergleicht es mit dem zuletzt gelesenen Stand – läuft auch, wenn die Gilde gar nicht offen ist.
+async function checkGuildChatUnread(){
+  if (!_myGuild) { setGuildChatDots(false); return; }
+  try {
+    const {data} = await sb.from('guild_chat_messages').select('created_at')
+      .eq('guild_id', _myGuild.id).order('created_at', {ascending:false}).limit(1);
+    const latest = data?.[0]?.created_at;
+    setGuildChatDots(!!latest && latest > getGuildChatLastRead(_myGuild.id));
+  } catch(e) { /* still, kein Punkt bei Fehler */ }
+}
+
 // ── Gilde öffnen: Router zwischen "keine Gilde" und Hauptansicht ─
 async function openGuild(){
   await loadMyGuildBonus();
+  await checkGuildChatUnread();
   if (!_myGuild) {
     await renderGuildBrowseList();
     document.getElementById('guildBrowseOverlay').classList.add('active');
@@ -4049,6 +4080,7 @@ async function leaveGuild(){
   await sb.rpc('guild_leave', {p_character_id: character.id});
   _myGuild = null; _myMembership = null; _guildMembers = [];
   updateGuildHudBadge();
+  setGuildChatDots(false);
   closeOverlay('guildOverlay');
   showToast('🚪','Gilde verlassen.');
 }
@@ -4309,8 +4341,9 @@ function queueGuildChatRefresh(forceScroll){
 async function openGuildChat(){
   _guildChatLastSig = null;
   await queueGuildChatRefresh(true);
+  markGuildChatRead();
   if (_guildChatTimer) clearInterval(_guildChatTimer);
-  _guildChatTimer = setInterval(() => queueGuildChatRefresh(false), 6000);
+  _guildChatTimer = setInterval(() => { queueGuildChatRefresh(false); markGuildChatRead(); }, 6000);
 }
 
 // #guildChatTab ist selbst der scrollbare Bereich (ganz normales .rp-body, wie überall sonst
@@ -4362,6 +4395,7 @@ async function sendGuildChatMessage(){
   }]);
   if (error) { showToast('⚠️', error.message); return; }
   await queueGuildChatRefresh(true);
+  markGuildChatRead();
   // Bewusst KEIN input.focus() hier: auf dem Handy öffnet das erneut die Tastatur, was das
   // Layout nach dem Scrollen noch einmal verschiebt und die gerade gesendete Nachricht wieder
   // verdeckt. Zum Weiterschreiben muss das Eingabefeld erneut angetippt werden.
@@ -4379,6 +4413,8 @@ closeOverlay = function(id){
 // updateStepsFromApp jetzt sicher aufgerufen werden kann.
 loadCharacter().then(async () => {
   await loadMyGuildBonus();
+  await checkGuildChatUnread();
+  setInterval(checkGuildChatUnread, 30000);
   if (window.FlutterBridge) {
     window.FlutterBridge.postMessage('ready');
   }
