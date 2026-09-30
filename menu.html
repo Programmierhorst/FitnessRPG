@@ -4362,7 +4362,9 @@ async function sendGuildChatMessage(){
   }]);
   if (error) { showToast('⚠️', error.message); return; }
   await queueGuildChatRefresh(true);
-  input.focus();
+  // Bewusst KEIN input.focus() hier: auf dem Handy öffnet das erneut die Tastatur, was das
+  // Layout nach dem Scrollen noch einmal verschiebt und die gerade gesendete Nachricht wieder
+  // verdeckt. Zum Weiterschreiben muss das Eingabefeld erneut angetippt werden.
 }
 
 // Chat-Polling stoppen, wenn das Overlay geschlossen wird
