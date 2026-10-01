@@ -1340,6 +1340,7 @@ async function loadCharacter(){
     .order('created_at',{ascending:false}).limit(1);
   if(!data||!data.length){ window.location.href='charakter.html'; return; }
   character = data[0];
+  syncDailyQuestsFromCharacter();
 
   // Inventar direkt beim Start laden, damit Item-Boni immer
   // für Kämpfe (startMission/startDungeon) verfügbar sind.
@@ -3348,9 +3349,9 @@ const DAILY_QUESTS = [
   {id:'water',   icon:'💧', title:'2 Liter Wasser trinken',       desc:'Trinke heute mindestens 2 Liter Wasser.',exp:30,  gold:3,  done:false},
 ];
 
-// Schritte-Stufe pro Tag lokal merken (gleiches Muster wie dungeonAttempts), damit ein Neuladen
-// die bereits abgeholten Stufen nicht zurücksetzt.
-const STEPS_KEY = 'dailyStepsProgress';
+// Der Fortschritt der täglichen Aufgaben liegt in Supabase (characters.steps_quest_day, steps_quest_tier,
+// water_quest_day; Datum als YYYYMMDD wie getTodayKey()). steps_quest_tier = Anzahl heute abgeholter
+// Schritte-Stufen (0–5, bei 5 ist die Aufgabe für heute komplett).
 
 function applyStepTier(q) {
   const t = STEP_TIERS[q.tier];
@@ -3363,25 +3364,26 @@ function applyStepTier(q) {
   q.current = Math.min(q.stepsToday || 0, q.goal);
 }
 
-function loadStepsProgress(q) {
-  let s = {};
-  try { s = JSON.parse(localStorage.getItem(STEPS_KEY) || '{}'); } catch(e) {}
-  q.day = getTodayKey();
-  if (s.day === q.day) {
-    q.tier = Math.min(Math.max(s.tier || 0, 0), STEP_TIERS.length - 1);
-    q.done = !!s.done;
-  } else {
-    q.tier = 0;
-    q.done = false;
+// Übernimmt den gespeicherten Tagesstand aus `character` in die Quests (Schritte-Stufe, Wasser erledigt).
+// Ist das gespeicherte Datum nicht heute, zählt alles als noch nicht abgeholt (neuer Tag).
+let _dailyQuestsDay = 0;
+function syncDailyQuestsFromCharacter() {
+  const today = getTodayKey();
+  const c = character || {};
+  _dailyQuestsDay = today;
+
+  const sq = DAILY_QUESTS.find(q => q.id === 'steps');
+  if (sq) {
+    const claimed = (c.steps_quest_day === today)
+      ? Math.min(Math.max(c.steps_quest_tier || 0, 0), STEP_TIERS.length) : 0;
+    sq.done = claimed >= STEP_TIERS.length;
+    sq.tier = Math.min(claimed, STEP_TIERS.length - 1);
+    applyStepTier(sq);
   }
-  applyStepTier(q);
-}
 
-function saveStepsProgress(q) {
-  try { localStorage.setItem(STEPS_KEY, JSON.stringify({day: getTodayKey(), tier: q.tier, done: q.done})); } catch(e) {}
+  const wq = DAILY_QUESTS.find(q => q.id === 'water');
+  if (wq) wq.done = (c.water_quest_day === today);
 }
-
-loadStepsProgress(DAILY_QUESTS.find(q => q.id === 'steps'));
 
 // Workout-Belohnung ist separat von den täglichen Quests
 const WORKOUT_QUEST = {id:'workout', icon:'💪', title:'Workout-Belohnung', done:false, statPoints:0, minutes:0};
@@ -3479,9 +3481,8 @@ function openKnight(){
 
 function renderDailyQuests(){
   const list = document.getElementById('dailyQuestList');
-  // Neuer Tag (App über Mitternacht offen): Schritte-Stufen zurücksetzen
-  const _sq = DAILY_QUESTS.find(q => q.id === 'steps');
-  if (_sq && _sq.day !== getTodayKey()) loadStepsProgress(_sq);
+  // Neuer Tag (App über Mitternacht offen): Tagesstand der Aufgaben neu berechnen
+  if (_dailyQuestsDay !== getTodayKey()) syncDailyQuestsFromCharacter();
   list.innerHTML = DAILY_QUESTS.map(q=>{
     const hasProgress = q.goal && !q.done;
     const pct = hasProgress ? Math.min(100, Math.round((q.current||0)/q.goal*100)) : 0;
@@ -3903,13 +3904,29 @@ async function completeQuest(id){
     // Lade aktuellen Stand
     const { data: chars } = await sb
       .from('characters')
-      .select('id, level, xp, gold')
+      .select('id, level, xp, gold, steps_quest_day, steps_quest_tier, water_quest_day')
       .eq('user_id', session.user.id)
       .order('created_at', {ascending:false})
       .limit(1);
 
-    if(!chars || !chars.length) return;
+    if(!chars || !chars.length) { q.done = false; renderDailyQuests(); return; }
     const char = chars[0];
+
+    // Schon auf einem anderen Gerät/Tab abgeholt? Dann keine zweite Belohnung, nur den Stand übernehmen.
+    const _today = getTodayKey();
+    const _claimedDb = id === 'steps'
+      ? (char.steps_quest_day === _today ? (char.steps_quest_tier || 0) : 0)
+      : (char.water_quest_day === _today ? 1 : 0);
+    const _claimedHere = id === 'steps' ? q.tier : 0;
+    if (_claimedDb > _claimedHere) {
+      character.steps_quest_day  = char.steps_quest_day;
+      character.steps_quest_tier = char.steps_quest_tier;
+      character.water_quest_day  = char.water_quest_day;
+      syncDailyQuestsFromCharacter();
+      renderDailyQuests();
+      showToast('ℹ️', 'Diese Aufgabe wurde heute schon abgeholt.');
+      return;
+    }
 
     let newXP   = (char.xp   || 0) + rewards.exp;
     let newGold = (char.gold  || 0) + rewards.gold;
@@ -3923,23 +3940,22 @@ async function completeQuest(id){
       } else break;
     }
 
-    await sb.from('characters')
-      .update({ xp: newXP, gold: newGold, level: newLevel })
-      .eq('id', char.id);
+    const upd = { xp: newXP, gold: newGold, level: newLevel };
+    if(id === 'steps') { upd.steps_quest_day = _today; upd.steps_quest_tier = q.tier + 1; }
+    if(id === 'water') { upd.water_quest_day = _today; }
+    const { error: updErr } = await sb.from('characters').update(upd).eq('id', char.id);
+    if(updErr) throw updErr;
 
     character.xp = newXP; character.gold = newGold; character.level = newLevel;
+    if(id === 'steps') { character.steps_quest_day = _today; character.steps_quest_tier = q.tier + 1; }
+    if(id === 'water') { character.water_quest_day = _today; }
     updateHUD();
     if(leveledUp) showLevelUpBanner(newLevel);
 
-    // Schritte-Aufgabe: nach erfolgreicher Belohnung nächste Stufe freischalten
-    if(id === 'steps') {
-      if(q.tier < STEP_TIERS.length - 1) {
-        q.tier++;
-        q.done = false;
-        applyStepTier(q);
-      }
-      saveStepsProgress(q);
-      showToast('🚶', `+${rewards.exp} EXP +${rewards.gold} 💰`);
+    // Tagesstand neu berechnen: bei Schritten erscheint die nächste Stufe, Wasser bleibt für heute erledigt
+    if(id === 'steps' || id === 'water') {
+      syncDailyQuestsFromCharacter();
+      showToast(id === 'steps' ? '🚶' : '💧', `+${rewards.exp} EXP +${rewards.gold} 💰`);
       renderDailyQuests();
       return;
     }
