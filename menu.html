@@ -4097,6 +4097,9 @@ function switchGuildTab(tab){
   document.getElementById('guildChatTab').style.display = tab==='chat' ? '' : 'none';
   document.getElementById('guildChatFooter').style.display = tab==='chat' ? 'flex' : 'none';
   document.getElementById('guildPanelTitle').textContent = `🏰 ${_myGuild.name}`;
+  // Chat-Polling (inkl. "als gelesen markieren") sofort stoppen, wenn man NICHT mehr im Chat-Tab ist –
+  // sonst markiert es im Hintergrund weiter Nachrichten als gelesen, die man gar nicht mehr sieht.
+  if (tab !== 'chat' && _guildChatTimer) { clearInterval(_guildChatTimer); _guildChatTimer = null; }
   if (tab==='overview') renderGuildOverviewTab();
   else openGuildChat();
 }
@@ -4411,6 +4414,12 @@ closeOverlay = function(id){
 // ── FLUTTER-HANDSHAKE ──────────────────────────────────────────
 // Web-App initialisieren, danach Flutter signalisieren, dass
 // updateStepsFromApp jetzt sicher aufgerufen werden kann.
+// Chat-Polling pausieren, sobald die App/der Tab in den Hintergrund geht – verhindert, dass ein
+// vergessen offen gelassener Chat-Tab endlos im Hintergrund Nachrichten als gelesen markiert.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && _guildChatTimer) { clearInterval(_guildChatTimer); _guildChatTimer = null; }
+});
+
 loadCharacter().then(async () => {
   await loadMyGuildBonus();
   await checkGuildChatUnread();
