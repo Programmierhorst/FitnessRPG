@@ -3494,6 +3494,8 @@ function timedStart(id) {
   if (t.startedAt) return;
   t.startedAt = Date.now();
   timedSave();
+  focusNotifyFlutter('start', id);
+  openFocus(id); // Timer läuft im eigenen Vollbild-Fenster
   renderDailyQuests();
 }
 
@@ -3505,6 +3507,7 @@ function timedPauseSilent(id) {
   t.acc += Date.now() - t.startedAt;
   t.startedAt = null;
   timedSave();
+  focusNotifyFlutter('pause', id);
 }
 
 function timedPause(id) {
@@ -3519,6 +3522,7 @@ async function timedReset(id) {
   t.acc = 0;
   t.startedAt = null;
   timedSave();
+  focusNotifyFlutter('stop', id);
   renderDailyQuests();
 }
 
@@ -3584,7 +3588,7 @@ function timedTickFn() {
     if (!TIMED_QUESTS[q.id] || q.done) continue;
     const t = timedView(q.id);
     if (t.finished) {
-      showToast(TIMED_QUESTS[q.id].icon, 'Zeit geschafft! Hol dir deine Belohnung ab.');
+      if (!_focusId) showToast(TIMED_QUESTS[q.id].icon, 'Zeit geschafft! Hol dir deine Belohnung ab.');
       renderDailyQuests();
       return;
     }
@@ -3593,6 +3597,97 @@ function timedTickFn() {
     if (txt) txt.textContent = fmtTimedTime(TIMED_GOAL_MS - t.elapsed);
     if (bar) bar.style.width = Math.round(t.elapsed / TIMED_GOAL_MS * 100) + '%';
   }
+}
+
+// ── FOKUS-FENSTER für Zeit-Aufgaben ──
+// Vollbild, fast schwarz, nur Restzeit + Fortschrittslinie, damit nichts ablenkt (kein HUD, kein Chat, kein Menü).
+// Der Timer selbst rechnet weiter mit Zeitstempeln; das Fenster zeigt ihn nur an.
+let _focusId = null;
+let _focusTickId = null;
+let _focusShownState = '';
+
+// Meldet den Timer-Stand an die Flutter-App (JS-Kanal "FlutterBridge"), damit sie daraus eine
+// Benachrichtigung mit Countdown für den Sperrbildschirm bauen kann. Ohne Flutter passiert nichts.
+// Nachricht (JSON-Text): {type:'focusTimer', action:'start'|'pause'|'stop', questId, title, remainingMs, endsAt}
+// endsAt = Zeitpunkt (ms seit 1970), an dem der Timer abläuft; nur bei 'start' gesetzt, sonst 0.
+function focusNotifyFlutter(action, id) {
+  try {
+    if (!window.FlutterBridge || typeof window.FlutterBridge.postMessage !== 'function') return;
+    const v = timedView(id);
+    const q = DAILY_QUESTS.find(x => x.id === id);
+    window.FlutterBridge.postMessage(JSON.stringify({
+      type: 'focusTimer', action, questId: id, title: q ? q.title : '',
+      remainingMs: Math.max(0, TIMED_GOAL_MS - v.elapsed),
+      endsAt: v.running ? Date.now() + (TIMED_GOAL_MS - v.elapsed) : 0,
+    }));
+  } catch(e) {}
+}
+
+function openFocus(id) {
+  const q = DAILY_QUESTS.find(x => x.id === id);
+  const ov = document.getElementById('focusOverlay');
+  if (!q || !ov) return;
+  _focusId = id;
+  _focusShownState = '';
+  document.getElementById('focusTitle').textContent = q.title;
+  ov.style.display = 'flex';
+  renderFocus();
+  if (!_focusTickId) _focusTickId = setInterval(renderFocus, 250);
+}
+
+function closeFocus() {
+  const ov = document.getElementById('focusOverlay');
+  if (ov) ov.style.display = 'none';
+  if (_focusTickId) { clearInterval(_focusTickId); _focusTickId = null; }
+  _focusId = null;
+  renderDailyQuests();
+}
+
+function focusPause() {
+  if (!_focusId) return;
+  timedPauseSilent(_focusId);
+  renderFocus();
+}
+
+// Zurück zu den Aufgaben: ein laufender Timer wird dabei pausiert (mit Nachfrage)
+async function focusBack() {
+  if (!_focusId) return;
+  if (timedView(_focusId).running) {
+    const ok = await showConfirmDialog('⏸', 'Timer pausieren und das Fenster schließen?', 'Pausieren', 'Abbrechen');
+    if (!ok || !_focusId) return;
+    timedPauseSilent(_focusId);
+  }
+  closeFocus();
+}
+
+function focusClaim() {
+  const id = _focusId;
+  closeFocus();
+  if (id) claimTimedTimer(id);
+}
+
+function renderFocus() {
+  if (!_focusId) return;
+  const t = timedView(_focusId);
+  const state = t.finished ? 'done' : (t.running ? 'run' : 'pause');
+  document.getElementById('focusTime').textContent = fmtTimedTime(TIMED_GOAL_MS - t.elapsed);
+  document.getElementById('focusBar').style.width = Math.round(t.elapsed / TIMED_GOAL_MS * 100) + '%';
+  if (state === _focusShownState) return; // Buttons nur bei Zustandswechsel neu bauen
+  _focusShownState = state;
+
+  document.getElementById('focusState').textContent = {done:'Geschafft', run:'', pause:'Pausiert'}[state];
+  const ghost = 'padding:12px 26px;background:transparent;border:1px solid #3a3320;border-radius:2px;color:#8f7f4f;font-family:Cinzel,serif;font-size:.8rem;letter-spacing:.15em;cursor:pointer';
+  const gold  = 'padding:12px 26px;background:#8f7a3a;border:none;border-radius:2px;color:#0a0a0a;font-family:Cinzel,serif;font-size:.8rem;letter-spacing:.15em;cursor:pointer';
+  let html = '';
+  if (state === 'done') {
+    html = `<button style="${gold}" onclick="focusClaim()">Belohnung abholen</button>`;
+    try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch(e) {}
+  } else if (state === 'run') {
+    html = `<button style="${ghost}" onclick="focusPause()">Pause</button><button style="${ghost}" onclick="focusBack()">Zurück</button>`;
+  } else {
+    html = `<button style="${gold}" onclick="timedStart('${_focusId}')">Fortsetzen</button><button style="${ghost}" onclick="focusBack()">Zurück</button>`;
+  }
+  document.getElementById('focusButtons').innerHTML = html;
 }
 
 function renderTimedQuestCard(q) {
@@ -3622,7 +3717,7 @@ function renderTimedQuestCard(q) {
       buttons = `<button style="${gold}" onclick="claimTimedTimer('${q.id}')">Belohnung abholen ✓</button>`;
     } else {
       buttons = t.running
-        ? `<button style="${ghost}" onclick="timedPause('${q.id}')">⏸ Pause</button>`
+        ? `<button style="${gold}" onclick="openFocus('${q.id}')">⛶ Timer-Fenster öffnen</button><button style="${ghost}" onclick="timedPause('${q.id}')">⏸ Pause</button>`
         : `<button style="${gold}" onclick="timedStart('${q.id}')">▶ ${t.elapsed > 0 ? 'Fortsetzen' : 'Timer starten'}</button>`;
       if (t.elapsed > 0) buttons += `<button style="${ghost}" onclick="timedReset('${q.id}')">↺ Zurücksetzen</button>`;
       buttons += `<button style="${ghost}" onclick="claimTimedManual('${q.id}')">${cfg.manualLabel}</button>`;
@@ -4229,7 +4324,7 @@ async function completeQuest(id){
 
     // Tagesstand neu berechnen: bei Schritten erscheint die nächste Stufe, Wasser bleibt für heute erledigt
     if(id === 'steps' || id === 'water' || _tq) {
-      if(_tq) { const _t = timerOf(id); _t.acc = 0; _t.startedAt = null; timedSave(); }
+      if(_tq) { const _t = timerOf(id); _t.acc = 0; _t.startedAt = null; timedSave(); focusNotifyFlutter('stop', id); }
       syncDailyQuestsFromCharacter();
       const _extra = _tq ? ` +1 ${_tq.statIcon} ${_tq.statLabel}` : '';
       showToast(id === 'steps' ? '🚶' : (_tq ? _tq.icon : '💧'), `+${rewards.exp} EXP +${rewards.gold} 💰${_extra}`);
@@ -4848,6 +4943,19 @@ loadCharacter().then(async () => {
 </div>
 
 <!-- ── CONFIRM OVERLAY ── -->
+<!-- FOKUS-FENSTER für Zeit-Aufgaben: ganzer Bildschirm, dunkel, nur Restzeit -->
+<div id="focusOverlay" style="display:none;position:fixed;inset:0;z-index:180;background:#050506;
+  flex-direction:column;align-items:center;justify-content:center;gap:26px;text-align:center;
+  padding:24px;padding-top:calc(24px + env(safe-area-inset-top));padding-bottom:calc(24px + env(safe-area-inset-bottom))">
+  <div id="focusTitle" style="font-family:Cinzel,serif;font-size:.8rem;letter-spacing:.25em;color:#5c5540;text-transform:uppercase"></div>
+  <div id="focusTime" style="font-family:Cinzel,serif;font-size:4.6rem;color:#a8955f;letter-spacing:.06em;font-variant-numeric:tabular-nums">30:00</div>
+  <div style="width:min(70vw,260px);height:2px;background:#15140f;border-radius:2px;overflow:hidden">
+    <div id="focusBar" style="height:100%;width:0;background:#6b5a2c"></div>
+  </div>
+  <div id="focusState" style="font-family:Cinzel,serif;font-size:.75rem;letter-spacing:.2em;color:#5c5540;min-height:1em"></div>
+  <div id="focusButtons" style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center"></div>
+</div>
+
 <div class="overlay" id="confirmOverlay" style="z-index:200">
   <div style="background:var(--card);border:1px solid var(--border);border-radius:4px;
     width:min(320px,90vw);padding:28px 24px;text-align:center;
