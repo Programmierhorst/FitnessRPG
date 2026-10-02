@@ -3344,12 +3344,16 @@ const STEP_TIERS = [
   {goal:10000, exp:450, gold:45},
 ];
 
+// Beide Quests des tauschbaren Platzes haben dieselbe Belohnung; nur der Statpunkt unterscheidet sich.
+// ACHTUNG: EXP/Gold vorläufig – Balancing folgt später.
+const FOCUS_REWARD = {exp:100, gold:10};
+
 const DAILY_QUESTS = [
   {id:'steps',   icon:'🚶', title:'1.000 Schritte gehen',        desc:'Gehe heute mindestens 1.000 Schritte.',  exp:50,  gold:5,  done:false, goal:1000, current:0, tier:0, stepsToday:0},
   {id:'water',   icon:'💧', title:'2 Liter Wasser trinken',       desc:'Trinke heute mindestens 2 Liter Wasser.',exp:30,  gold:3,  done:false},
-  // Lese-Aufgabe: 30 Min lesen (Timer mit Pause oder manuelle Angabe). Belohnung zusätzlich +1 Intelligenz.
-  // ACHTUNG: EXP/Gold vorläufig – Balancing folgt später.
-  {id:'read',    icon:'📖', title:'30 Minuten lesen',             desc:'Lies heute 30 Minuten. Starte den Timer oder bestätige, dass du gelesen hast.', exp:100, gold:10, done:false},
+  // Tauschbarer Platz "focus": entweder Lesen ODER Instrument üben (siehe QUEST_SLOTS)
+  {id:'read',       icon:'📖', title:'30 Minuten lesen',          desc:'Lies heute 30 Minuten. Starte den Timer oder bestätige, dass du gelesen hast.',          exp:FOCUS_REWARD.exp, gold:FOCUS_REWARD.gold, done:false},
+  {id:'instrument', icon:'🎸', title:'30 Minuten Instrument üben', desc:'Übe heute 30 Minuten ein Instrument. Starte den Timer oder bestätige, dass du geübt hast.', exp:FOCUS_REWARD.exp, gold:FOCUS_REWARD.gold, done:false},
 ];
 
 // Der Fortschritt der täglichen Aufgaben liegt in Supabase (characters.steps_quest_day, steps_quest_tier,
@@ -3387,119 +3391,217 @@ function syncDailyQuestsFromCharacter() {
   const wq = DAILY_QUESTS.find(q => q.id === 'water');
   if (wq) wq.done = (c.water_quest_day === today);
 
-  const rq = DAILY_QUESTS.find(q => q.id === 'read');
-  if (rq) rq.done = (c.read_quest_day === today);
+  // Zeit-Aufgaben (Lesen, Instrument üben): "erledigt" = heute abgeholt
+  Object.keys(TIMED_QUESTS).forEach(id => {
+    const tq = DAILY_QUESTS.find(q => q.id === id);
+    if (tq) tq.done = (c[TIMED_QUESTS[id].dayCol] === today);
+  });
 }
 
-// ── LESE-AUFGABE: Timer mit Pause ──
-// Der Timer läuft mit Zeitstempeln (nicht mit einem zählenden Intervall). So läuft er weiter, auch wenn die App
-// im Hintergrund ist oder neu geladen wird. Gespeichert wird nur der Timer (localStorage, pro Tag);
-// ob die Belohnung abgeholt wurde, steht in Supabase (characters.read_quest_day).
-const READ_GOAL_MS = 30 * 60 * 1000;
-const READ_KEY = 'readQuestTimer';
-let _readTimer = {day:0, acc:0, startedAt:null}; // acc = bisher gelesene ms, startedAt = Startzeit des laufenden Abschnitts
-let _readTick = null;
+// ── ZEIT-AUFGABEN (Lesen, Instrument üben): Timer mit Pause ──
+// Jede Zeit-Aufgabe hat einen eigenen Timer. Er läuft mit Zeitstempeln (nicht mit einem zählenden Intervall), läuft also
+// auch weiter, wenn die App im Hintergrund ist oder neu geladen wird. Gespeichert wird nur der Timer
+// (localStorage, pro Tag); ob die Belohnung abgeholt wurde, steht in Supabase (je Quest eine *_quest_day-Spalte).
+const TIMED_GOAL_MS = 30 * 60 * 1000;
+const TIMED_KEY = 'timedQuestTimers';
+const TIMED_QUESTS = {
+  read: {
+    dayCol:'read_quest_day', stat:'intelligenz', statLabel:'Intelligenz', statIcon:'🔮', icon:'📖',
+    confirmText:'Hast du heute wirklich <b>30 Minuten</b> gelesen?', yesLabel:'Ja, gelesen', manualLabel:'Habe gelesen ✓',
+  },
+  instrument: {
+    dayCol:'instrument_quest_day', stat:'gewandheit', statLabel:'Gewandheit', statIcon:'🌿', icon:'🎸',
+    confirmText:'Hast du heute wirklich <b>30 Minuten</b> ein Instrument geübt?', yesLabel:'Ja, geübt', manualLabel:'Habe geübt ✓',
+  },
+};
 
-function readTimerLoad() {
+// Tauschbare Plätze: pro Tag zählt nur EINE der Optionen. Neue Tausch-Paare = hier eintragen.
+// Hat man heute eine Option schon abgeholt, bleibt sie für den Tag fest (kein Tauschen mehr).
+const QUEST_SLOTS = [
+  {id:'focus', options:['read', 'instrument'], def:'read'},
+];
+
+let _timedState = {day:0, timers:{}}; // timers[questId] = {acc: bisher ms, startedAt: Startzeit des laufenden Abschnitts}
+let _timedTick = null;
+
+// Ist in `c` (character oder frisch geladene Zeile) eine Option dieses Platzes heute schon abgeholt?
+function slotClaimedToday(slot, c) {
   const today = getTodayKey();
-  if (_readTimer.day === today) return;
-  let s = null;
-  try { s = JSON.parse(localStorage.getItem(READ_KEY) || 'null'); } catch(e) {}
-  _readTimer = (s && s.day === today)
-    ? {day: today, acc: s.acc || 0, startedAt: s.startedAt || null}
-    : {day: today, acc: 0, startedAt: null};
+  return slot.options.some(o => TIMED_QUESTS[o] && c && c[TIMED_QUESTS[o].dayCol] === today);
 }
 
-function readTimerSave() {
-  try { localStorage.setItem(READ_KEY, JSON.stringify(_readTimer)); } catch(e) {}
-}
-
-// Aktueller Stand des Timers; friert ihn ein, sobald die 30 Minuten voll sind
-function readTimerView() {
-  readTimerLoad();
-  const run = _readTimer.startedAt ? Date.now() - _readTimer.startedAt : 0;
-  const elapsed = Math.min(READ_GOAL_MS, _readTimer.acc + run);
-  const finished = elapsed >= READ_GOAL_MS;
-  if (finished && _readTimer.startedAt) {
-    _readTimer.acc = READ_GOAL_MS;
-    _readTimer.startedAt = null;
-    readTimerSave();
+// Welche Option des Platzes ist aktuell sichtbar?
+function getSlotChoice(slot) {
+  const c = character || {};
+  const today = getTodayKey();
+  for (const o of slot.options) {
+    if (TIMED_QUESTS[o] && c[TIMED_QUESTS[o].dayCol] === today) return o; // heute abgeholt -> bleibt
   }
-  return {elapsed, finished, running: !!_readTimer.startedAt && !finished};
+  const v = (c.quest_choices || {})[slot.id];
+  return slot.options.includes(v) ? v : slot.def;
 }
 
-function fmtReadTime(ms) {
+// Die täglichen Quests, die heute angezeigt werden (Schritte, Wasser + je Platz die gewählte Option = 3 Quests)
+function getActiveDailyQuests() {
+  const hidden = new Set();
+  QUEST_SLOTS.forEach(s => {
+    const ch = getSlotChoice(s);
+    s.options.forEach(o => { if (o !== ch) hidden.add(o); });
+  });
+  return DAILY_QUESTS.filter(q => !hidden.has(q.id));
+}
+
+function timedLoad() {
+  const today = getTodayKey();
+  if (_timedState.day === today) return;
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem(TIMED_KEY) || 'null'); } catch(e) {}
+  _timedState = (s && s.day === today && s.timers) ? {day: today, timers: s.timers} : {day: today, timers: {}};
+}
+
+function timedSave() {
+  try { localStorage.setItem(TIMED_KEY, JSON.stringify(_timedState)); } catch(e) {}
+}
+
+function timerOf(id) {
+  timedLoad();
+  if (!_timedState.timers[id]) _timedState.timers[id] = {acc: 0, startedAt: null};
+  return _timedState.timers[id];
+}
+
+// Aktueller Stand eines Timers; friert ihn ein, sobald die 30 Minuten voll sind
+function timedView(id) {
+  const t = timerOf(id);
+  const run = t.startedAt ? Date.now() - t.startedAt : 0;
+  const elapsed = Math.min(TIMED_GOAL_MS, t.acc + run);
+  const finished = elapsed >= TIMED_GOAL_MS;
+  if (finished && t.startedAt) {
+    t.acc = TIMED_GOAL_MS;
+    t.startedAt = null;
+    timedSave();
+  }
+  return {elapsed, finished, running: !!t.startedAt && !finished};
+}
+
+function fmtTimedTime(ms) {
   const s = Math.max(0, Math.ceil(ms / 1000));
   return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
 }
 
-function readTimerStart() {
-  readTimerView();
-  if (_readTimer.startedAt) return;
-  _readTimer.startedAt = Date.now();
-  readTimerSave();
+function timedStart(id) {
+  timedView(id);
+  const t = timerOf(id);
+  if (t.startedAt) return;
+  t.startedAt = Date.now();
+  timedSave();
   renderDailyQuests();
 }
 
-function readTimerPause() {
-  readTimerView();
-  if (!_readTimer.startedAt) return;
-  _readTimer.acc += Date.now() - _readTimer.startedAt;
-  _readTimer.startedAt = null;
-  readTimerSave();
+// Pausiert den Timer, ohne neu zu zeichnen (wird auch beim Tauschen benutzt)
+function timedPauseSilent(id) {
+  timedView(id);
+  const t = timerOf(id);
+  if (!t.startedAt) return;
+  t.acc += Date.now() - t.startedAt;
+  t.startedAt = null;
+  timedSave();
+}
+
+function timedPause(id) {
+  timedPauseSilent(id);
   renderDailyQuests();
 }
 
-async function readTimerReset() {
+async function timedReset(id) {
   const ok = await showConfirmDialog('↺', 'Timer wirklich auf 30:00 zurücksetzen?', 'Zurücksetzen', 'Abbrechen');
   if (!ok) return;
-  _readTimer = {day: getTodayKey(), acc: 0, startedAt: null};
-  readTimerSave();
+  const t = timerOf(id);
+  t.acc = 0;
+  t.startedAt = null;
+  timedSave();
   renderDailyQuests();
 }
 
 // Abholen, nachdem der Timer abgelaufen ist
-function claimReadTimer() {
-  if (readTimerView().finished) completeQuest('read');
+function claimTimedTimer(id) {
+  if (timedView(id).finished) completeQuest(id);
 }
 
-// Abholen per Angabe „30 Minuten gelesen“ (mit Sicherheitsabfrage, wie beim Workout)
-async function claimReadManual() {
-  const q = DAILY_QUESTS.find(x => x.id === 'read');
-  if (!q || q.done) return;
-  const ok = await showConfirmDialog('📖', 'Hast du heute wirklich <b>30 Minuten</b> gelesen?', 'Ja, gelesen', 'Abbrechen');
-  if (ok) completeQuest('read');
+// Abholen per Angabe (mit Sicherheitsabfrage, wie beim Workout)
+async function claimTimedManual(id) {
+  const q = DAILY_QUESTS.find(x => x.id === id);
+  const cfg = TIMED_QUESTS[id];
+  if (!q || !cfg || q.done) return;
+  const ok = await showConfirmDialog(cfg.icon, cfg.confirmText, cfg.yesLabel, 'Abbrechen');
+  if (ok) completeQuest(id);
 }
 
-// Sekundentakt nur, solange der Timer läuft und das Aufgaben-Fenster offen ist
-function ensureReadTick() {
-  const t = readTimerView();
-  const rq = DAILY_QUESTS.find(x => x.id === 'read');
-  const need = t.running && rq && !rq.done;
-  if (need && !_readTick) _readTick = setInterval(readTick, 1000);
-  if (!need && _readTick) { clearInterval(_readTick); _readTick = null; }
-}
-
-function readTick() {
-  const ov = document.getElementById('knightOverlay');
-  if (!ov || !ov.classList.contains('active')) { clearInterval(_readTick); _readTick = null; return; }
-  const t = readTimerView();
-  if (t.finished) {
-    showToast('📖', 'Lesezeit geschafft! Hol dir deine Belohnung ab.');
-    renderDailyQuests();
+// Quest des tauschbaren Platzes gegen die nächste Option tauschen (nur solange heute nichts abgeholt wurde)
+async function swapQuestSlot(slotId) {
+  const slot = QUEST_SLOTS.find(s => s.id === slotId);
+  if (!slot || !character) return;
+  if (slotClaimedToday(slot, character)) {
+    showToast('ℹ️', 'Heute schon abgeholt – getauscht werden kann erst morgen wieder.');
     return;
   }
-  const txt = document.getElementById('readTimerText');
-  const bar = document.getElementById('readTimerBar');
-  if (txt) txt.textContent = fmtReadTime(READ_GOAL_MS - t.elapsed);
-  if (bar) bar.style.width = Math.round(t.elapsed / READ_GOAL_MS * 100) + '%';
+  const cur  = getSlotChoice(slot);
+  const next = slot.options[(slot.options.indexOf(cur) + 1) % slot.options.length];
+  const qc = DAILY_QUESTS.find(q => q.id === cur);
+  const qn = DAILY_QUESTS.find(q => q.id === next);
+  const cn = TIMED_QUESTS[next];
+  const ok = await showConfirmDialog('🔄',
+    `„${qc.title}“ gegen „${qn.title}“ tauschen?<br><br>Die Belohnungen bleiben gleich, nur der Statpunkt wechselt zu ${cn.statIcon} ${cn.statLabel}.`,
+    'Tauschen', 'Abbrechen');
+  if (!ok) return;
+
+  try {
+    const { data:{session} } = await sb.auth.getSession();
+    if (!session) return;
+    const choices = Object.assign({}, character.quest_choices || {}, {[slot.id]: next});
+    const { error } = await sb.from('characters').update({quest_choices: choices}).eq('id', character.id);
+    if (error) throw error;
+    character.quest_choices = choices;
+    timedPauseSilent(cur); // Fortschritt der abgewählten Quest bleibt erhalten, läuft aber nicht weiter
+    showToast('🔄', `Getauscht: ${qn.title}`);
+  } catch(err) {
+    console.error('Tauschen fehlgeschlagen:', err);
+    showToast('⚠️', 'Tauschen fehlgeschlagen. Bitte nochmal versuchen.');
+  }
+  renderDailyQuests();
 }
 
-function renderReadQuestCard(q) {
+// Sekundentakt nur, solange ein Timer läuft und das Aufgaben-Fenster offen ist
+function ensureTimedTick() {
+  const need = getActiveDailyQuests().some(q => TIMED_QUESTS[q.id] && !q.done && timedView(q.id).running);
+  if (need && !_timedTick) _timedTick = setInterval(timedTickFn, 1000);
+  if (!need && _timedTick) { clearInterval(_timedTick); _timedTick = null; }
+}
+
+function timedTickFn() {
+  const ov = document.getElementById('knightOverlay');
+  if (!ov || !ov.classList.contains('active')) { clearInterval(_timedTick); _timedTick = null; return; }
+  for (const q of getActiveDailyQuests()) {
+    if (!TIMED_QUESTS[q.id] || q.done) continue;
+    const t = timedView(q.id);
+    if (t.finished) {
+      showToast(TIMED_QUESTS[q.id].icon, 'Zeit geschafft! Hol dir deine Belohnung ab.');
+      renderDailyQuests();
+      return;
+    }
+    const txt = document.getElementById('timedText_' + q.id);
+    const bar = document.getElementById('timedBar_' + q.id);
+    if (txt) txt.textContent = fmtTimedTime(TIMED_GOAL_MS - t.elapsed);
+    if (bar) bar.style.width = Math.round(t.elapsed / TIMED_GOAL_MS * 100) + '%';
+  }
+}
+
+function renderTimedQuestCard(q) {
+  const cfg = TIMED_QUESTS[q.id];
   const gold  = 'padding:5px 12px;background:linear-gradient(135deg,var(--gold-d),var(--gold));border:none;border-radius:2px;color:#1a1200;font-family:Cinzel,serif;font-size:.6rem;letter-spacing:.08em;cursor:pointer';
   const ghost = 'padding:5px 12px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:2px;color:var(--text);font-family:Cinzel,serif;font-size:.6rem;letter-spacing:.08em;cursor:pointer';
-  const t = readTimerView();
-  const pct = Math.round(t.elapsed / READ_GOAL_MS * 100);
+  const t = timedView(q.id);
+  const pct = Math.round(t.elapsed / TIMED_GOAL_MS * 100);
+  const slot = QUEST_SLOTS.find(s => s.options.includes(q.id));
 
   let progress = '';
   let buttons = '';
@@ -3509,21 +3611,25 @@ function renderReadQuestCard(q) {
         <div style="display:flex;justify-content:space-between;
           font-family:Cinzel,serif;font-size:.6rem;color:var(--dim);margin-bottom:4px">
           <span>${t.finished ? 'Geschafft!' : (t.running ? 'Timer läuft – noch' : (t.elapsed > 0 ? 'Pausiert – noch' : 'Noch'))}</span>
-          <span id="readTimerText">${fmtReadTime(READ_GOAL_MS - t.elapsed)}</span>
+          <span id="timedText_${q.id}">${fmtTimedTime(TIMED_GOAL_MS - t.elapsed)}</span>
         </div>
         <div style="height:6px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden">
-          <div id="readTimerBar" style="height:100%;width:${pct}%;background:linear-gradient(90deg,var(--gold-d),var(--gold-l));
+          <div id="timedBar_${q.id}" style="height:100%;width:${pct}%;background:linear-gradient(90deg,var(--gold-d),var(--gold-l));
             border-radius:3px"></div>
         </div>
       </div>`;
     if (t.finished) {
-      buttons = `<button style="${gold}" onclick="claimReadTimer()">Belohnung abholen ✓</button>`;
+      buttons = `<button style="${gold}" onclick="claimTimedTimer('${q.id}')">Belohnung abholen ✓</button>`;
     } else {
       buttons = t.running
-        ? `<button style="${ghost}" onclick="readTimerPause()">⏸ Pause</button>`
-        : `<button style="${gold}" onclick="readTimerStart()">▶ ${t.elapsed > 0 ? 'Fortsetzen' : 'Timer starten'}</button>`;
-      if (t.elapsed > 0) buttons += `<button style="${ghost}" onclick="readTimerReset()">↺ Zurücksetzen</button>`;
-      buttons += `<button style="${ghost}" onclick="claimReadManual()">Habe gelesen ✓</button>`;
+        ? `<button style="${ghost}" onclick="timedPause('${q.id}')">⏸ Pause</button>`
+        : `<button style="${gold}" onclick="timedStart('${q.id}')">▶ ${t.elapsed > 0 ? 'Fortsetzen' : 'Timer starten'}</button>`;
+      if (t.elapsed > 0) buttons += `<button style="${ghost}" onclick="timedReset('${q.id}')">↺ Zurücksetzen</button>`;
+      buttons += `<button style="${ghost}" onclick="claimTimedManual('${q.id}')">${cfg.manualLabel}</button>`;
+    }
+    // Tauschen nur, wenn der Platz mehrere Optionen hat und heute noch nichts abgeholt wurde
+    if (slot && slot.options.length > 1 && !t.finished) {
+      buttons += `<button style="${ghost}" onclick="swapQuestSlot('${slot.id}')">🔄 Tauschen</button>`;
     }
   }
 
@@ -3535,7 +3641,7 @@ function renderReadQuestCard(q) {
       <div class="mc-rewards" style="margin-top:8px">
         <span class="mc-reward exp">✨ ${q.exp} EXP</span>
         <span class="mc-reward gold">💰 ${q.gold} Gold</span>
-        <span class="mc-reward">🔮 +1 Intelligenz</span>
+        <span class="mc-reward">${cfg.statIcon} +1 ${cfg.statLabel}</span>
       </div>
       ${buttons ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">${buttons}</div>` : ''}
     </div>`;
@@ -3639,8 +3745,8 @@ function renderDailyQuests(){
   const list = document.getElementById('dailyQuestList');
   // Neuer Tag (App über Mitternacht offen): Tagesstand der Aufgaben neu berechnen
   if (_dailyQuestsDay !== getTodayKey()) syncDailyQuestsFromCharacter();
-  list.innerHTML = DAILY_QUESTS.map(q=>{
-    if (q.id === 'read') return renderReadQuestCard(q);
+  list.innerHTML = getActiveDailyQuests().map(q=>{
+    if (TIMED_QUESTS[q.id]) return renderTimedQuestCard(q);
     const hasProgress = q.goal && !q.done;
     const pct = hasProgress ? Math.min(100, Math.round((q.current||0)/q.goal*100)) : 0;
     const progressBar = hasProgress ? `
@@ -3672,7 +3778,7 @@ function renderDailyQuests(){
   }).join('');
 
   renderWorkoutSection();
-  ensureReadTick();
+  ensureTimedTick();
 }
 
 function renderWorkoutSection(){
@@ -4047,6 +4153,8 @@ async function completeQuest(id){
   if(!q||q.done) return;
   // Sicherheitscheck: Schritte-Stufe nur abholbar, wenn das Ziel wirklich erreicht ist
   if(q.goal && (q.current||0) < q.goal) return;
+  // Nur Quests, die heute wirklich angezeigt werden (tauschbare Plätze: nur die gewählte Option)
+  if(!getActiveDailyQuests().includes(q)) return;
   q.done = true;
   renderDailyQuests();
 
@@ -4062,7 +4170,7 @@ async function completeQuest(id){
     // Lade aktuellen Stand
     const { data: chars } = await sb
       .from('characters')
-      .select('id, level, xp, gold, intelligenz, steps_quest_day, steps_quest_tier, water_quest_day, read_quest_day')
+      .select('id, level, xp, gold, intelligenz, gewandheit, steps_quest_day, steps_quest_tier, water_quest_day, read_quest_day, instrument_quest_day')
       .eq('user_id', session.user.id)
       .order('created_at', {ascending:false})
       .limit(1);
@@ -4072,10 +4180,13 @@ async function completeQuest(id){
 
     // Schon auf einem anderen Gerät/Tab abgeholt? Dann keine zweite Belohnung, nur den Stand übernehmen.
     const _today = getTodayKey();
+    const _tq = TIMED_QUESTS[id]; // Zeit-Aufgabe (Lesen / Instrument)? sonst undefined
+    const _slotOfId = QUEST_SLOTS.find(s => s.options.includes(id));
     const _claimedDb = id === 'steps'
       ? (char.steps_quest_day === _today ? (char.steps_quest_tier || 0) : 0)
-      : id === 'read'
-        ? (char.read_quest_day === _today ? 1 : 0)
+      : _tq
+        // pro Platz zählt nur eine Quest pro Tag: ist irgendeine Option heute abgeholt, gilt der Platz als erledigt
+        ? ((_slotOfId ? slotClaimedToday(_slotOfId, char) : char[_tq.dayCol] === _today) ? 1 : 0)
         : (char.water_quest_day === _today ? 1 : 0);
     const _claimedHere = id === 'steps' ? q.tier : 0;
     if (_claimedDb > _claimedHere) {
@@ -4083,6 +4194,7 @@ async function completeQuest(id){
       character.steps_quest_tier = char.steps_quest_tier;
       character.water_quest_day  = char.water_quest_day;
       character.read_quest_day   = char.read_quest_day;
+      character.instrument_quest_day = char.instrument_quest_day;
       syncDailyQuestsFromCharacter();
       renderDailyQuests();
       showToast('ℹ️', 'Diese Aufgabe wurde heute schon abgeholt.');
@@ -4104,23 +4216,23 @@ async function completeQuest(id){
     const upd = { xp: newXP, gold: newGold, level: newLevel };
     if(id === 'steps') { upd.steps_quest_day = _today; upd.steps_quest_tier = q.tier + 1; }
     if(id === 'water') { upd.water_quest_day = _today; }
-    if(id === 'read')  { upd.read_quest_day = _today; upd.intelligenz = (char.intelligenz || 0) + 1; }
+    if(_tq) { upd[_tq.dayCol] = _today; upd[_tq.stat] = (char[_tq.stat] || 0) + 1; }
     const { error: updErr } = await sb.from('characters').update(upd).eq('id', char.id);
     if(updErr) throw updErr;
 
     character.xp = newXP; character.gold = newGold; character.level = newLevel;
     if(id === 'steps') { character.steps_quest_day = _today; character.steps_quest_tier = q.tier + 1; }
     if(id === 'water') { character.water_quest_day = _today; }
-    if(id === 'read')  { character.read_quest_day = _today; character.intelligenz = (char.intelligenz || 0) + 1; }
+    if(_tq) { character[_tq.dayCol] = _today; character[_tq.stat] = (char[_tq.stat] || 0) + 1; }
     updateHUD();
     if(leveledUp) showLevelUpBanner(newLevel);
 
     // Tagesstand neu berechnen: bei Schritten erscheint die nächste Stufe, Wasser bleibt für heute erledigt
-    if(id === 'steps' || id === 'water' || id === 'read') {
-      if(id === 'read') { _readTimer = {day: _today, acc: 0, startedAt: null}; readTimerSave(); }
+    if(id === 'steps' || id === 'water' || _tq) {
+      if(_tq) { const _t = timerOf(id); _t.acc = 0; _t.startedAt = null; timedSave(); }
       syncDailyQuestsFromCharacter();
-      const _extra = id === 'read' ? ' +1 🔮 Intelligenz' : '';
-      showToast(id === 'steps' ? '🚶' : (id === 'read' ? '📖' : '💧'), `+${rewards.exp} EXP +${rewards.gold} 💰${_extra}`);
+      const _extra = _tq ? ` +1 ${_tq.statIcon} ${_tq.statLabel}` : '';
+      showToast(id === 'steps' ? '🚶' : (_tq ? _tq.icon : '💧'), `+${rewards.exp} EXP +${rewards.gold} 💰${_extra}`);
       renderDailyQuests();
       return;
     }
