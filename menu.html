@@ -3344,16 +3344,17 @@ const STEP_TIERS = [
   {goal:10000, exp:450, gold:45},
 ];
 
-// Beide Quests des tauschbaren Platzes haben dieselbe Belohnung; nur der Statpunkt unterscheidet sich.
+// Alle Hobby-Quests des tauschbaren Platzes haben dieselbe Belohnung; nur der Statpunkt unterscheidet sich.
 // ACHTUNG: EXP/Gold vorläufig – Balancing folgt später.
 const FOCUS_REWARD = {exp:100, gold:10};
 
 const DAILY_QUESTS = [
   {id:'steps',   icon:'🚶', title:'1.000 Schritte gehen',        desc:'Gehe heute mindestens 1.000 Schritte.',  exp:50,  gold:5,  done:false, goal:1000, current:0, tier:0, stepsToday:0},
   {id:'water',   icon:'💧', title:'2 Liter Wasser trinken',       desc:'Trinke heute mindestens 2 Liter Wasser.',exp:30,  gold:3,  done:false},
-  // Tauschbarer Platz "focus": entweder Lesen ODER Instrument üben (siehe QUEST_SLOTS)
+  // Tauschbarer Platz "focus" = Kategorie Hobbys: Lesen ODER Instrument üben ODER Andere Hobbys (siehe QUEST_SLOTS)
   {id:'read',       icon:'📖', title:'30 Minuten lesen',          desc:'Lies heute 30 Minuten. Starte den Timer oder bestätige, dass du gelesen hast.',          exp:FOCUS_REWARD.exp, gold:FOCUS_REWARD.gold, done:false},
   {id:'instrument', icon:'🎸', title:'30 Minuten Instrument üben', desc:'Übe heute 30 Minuten ein Instrument. Starte den Timer oder bestätige, dass du geübt hast.', exp:FOCUS_REWARD.exp, gold:FOCUS_REWARD.gold, done:false},
+  {id:'hobby',      icon:'🎨', title:'30 Minuten Andere Hobbys',  desc:'Geh heute 30 Minuten einem Hobby nach. Starte den Timer oder bestätige, dass du dich damit beschäftigt hast.', exp:FOCUS_REWARD.exp, gold:FOCUS_REWARD.gold, done:false},
 ];
 
 // Der Fortschritt der täglichen Aufgaben liegt in Supabase (characters.steps_quest_day, steps_quest_tier,
@@ -3413,12 +3414,18 @@ const TIMED_QUESTS = {
     dayCol:'instrument_quest_day', stat:'gewandheit', statLabel:'Gewandheit', statIcon:'🌿', icon:'🎸',
     confirmText:'Hast du heute wirklich <b>30 Minuten</b> ein Instrument geübt?', yesLabel:'Ja, geübt', manualLabel:'Habe geübt ✓',
   },
+  // Statpunkt geht auf `lebenskraft` (wird im Heldenmenü als LP angezeigt)
+  hobby: {
+    dayCol:'hobby_quest_day', stat:'lebenskraft', statLabel:'LP', statIcon:'💗', icon:'🎨',
+    confirmText:'Hast du heute wirklich <b>30 Minuten</b> einem Hobby nachgegangen?', yesLabel:'Ja, erledigt', manualLabel:'Hobby erledigt ✓',
+  },
 };
 
-// Tauschbare Plätze: pro Tag zählt nur EINE der Optionen. Neue Tausch-Paare = hier eintragen.
-// Hat man heute eine Option schon abgeholt, bleibt sie für den Tag fest (kein Tauschen mehr).
+// Tauschbare Plätze: pro Tag zählt nur EINE der Optionen. Neue Optionen/Paare = hier eintragen.
+// Hat man heute eine Option schon abgeholt, bleibt sie für den Tag fest (kein Wechseln mehr).
+// `label` = Kategoriename auf der Karte, `swapLabel` = Text des Wechsel-Buttons.
 const QUEST_SLOTS = [
-  {id:'focus', options:['read', 'instrument'], def:'read'},
+  {id:'focus', label:'Hobbys', swapLabel:'Hobby wechseln', options:['read', 'instrument', 'hobby'], def:'read'},
 ];
 
 let _timedState = {day:0, timers:{}}; // timers[questId] = {acc: bisher ms, startedAt: Startzeit des laufenden Abschnitts}
@@ -3540,23 +3547,45 @@ async function claimTimedManual(id) {
   if (ok) completeQuest(id);
 }
 
-// Quest des tauschbaren Platzes gegen die nächste Option tauschen (nur solange heute nichts abgeholt wurde)
-async function swapQuestSlot(slotId) {
+// Hobby-Auswahl öffnen: zeigt alle Optionen des Platzes zur Auswahl (nur solange heute nichts abgeholt wurde)
+function swapQuestSlot(slotId) {
   const slot = QUEST_SLOTS.find(s => s.id === slotId);
   if (!slot || !character) return;
   if (slotClaimedToday(slot, character)) {
-    showToast('ℹ️', 'Heute schon abgeholt – getauscht werden kann erst morgen wieder.');
+    showToast('ℹ️', 'Heute schon abgeholt – gewechselt werden kann erst morgen wieder.');
     return;
   }
+  const cur = getSlotChoice(slot);
+  document.getElementById('slotPickTitle').textContent = slot.label ? `${slot.label} wählen` : 'Quest wählen';
+  document.getElementById('slotPickList').innerHTML = slot.options.map(o => {
+    const q = DAILY_QUESTS.find(x => x.id === o);
+    const c = TIMED_QUESTS[o];
+    const isCur = o === cur;
+    return `<button onclick="chooseSlotQuest('${slot.id}','${o}')" style="width:100%;display:flex;justify-content:space-between;align-items:center;gap:10px;
+      padding:12px 14px;background:${isCur ? 'rgba(201,168,76,.12)' : 'transparent'};border:1px solid ${isCur ? 'var(--gold)' : 'var(--border)'};
+      border-radius:3px;color:var(--text);font-family:'Crimson Pro',serif;font-size:.95rem;text-align:left;cursor:pointer">
+      <span>${q.icon} ${q.title}</span>
+      <span style="font-size:.8rem;color:var(--dim);white-space:nowrap">${c.statIcon} +1 ${c.statLabel}${isCur ? ' · aktuell' : ''}</span>
+    </button>`;
+  }).join('');
+  document.getElementById('slotPickOverlay').classList.add('active');
+}
+
+function closeSlotPicker() {
+  const ov = document.getElementById('slotPickOverlay');
+  if (ov) ov.classList.remove('active');
+}
+
+// Gewählte Option speichern (Supabase) – gleiche Belohnungen, nur der Statpunkt wechselt
+async function chooseSlotQuest(slotId, optId) {
+  closeSlotPicker();
+  const slot = QUEST_SLOTS.find(s => s.id === slotId);
+  if (!slot || !character || !slot.options.includes(optId)) return;
+  if (slotClaimedToday(slot, character)) return;
   const cur  = getSlotChoice(slot);
-  const next = slot.options[(slot.options.indexOf(cur) + 1) % slot.options.length];
-  const qc = DAILY_QUESTS.find(q => q.id === cur);
+  const next = optId;
+  if (next === cur) return;
   const qn = DAILY_QUESTS.find(q => q.id === next);
-  const cn = TIMED_QUESTS[next];
-  const ok = await showConfirmDialog('🔄',
-    `„${qc.title}“ gegen „${qn.title}“ tauschen?<br><br>Die Belohnungen bleiben gleich, nur der Statpunkt wechselt zu ${cn.statIcon} ${cn.statLabel}.`,
-    'Tauschen', 'Abbrechen');
-  if (!ok) return;
 
   try {
     const { data:{session} } = await sb.auth.getSession();
@@ -3724,12 +3753,13 @@ function renderTimedQuestCard(q) {
     }
     // Tauschen nur, wenn der Platz mehrere Optionen hat und heute noch nichts abgeholt wurde
     if (slot && slot.options.length > 1 && !t.finished) {
-      buttons += `<button style="${ghost}" onclick="swapQuestSlot('${slot.id}')">🔄 Tauschen</button>`;
+      buttons += `<button style="${ghost}" onclick="swapQuestSlot('${slot.id}')">🔄 ${slot.swapLabel || 'Tauschen'}</button>`;
     }
   }
 
   return `
     <div class="mission-card ${q.done ? '' : 'exp-focus'}" style="${q.done ? 'opacity:.5' : ''}">
+      ${slot && slot.label ? `<div style="font-family:Cinzel,serif;font-size:.55rem;letter-spacing:.2em;color:var(--dim);text-transform:uppercase;margin-bottom:3px">🎭 ${slot.label}</div>` : ''}
       <div class="mc-title">${q.icon} ${q.title} ${q.done ? '✅' : ''}</div>
       <div class="mc-desc">${q.desc}</div>
       ${progress}
@@ -4265,7 +4295,7 @@ async function completeQuest(id){
     // Lade aktuellen Stand
     const { data: chars } = await sb
       .from('characters')
-      .select('id, level, xp, gold, intelligenz, gewandheit, steps_quest_day, steps_quest_tier, water_quest_day, read_quest_day, instrument_quest_day')
+      .select('id, level, xp, gold, intelligenz, gewandheit, lebenskraft, steps_quest_day, steps_quest_tier, water_quest_day, read_quest_day, instrument_quest_day, hobby_quest_day')
       .eq('user_id', session.user.id)
       .order('created_at', {ascending:false})
       .limit(1);
@@ -4290,6 +4320,7 @@ async function completeQuest(id){
       character.water_quest_day  = char.water_quest_day;
       character.read_quest_day   = char.read_quest_day;
       character.instrument_quest_day = char.instrument_quest_day;
+      character.hobby_quest_day = char.hobby_quest_day;
       syncDailyQuestsFromCharacter();
       renderDailyQuests();
       showToast('ℹ️', 'Diese Aufgabe wurde heute schon abgeholt.');
@@ -4954,6 +4985,19 @@ loadCharacter().then(async () => {
   </div>
   <div id="focusState" style="font-family:Cinzel,serif;font-size:.75rem;letter-spacing:.2em;color:#5c5540;min-height:1em"></div>
   <div id="focusButtons" style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center"></div>
+</div>
+
+<!-- Hobby-Auswahl (tauschbarer Quest-Platz) -->
+<div class="overlay" id="slotPickOverlay" style="z-index:190">
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:4px;
+    width:min(340px,92vw);padding:24px 20px;box-shadow:0 0 40px rgba(0,0,0,.9)">
+    <div id="slotPickTitle" style="font-family:Cinzel,serif;font-size:.8rem;letter-spacing:.15em;
+      color:var(--gold);text-align:center;text-transform:uppercase;margin-bottom:14px">Hobby wählen</div>
+    <div id="slotPickList" style="display:flex;flex-direction:column;gap:8px"></div>
+    <button onclick="closeSlotPicker()" style="width:100%;margin-top:14px;padding:11px;background:transparent;
+      border:1px solid var(--border);border-radius:3px;color:var(--dim);font-family:Cinzel,serif;
+      font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;cursor:pointer">Abbrechen</button>
+  </div>
 </div>
 
 <div class="overlay" id="confirmOverlay" style="z-index:200">
