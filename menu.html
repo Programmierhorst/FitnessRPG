@@ -3973,8 +3973,9 @@ function openKnight(){
 
 // ── SCHLAFDATEN AUS HEALTH CONNECT (von der Flutter-App) ──
 // Die Flutter-App ruft `window.updateSleepFromApp(daten)` auf. `daten` ist ein Objekt oder ein JSON-Text:
-//   {status:'ok'|'no_data'|'no_permission'|'error', minutes:432, start:'2026-10-03T22:41:00', end:'2026-10-04T06:03:00', message:''}
-//   minutes = Schlafdauer letzte Nacht in Minuten, start/end = Beginn/Ende (ISO-Zeit, lokale Zeit oder mit Zeitzone).
+//   {status:'ok'|'no_data'|'no_permission'|'error', minutes:542, asleepMinutes:480, start:'2026-10-03T22:41:00', end:'2026-10-04T06:03:00', message:''}
+//   minutes = Länge der Schlafsitzung (Zeit im Bett) in Minuten, asleepMinutes = tatsächlich geschlafene Zeit (Leicht+Tief+REM, ohne Wachphasen;
+//   optional, ohne den Wert wird `minutes` benutzt), start/end = Beginn/Ende (ISO-Zeit, lokale Zeit oder mit Zeitzone).
 // Die Daten gelten nur für den Tag, an dem sie ankommen. Zeigen sich passende Daten, kann die Schlaf-Quest ohne
 // Nachfrage abgeholt werden; ohne Daten (oder im Browser) bleibt die manuelle Abholung mit Sicherheitsabfrage.
 let _sleepData = null;
@@ -3990,6 +3991,18 @@ function updateSleepFromApp(payload) {
 }
 window.updateSleepFromApp = updateSleepFromApp;
 
+// Geschlafene Minuten: bevorzugt asleepMinutes (ohne Wachphasen), sonst die Länge der Schlafsitzung
+function sleepMinutesOf(d) {
+  const a = Number(d.asleepMinutes);
+  if (d.asleepMinutes !== undefined && d.asleepMinutes !== null && d.asleepMinutes !== '' && isFinite(a) && a > 0) return a;
+  const m = Number(d.minutes);
+  return isFinite(m) ? m : NaN;
+}
+
+function fmtHM(min) {
+  return `${Math.floor(min / 60)} Std ${Math.round(min % 60)} Min`;
+}
+
 // Minuten seit 18:00 (Abend als Nullpunkt), damit "vor 00:30" und "22:41" richtig verglichen werden
 function minutesSinceEvening(h, m) {
   return ((h * 60 + m) - 18 * 60 + 1440) % 1440;
@@ -4000,7 +4013,7 @@ function sleepVerdict(id) {
   const d = _sleepData;
   if (!d || d.day !== getTodayKey() || d.status !== 'ok') return null;
   if (id === 'sleepdur') {
-    const min = Number(d.minutes);
+    const min = sleepMinutesOf(d);
     if (!isFinite(min)) return null;
     return min >= 420 && min <= 540;
   }
@@ -4026,11 +4039,14 @@ function sleepInfoHtml(id) {
     if (!window.FlutterBridge) return '';   // im Browser gibt es keine Health-Connect-Daten
     txt = '⏳ Warte auf Schlafdaten von Health Connect …';
   } else if (d.status === 'ok') {
-    const min = Number(d.minutes) || 0;
+    const min = sleepMinutesOf(d);
+    const bed = Number(d.minutes);
     const st  = new Date(d.start);
     const when = isNaN(st.getTime()) ? '' : ` · eingeschlafen ${fmtClock(st)} Uhr`;
     const v = sleepVerdict(id);
-    txt = `😴 Erkannt: ${Math.floor(min / 60)} Std ${min % 60} Min${when}<br>` +
+    const inBed = (d.asleepMinutes !== undefined && d.asleepMinutes !== null && isFinite(bed) && bed > 0 && Math.round(bed) !== Math.round(min))
+      ? ` (im Bett ${fmtHM(bed)})` : '';
+    txt = `😴 Erkannt: ${isFinite(min) ? fmtHM(min) : '?'} Schlaf${inBed}${when}<br>` +
       (v === true ? '✅ Ziel erreicht' : (v === false ? '❌ Ziel nicht erreicht' : ''));
   } else if (d.status === 'no_data') {
     txt = 'ℹ️ Health Connect hat keine Schlafdaten für letzte Nacht geliefert.';
