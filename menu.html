@@ -3971,6 +3971,77 @@ function openKnight(){
   document.getElementById('knightOverlay').classList.add('active');
 }
 
+// ── SCHLAFDATEN AUS HEALTH CONNECT (von der Flutter-App) ──
+// Die Flutter-App ruft `window.updateSleepFromApp(daten)` auf. `daten` ist ein Objekt oder ein JSON-Text:
+//   {status:'ok'|'no_data'|'no_permission'|'error', minutes:432, start:'2026-10-03T22:41:00', end:'2026-10-04T06:03:00', message:''}
+//   minutes = Schlafdauer letzte Nacht in Minuten, start/end = Beginn/Ende (ISO-Zeit, lokale Zeit oder mit Zeitzone).
+// Die Daten gelten nur für den Tag, an dem sie ankommen. Zeigen sich passende Daten, kann die Schlaf-Quest ohne
+// Nachfrage abgeholt werden; ohne Daten (oder im Browser) bleibt die manuelle Abholung mit Sicherheitsabfrage.
+let _sleepData = null;
+
+function updateSleepFromApp(payload) {
+  let d = payload;
+  try { if (typeof payload === 'string') d = JSON.parse(payload); } catch(e) { d = {status:'error', message:'Ungültige Daten von der App'}; }
+  if (!d || typeof d !== 'object') d = {status:'error', message:'Keine Daten von der App'};
+  _sleepData = Object.assign({}, d, {day: getTodayKey()});
+  console.log('Schlafdaten von der App:', _sleepData);
+  const ov = document.getElementById('knightOverlay');
+  if (ov && ov.classList.contains('active') && typeof renderDailyQuests === 'function') renderDailyQuests();
+}
+window.updateSleepFromApp = updateSleepFromApp;
+
+// Minuten seit 18:00 (Abend als Nullpunkt), damit "vor 00:30" und "22:41" richtig verglichen werden
+function minutesSinceEvening(h, m) {
+  return ((h * 60 + m) - 18 * 60 + 1440) % 1440;
+}
+
+// Gibt true/false zurück, wenn die App-Daten die Schlaf-Quest bestätigen/widerlegen; null ohne passende Daten
+function sleepVerdict(id) {
+  const d = _sleepData;
+  if (!d || d.day !== getTodayKey() || d.status !== 'ok') return null;
+  if (id === 'sleepdur') {
+    const min = Number(d.minutes);
+    if (!isFinite(min)) return null;
+    return min >= 420 && min <= 540;
+  }
+  if (id === 'sleepbed') {
+    const st = new Date(d.start);
+    if (isNaN(st.getTime())) return null;
+    const [bh, bm] = getBedtime().split(':').map(Number);
+    return minutesSinceEvening(st.getHours(), st.getMinutes()) <= minutesSinceEvening(bh, bm);
+  }
+  return null;
+}
+
+function fmtClock(date) {
+  return String(date.getHours()).padStart(2, '0') + ':' + String(date.getMinutes()).padStart(2, '0');
+}
+
+// Kleine Statuszeile auf der Schlaf-Karte: zeigt, was die App von Health Connect bekommen hat
+function sleepInfoHtml(id) {
+  if (id !== 'sleepbed' && id !== 'sleepdur') return '';
+  const d = (_sleepData && _sleepData.day === getTodayKey()) ? _sleepData : null;
+  let txt = '';
+  if (!d) {
+    if (!window.FlutterBridge) return '';   // im Browser gibt es keine Health-Connect-Daten
+    txt = '⏳ Warte auf Schlafdaten von Health Connect …';
+  } else if (d.status === 'ok') {
+    const min = Number(d.minutes) || 0;
+    const st  = new Date(d.start);
+    const when = isNaN(st.getTime()) ? '' : ` · eingeschlafen ${fmtClock(st)} Uhr`;
+    const v = sleepVerdict(id);
+    txt = `😴 Erkannt: ${Math.floor(min / 60)} Std ${min % 60} Min${when}<br>` +
+      (v === true ? '✅ Ziel erreicht' : (v === false ? '❌ Ziel nicht erreicht' : ''));
+  } else if (d.status === 'no_data') {
+    txt = 'ℹ️ Health Connect hat keine Schlafdaten für letzte Nacht geliefert.';
+  } else if (d.status === 'no_permission') {
+    txt = '⚠️ Keine Erlaubnis für Schlafdaten in Health Connect.' + (d.message ? `<br>${d.message}` : '');
+  } else {
+    txt = '⚠️ Schlafdaten konnten nicht gelesen werden.' + (d.message ? `<br>${d.message}` : '');
+  }
+  return `<div style="font-size:.75rem;color:var(--gold-l);margin:8px 0 2px;line-height:1.5">${txt}</div>`;
+}
+
 // ── EINFACHE QUESTS (Wasser, Schlaf): Karte ohne Timer ──
 function renderSimpleQuestCard(q) {
   const cfg = SIMPLE_QUESTS[q.id];
@@ -3985,8 +4056,9 @@ function renderSimpleQuestCard(q) {
     : q.desc;
 
   let buttons = '';
+  const verified = !q.done && sleepVerdict(q.id) === true; // App-Daten bestätigen die Quest
   if (!q.done) {
-    buttons = `<button style="${gold}" onclick="claimSimpleQuest('${q.id}')">${cfg.claimLabel}</button>`;
+    buttons = `<button style="${gold}" onclick="claimSimpleQuest('${q.id}')">${verified ? 'Belohnung abholen ✓' : cfg.claimLabel}</button>`;
     if (q.id === 'sleepbed') buttons += `<button style="${ghost}" onclick="openBedtimeEditor()">🕙 Schlafenszeit: ${bt}</button>`;
     if (slot && slot.options.length > 1) buttons += `<button style="${ghost}" onclick="swapQuestSlot('${slot.id}')">🔄 ${slot.swapLabel || 'Wechseln'}</button>`;
   }
@@ -3996,6 +4068,7 @@ function renderSimpleQuestCard(q) {
       ${cat ? `<div style="font-family:Cinzel,serif;font-size:.55rem;letter-spacing:.2em;color:var(--dim);text-transform:uppercase;margin-bottom:3px">${cat.icon} ${cat.label}</div>` : ''}
       <div class="mc-title">${q.icon} ${title} ${q.done ? '✅' : ''}</div>
       <div class="mc-desc">${desc}</div>
+      ${q.done ? '' : sleepInfoHtml(q.id)}
       <div class="mc-rewards" style="margin-top:8px">
         <span class="mc-reward exp">✨ ${q.exp} EXP</span>
         <span class="mc-reward gold">💰 ${q.gold} Gold</span>
@@ -4009,7 +4082,7 @@ async function claimSimpleQuest(id) {
   const cfg = SIMPLE_QUESTS[id];
   const q = DAILY_QUESTS.find(x => x.id === id);
   if (!cfg || !q || q.done) return;
-  if (cfg.confirmText) {
+  if (cfg.confirmText && sleepVerdict(id) !== true) { // von der App bestätigt = keine Nachfrage nötig
     const msg = typeof cfg.confirmText === 'function' ? cfg.confirmText() : cfg.confirmText;
     const ok = await showConfirmDialog(cfg.icon, msg, cfg.yesLabel || 'Ja', 'Abbrechen');
     if (!ok) return;
