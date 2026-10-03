@@ -3348,9 +3348,16 @@ const STEP_TIERS = [
 // ACHTUNG: EXP/Gold vorläufig – Balancing folgt später.
 const FOCUS_REWARD = {exp:100, gold:10};
 
+// Alle Gesundheits-Quests (Wasser, Schlaf) haben dieselbe Belohnung, aber keinen Statpunkt.
+// ACHTUNG: EXP/Gold vorläufig – Balancing folgt später.
+const HEALTH_REWARD = {exp:30, gold:3};
+
 const DAILY_QUESTS = [
   {id:'steps',   icon:'🚶', title:'1.000 Schritte gehen',        desc:'Gehe heute mindestens 1.000 Schritte.',  exp:50,  gold:5,  done:false, goal:1000, current:0, tier:0, stepsToday:0},
-  {id:'water',   icon:'💧', title:'2 Liter Wasser trinken',       desc:'Trinke heute mindestens 2 Liter Wasser.',exp:30,  gold:3,  done:false},
+  // Tauschbarer Platz "health" = Kategorie Gesundheit: Wasser trinken ODER Schlaf verbessern 1 ODER 2 (siehe QUEST_SLOTS)
+  {id:'water',    icon:'💧', title:'2 Liter Wasser trinken',  desc:'Trinke heute mindestens 2 Liter Wasser.', exp:HEALTH_REWARD.exp, gold:HEALTH_REWARD.gold, done:false},
+  {id:'sleepbed', icon:'🌙', title:'Schlaf verbessern: Früh ins Bett', desc:'Sei gestern vor deiner Schlafenszeit schlafen gegangen.', exp:HEALTH_REWARD.exp, gold:HEALTH_REWARD.gold, done:false},
+  {id:'sleepdur', icon:'😴', title:'Schlaf verbessern: 7–9 Stunden', desc:'Schlafe zwischen 7 und 9 Stunden.',   exp:HEALTH_REWARD.exp, gold:HEALTH_REWARD.gold, done:false},
   // Tauschbarer Platz "focus": eine Quest aus den Kategorien Hobbys ODER Aufgaben erledigen (siehe QUEST_SLOTS)
   {id:'read',       icon:'📖', title:'30 Minuten lesen',          desc:'Lies heute 30 Minuten. Starte den Timer oder bestätige, dass du gelesen hast.',          exp:FOCUS_REWARD.exp, gold:FOCUS_REWARD.gold, done:false},
   {id:'instrument', icon:'🎸', title:'30 Minuten Instrument üben', desc:'Übe heute 30 Minuten ein Instrument. Starte den Timer oder bestätige, dass du geübt hast.', exp:FOCUS_REWARD.exp, gold:FOCUS_REWARD.gold, done:false},
@@ -3393,8 +3400,11 @@ function syncDailyQuestsFromCharacter() {
     applyStepTier(sq);
   }
 
-  const wq = DAILY_QUESTS.find(q => q.id === 'water');
-  if (wq) wq.done = (c.water_quest_day === today);
+  // Einfache Quests (ohne Timer): Wasser und die Schlaf-Quests – "erledigt" = heute abgeholt
+  Object.keys(SIMPLE_QUESTS).forEach(id => {
+    const sq2 = DAILY_QUESTS.find(q => q.id === id);
+    if (sq2) sq2.done = (c[SIMPLE_QUESTS[id].dayCol] === today);
+  });
 
   // Zeit-Aufgaben (Lesen, Instrument üben): "erledigt" = heute abgeholt
   Object.keys(TIMED_QUESTS).forEach(id => {
@@ -3438,11 +3448,42 @@ const TIMED_QUESTS = {
   },
 };
 
+// Einfache Quests ohne Timer (Kategorie Gesundheit). dayCol = Spalte in `characters` mit dem Tag der letzten Abholung.
+// Abholen per Button; bei den Schlaf-Quests mit Sicherheitsabfrage (ehrliche Selbstauskunft, wie beim Workout).
+const SIMPLE_QUESTS = {
+  water: {dayCol:'water_quest_day', icon:'💧', claimLabel:'Erledigt ✓'},
+  sleepbed: {
+    dayCol:'sleepbed_quest_day', icon:'🌙', claimLabel:'War rechtzeitig im Bett ✓', yesLabel:'Ja, war ich',
+    confirmText: () => `Bist du gestern vor <b>${getBedtime()} Uhr</b> schlafen gegangen?`,
+  },
+  sleepdur: {
+    dayCol:'sleepdur_quest_day', icon:'😴', claimLabel:'7–9 Stunden geschlafen ✓', yesLabel:'Ja, habe ich',
+    confirmText:'Hast du letzte Nacht zwischen <b>7 und 9 Stunden</b> geschlafen?',
+  },
+};
+
+// Spalte mit dem Abholtag einer Quest (Zeit-Quest oder einfache Quest); Schritte haben ihre eigene Logik
+function questDayCol(id) {
+  if (TIMED_QUESTS[id]) return TIMED_QUESTS[id].dayCol;
+  if (SIMPLE_QUESTS[id]) return SIMPLE_QUESTS[id].dayCol;
+  return null;
+}
+
+function allQuestDayCols() {
+  return Object.values(TIMED_QUESTS).map(c => c.dayCol).concat(Object.values(SIMPLE_QUESTS).map(c => c.dayCol));
+}
+
+// Vom Spieler festgelegte Schlafenszeit ("HH:MM"), gespeichert in characters.bedtime; Standard 22:30
+function getBedtime() {
+  const b = character && character.bedtime;
+  return /^\d{2}:\d{2}$/.test(b || '') ? b : '22:30';
+}
+
 // Spalten, die beim Abholen aus Supabase gelesen werden (alle Tages-Spalten + betroffene Stats)
 function timedSelectColumns() {
   const cfgs = Object.values(TIMED_QUESTS);
-  const cols = ['id', 'level', 'xp', 'gold', 'steps_quest_day', 'steps_quest_tier', 'water_quest_day']
-    .concat(cfgs.map(c => c.dayCol), cfgs.map(c => c.stat));
+  const cols = ['id', 'level', 'xp', 'gold', 'steps_quest_day', 'steps_quest_tier']
+    .concat(allQuestDayCols(), cfgs.map(c => c.stat));
   return [...new Set(cols)].join(', ');
 }
 
@@ -3457,6 +3498,13 @@ const QUEST_SLOTS = [
    ],
    options:['read', 'instrument', 'hobby', 'tidy', 'garden', 'otherchores'],
   },
+  // Zweiter Platz: Gesundheit (Wasser oder eine der beiden Schlaf-Quests)
+  {id:'health', swapLabel:'Gesundheit wechseln', def:'water',
+   categories:[
+     {id:'health', label:'Gesundheit', icon:'💚', options:['water', 'sleepbed', 'sleepdur']},
+   ],
+   options:['water', 'sleepbed', 'sleepdur'],
+  },
 ];
 
 // In welcher Kategorie des Platzes steht die Quest?
@@ -3470,7 +3518,7 @@ let _timedTick = null;
 // Ist in `c` (character oder frisch geladene Zeile) eine Option dieses Platzes heute schon abgeholt?
 function slotClaimedToday(slot, c) {
   const today = getTodayKey();
-  return slot.options.some(o => TIMED_QUESTS[o] && c && c[TIMED_QUESTS[o].dayCol] === today);
+  return slot.options.some(o => c && questDayCol(o) && c[questDayCol(o)] === today);
 }
 
 // Welche Option des Platzes ist aktuell sichtbar?
@@ -3478,7 +3526,7 @@ function getSlotChoice(slot) {
   const c = character || {};
   const today = getTodayKey();
   for (const o of slot.options) {
-    if (TIMED_QUESTS[o] && c[TIMED_QUESTS[o].dayCol] === today) return o; // heute abgeholt -> bleibt
+    if (questDayCol(o) && c[questDayCol(o)] === today) return o; // heute abgeholt -> bleibt
   }
   const v = (c.quest_choices || {})[slot.id];
   return slot.options.includes(v) ? v : slot.def;
@@ -3622,7 +3670,7 @@ function renderSlotPicker(slotId, catId) {
       padding:12px 14px;background:${isCur ? 'rgba(201,168,76,.12)' : 'transparent'};border:1px solid ${isCur ? 'var(--gold)' : 'var(--border)'};
       border-radius:3px;color:var(--text);font-family:'Crimson Pro',serif;font-size:.95rem;text-align:left;cursor:pointer">
       <span>${q.icon} ${q.title}</span>
-      <span style="font-size:.8rem;color:var(--dim);white-space:nowrap">${c.statIcon} +1 ${c.statLabel}${isCur ? ' · aktuell' : ''}</span>
+      <span style="font-size:.8rem;color:var(--dim);white-space:nowrap">${c ? `${c.statIcon} +1 ${c.statLabel}` : `✨ ${q.exp} EXP · 💰 ${q.gold}`}${isCur ? ' · aktuell' : ''}</span>
     </button>`;
   }).join('');
 }
@@ -3650,7 +3698,7 @@ async function chooseSlotQuest(slotId, optId) {
     const { error } = await sb.from('characters').update({quest_choices: choices}).eq('id', character.id);
     if (error) throw error;
     character.quest_choices = choices;
-    timedPauseSilent(cur); // Fortschritt der abgewählten Quest bleibt erhalten, läuft aber nicht weiter
+    if (TIMED_QUESTS[cur]) timedPauseSilent(cur); // Fortschritt der abgewählten Quest bleibt erhalten, läuft aber nicht weiter
     showToast('🔄', `Getauscht: ${qn.title}`);
   } catch(err) {
     console.error('Tauschen fehlgeschlagen:', err);
@@ -3923,12 +3971,88 @@ function openKnight(){
   document.getElementById('knightOverlay').classList.add('active');
 }
 
+// ── EINFACHE QUESTS (Wasser, Schlaf): Karte ohne Timer ──
+function renderSimpleQuestCard(q) {
+  const cfg = SIMPLE_QUESTS[q.id];
+  const gold  = 'padding:5px 12px;background:linear-gradient(135deg,var(--gold-d),var(--gold));border:none;border-radius:2px;color:#1a1200;font-family:Cinzel,serif;font-size:.6rem;letter-spacing:.08em;cursor:pointer';
+  const ghost = 'padding:5px 12px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:2px;color:var(--text);font-family:Cinzel,serif;font-size:.6rem;letter-spacing:.08em;cursor:pointer';
+  const slot = QUEST_SLOTS.find(s => s.options.includes(q.id));
+  const cat  = slot ? slotCategoryOf(slot, q.id) : null;
+  const bt   = getBedtime();
+  const title = q.id === 'sleepbed' ? `Schlaf verbessern: vor ${bt} Uhr ins Bett` : q.title;
+  const desc  = q.id === 'sleepbed'
+    ? `Sei gestern vor ${bt} Uhr schlafen gegangen. Deine Schlafenszeit legst du selbst fest.`
+    : q.desc;
+
+  let buttons = '';
+  if (!q.done) {
+    buttons = `<button style="${gold}" onclick="claimSimpleQuest('${q.id}')">${cfg.claimLabel}</button>`;
+    if (q.id === 'sleepbed') buttons += `<button style="${ghost}" onclick="openBedtimeEditor()">🕙 Schlafenszeit: ${bt}</button>`;
+    if (slot && slot.options.length > 1) buttons += `<button style="${ghost}" onclick="swapQuestSlot('${slot.id}')">🔄 ${slot.swapLabel || 'Wechseln'}</button>`;
+  }
+
+  return `
+    <div class="mission-card ${q.done ? '' : 'exp-focus'}" style="${q.done ? 'opacity:.5' : ''}">
+      ${cat ? `<div style="font-family:Cinzel,serif;font-size:.55rem;letter-spacing:.2em;color:var(--dim);text-transform:uppercase;margin-bottom:3px">${cat.icon} ${cat.label}</div>` : ''}
+      <div class="mc-title">${q.icon} ${title} ${q.done ? '✅' : ''}</div>
+      <div class="mc-desc">${desc}</div>
+      <div class="mc-rewards" style="margin-top:8px">
+        <span class="mc-reward exp">✨ ${q.exp} EXP</span>
+        <span class="mc-reward gold">💰 ${q.gold} Gold</span>
+      </div>
+      ${buttons ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">${buttons}</div>` : ''}
+    </div>`;
+}
+
+// Abholen; bei Quests mit Sicherheitsabfrage (Schlaf) erst nachfragen
+async function claimSimpleQuest(id) {
+  const cfg = SIMPLE_QUESTS[id];
+  const q = DAILY_QUESTS.find(x => x.id === id);
+  if (!cfg || !q || q.done) return;
+  if (cfg.confirmText) {
+    const msg = typeof cfg.confirmText === 'function' ? cfg.confirmText() : cfg.confirmText;
+    const ok = await showConfirmDialog(cfg.icon, msg, cfg.yesLabel || 'Ja', 'Abbrechen');
+    if (!ok) return;
+  }
+  completeQuest(id);
+}
+
+// ── SCHLAFENSZEIT FESTLEGEN ──
+function openBedtimeEditor() {
+  const inp = document.getElementById('bedtimeInput');
+  if (inp) inp.value = getBedtime();
+  document.getElementById('bedtimeOverlay').classList.add('active');
+}
+
+function closeBedtimeEditor() {
+  const ov = document.getElementById('bedtimeOverlay');
+  if (ov) ov.classList.remove('active');
+}
+
+async function saveBedtime() {
+  const v = document.getElementById('bedtimeInput').value;
+  if (!/^\d{2}:\d{2}$/.test(v)) { showToast('⚠️', 'Bitte eine gültige Uhrzeit wählen.'); return; }
+  if (!character) return;
+  try {
+    const { error } = await sb.from('characters').update({bedtime: v}).eq('id', character.id);
+    if (error) throw error;
+    character.bedtime = v;
+    closeBedtimeEditor();
+    showToast('🌙', `Schlafenszeit: ${v} Uhr`);
+    renderDailyQuests();
+  } catch(err) {
+    console.error('Schlafenszeit speichern fehlgeschlagen:', err);
+    showToast('⚠️', 'Speichern fehlgeschlagen. Bitte nochmal versuchen.');
+  }
+}
+
 function renderDailyQuests(){
   const list = document.getElementById('dailyQuestList');
   // Neuer Tag (App über Mitternacht offen): Tagesstand der Aufgaben neu berechnen
   if (_dailyQuestsDay !== getTodayKey()) syncDailyQuestsFromCharacter();
   list.innerHTML = getActiveDailyQuests().map(q=>{
     if (TIMED_QUESTS[q.id]) return renderTimedQuestCard(q);
+    if (SIMPLE_QUESTS[q.id]) return renderSimpleQuestCard(q);
     const hasProgress = q.goal && !q.done;
     const pct = hasProgress ? Math.min(100, Math.round((q.current||0)/q.goal*100)) : 0;
     const progressBar = hasProgress ? `
@@ -4366,16 +4490,13 @@ async function completeQuest(id){
     const _slotOfId = QUEST_SLOTS.find(s => s.options.includes(id));
     const _claimedDb = id === 'steps'
       ? (char.steps_quest_day === _today ? (char.steps_quest_tier || 0) : 0)
-      : _tq
-        // pro Platz zählt nur eine Quest pro Tag: ist irgendeine Option heute abgeholt, gilt der Platz als erledigt
-        ? ((_slotOfId ? slotClaimedToday(_slotOfId, char) : char[_tq.dayCol] === _today) ? 1 : 0)
-        : (char.water_quest_day === _today ? 1 : 0);
+      // pro Platz zählt nur eine Quest pro Tag: ist irgendeine Option heute abgeholt, gilt der Platz als erledigt
+      : ((_slotOfId ? slotClaimedToday(_slotOfId, char) : char[questDayCol(id)] === _today) ? 1 : 0);
     const _claimedHere = id === 'steps' ? q.tier : 0;
     if (_claimedDb > _claimedHere) {
       character.steps_quest_day  = char.steps_quest_day;
       character.steps_quest_tier = char.steps_quest_tier;
-      character.water_quest_day  = char.water_quest_day;
-      Object.values(TIMED_QUESTS).forEach(c => { character[c.dayCol] = char[c.dayCol]; });
+      allQuestDayCols().forEach(col => { character[col] = char[col]; });
       syncDailyQuestsFromCharacter();
       renderDailyQuests();
       showToast('ℹ️', 'Diese Aufgabe wurde heute schon abgeholt.');
@@ -4396,24 +4517,24 @@ async function completeQuest(id){
 
     const upd = { xp: newXP, gold: newGold, level: newLevel };
     if(id === 'steps') { upd.steps_quest_day = _today; upd.steps_quest_tier = q.tier + 1; }
-    if(id === 'water') { upd.water_quest_day = _today; }
+    if(id !== 'steps' && questDayCol(id)) { upd[questDayCol(id)] = _today; }
     if(_tq) { upd[_tq.dayCol] = _today; upd[_tq.stat] = (char[_tq.stat] || 0) + 1; }
     const { error: updErr } = await sb.from('characters').update(upd).eq('id', char.id);
     if(updErr) throw updErr;
 
     character.xp = newXP; character.gold = newGold; character.level = newLevel;
     if(id === 'steps') { character.steps_quest_day = _today; character.steps_quest_tier = q.tier + 1; }
-    if(id === 'water') { character.water_quest_day = _today; }
+    if(id !== 'steps' && questDayCol(id)) { character[questDayCol(id)] = _today; }
     if(_tq) { character[_tq.dayCol] = _today; character[_tq.stat] = (char[_tq.stat] || 0) + 1; }
     updateHUD();
     if(leveledUp) showLevelUpBanner(newLevel);
 
     // Tagesstand neu berechnen: bei Schritten erscheint die nächste Stufe, Wasser bleibt für heute erledigt
-    if(id === 'steps' || id === 'water' || _tq) {
+    if(id === 'steps' || SIMPLE_QUESTS[id] || _tq) {
       if(_tq) { const _t = timerOf(id); _t.acc = 0; _t.startedAt = null; timedSave(); focusNotifyFlutter('stop', id); }
       syncDailyQuestsFromCharacter();
       const _extra = _tq ? ` +1 ${_tq.statIcon} ${_tq.statLabel}` : '';
-      showToast(id === 'steps' ? '🚶' : (_tq ? _tq.icon : '💧'), `+${rewards.exp} EXP +${rewards.gold} 💰${_extra}`);
+      showToast(id === 'steps' ? '🚶' : (_tq ? _tq.icon : ((SIMPLE_QUESTS[id] && SIMPLE_QUESTS[id].icon) || '💧')), `+${rewards.exp} EXP +${rewards.gold} 💰${_extra}`);
       renderDailyQuests();
       return;
     }
@@ -5040,6 +5161,27 @@ loadCharacter().then(async () => {
   </div>
   <div id="focusState" style="font-family:Cinzel,serif;font-size:.75rem;letter-spacing:.2em;color:#5c5540;min-height:1em"></div>
   <div id="focusButtons" style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center"></div>
+</div>
+
+<!-- Schlafenszeit festlegen (Schlaf-Quest "Früh ins Bett") -->
+<div class="overlay" id="bedtimeOverlay" style="z-index:190">
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:4px;
+    width:min(320px,92vw);padding:24px 20px;text-align:center;box-shadow:0 0 40px rgba(0,0,0,.9)">
+    <div style="font-family:Cinzel,serif;font-size:.8rem;letter-spacing:.15em;color:var(--gold);
+      text-transform:uppercase;margin-bottom:6px">Schlafenszeit</div>
+    <div style="font-size:.85rem;color:var(--dim);margin-bottom:14px">Bis wann willst du abends im Bett sein?</div>
+    <input type="time" id="bedtimeInput" style="font-family:Cinzel,serif;font-size:1.6rem;padding:8px 12px;
+      background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:3px;
+      color:var(--text);text-align:center;color-scheme:dark">
+    <div style="display:flex;gap:10px;margin-top:18px">
+      <button onclick="closeBedtimeEditor()" style="flex:1;padding:11px;background:transparent;
+        border:1px solid var(--border);border-radius:3px;color:var(--dim);font-family:Cinzel,serif;
+        font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;cursor:pointer">Abbrechen</button>
+      <button onclick="saveBedtime()" style="flex:1;padding:11px;background:linear-gradient(135deg,var(--gold-d),var(--gold));
+        border:none;border-radius:3px;color:#1a1200;font-family:Cinzel,serif;
+        font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;cursor:pointer">Speichern</button>
+    </div>
+  </div>
 </div>
 
 <!-- Hobby-Auswahl (tauschbarer Quest-Platz) -->
