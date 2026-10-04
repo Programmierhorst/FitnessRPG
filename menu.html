@@ -3406,6 +3406,9 @@ function syncDailyQuestsFromCharacter() {
     if (sq2) sq2.done = (c[SIMPLE_QUESTS[id].dayCol] === today);
   });
 
+  // Workout-Belohnung: heute schon eingelöst? (steht jetzt in Supabase, vorher nur im Speicher)
+  WORKOUT_QUEST.done = (c.workout_quest_day === today);
+
   // Zeit-Aufgaben (Lesen, Instrument üben): "erledigt" = heute abgeholt
   Object.keys(TIMED_QUESTS).forEach(id => {
     const tq = DAILY_QUESTS.find(q => q.id === id);
@@ -3584,6 +3587,22 @@ function plannedChoice(slot) {
 function planBadge(q) {
   const slot = QUEST_SLOTS.find(s => s.options.includes(q.id));
   return (slot && plannedChoice(slot) === q.id) ? ' · 📅 Wochenplan' : '';
+}
+
+// Welches Workout (Kategorie-ID aus WORKOUT_CATEGORIES) ist für heute im Wochenplan eingetragen? (null = keins)
+function plannedWorkoutToday() {
+  if (!weekPlanActive()) return null;
+  const day = character.week_plan.days[weekdayKey(new Date())];
+  const v = day && day.workout;
+  return WORKOUT_CATEGORIES.some(c => c.id === v) ? v : null;
+}
+
+// Bonus-Statpunkt (0 oder 1) für ein umgesetztes, geplantes Workout. `cat` = gewählte/erkannte Kategorie oder null
+// (Art unbekannt: z. B. wenn die Belohnung direkt über die Quest-Karte eingelöst wird -> zählt als umgesetzt).
+function plannedWorkoutBonus(cat) {
+  const planned = plannedWorkoutToday();
+  if (!planned) return 0;
+  return (!cat || cat.id === planned) ? 1 : 0;
 }
 
 function updateWeekPlanButton() {
@@ -4166,6 +4185,11 @@ async function claimSimpleQuest(id) {
 }
 
 // ── WOCHENPLAN-EDITOR ──
+function weekPlanWorkoutOptionsHtml(selected) {
+  return `<option value="">– kein Workout geplant</option>` +
+    WORKOUT_CATEGORIES.map(c => `<option value="${c.id}" ${c.id === selected ? 'selected' : ''}>${c.label}</option>`).join('');
+}
+
 function weekPlanOptionsHtml(slot, selected) {
   let h = `<option value="">– nach Wahl (wie bisher)</option>`;
   const cats = slot.categories || [{id:'all', label:'', icon:'', options: slot.options}];
@@ -4190,7 +4214,10 @@ function renderWeekPlanEditor() {
     const isToday = d.key === todayKey;
     const sels = QUEST_SLOTS.map(slot => `
       <label style="display:block;font-size:.7rem;color:var(--dim);margin:7px 0 2px">${slot.planLabel}</label>
-      <select id="wp_${d.key}_${slot.id}" style="${selStyle}">${weekPlanOptionsHtml(slot, dd[slot.id])}</select>`).join('');
+      <select id="wp_${d.key}_${slot.id}" style="${selStyle}">${weekPlanOptionsHtml(slot, dd[slot.id])}</select>`).join('')
+      + `
+      <label style="display:block;font-size:.7rem;color:var(--dim);margin:7px 0 2px">💪 Workout (+1 Bonus-Statpunkt bei Umsetzung)</label>
+      <select id="wp_${d.key}_workout" style="${selStyle}">${weekPlanWorkoutOptionsHtml(dd.workout)}</select>`;
     return `<div style="border:1px solid ${isToday ? 'var(--gold)' : 'var(--border)'};border-radius:3px;padding:10px 12px;margin-bottom:10px">
       <div style="font-family:Cinzel,serif;font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:${isToday ? 'var(--gold)' : 'var(--text)'}">${d.label}${isToday ? ' · heute' : ''}</div>${sels}
     </div>`;
@@ -4242,6 +4269,8 @@ async function saveWeekPlan() {
       const el = document.getElementById(`wp_${d.key}_${slot.id}`);
       if (el && el.value && slot.options.includes(el.value)) e[slot.id] = el.value;
     });
+    const wEl = document.getElementById(`wp_${d.key}_workout`);
+    if (wEl && WORKOUT_CATEGORIES.some(c => c.id === wEl.value)) e.workout = wEl.value;
     if (Object.keys(e).length) days[d.key] = e;
   });
   const repeat = document.getElementById('weekPlanRepeat').checked;
@@ -4328,8 +4357,13 @@ function renderDailyQuests(){
 function renderWorkoutSection(){
   const q = WORKOUT_QUEST;
   const points = getWorkoutPoints(q.minutes);
+  const plannedId  = plannedWorkoutToday();
+  const plannedCat = plannedId ? WORKOUT_CATEGORIES.find(c => c.id === plannedId) : null;
+  const planTxt = (plannedCat && !q.done)
+    ? `<div style="font-size:.78rem;color:var(--gold-l);margin:4px 0">📅 Heute geplant: ${plannedCat.label} – bei Umsetzung +1 Bonus-Statpunkt (frei wählbar)</div>`
+    : '';
   const statusTxt = q.done
-    ? `✅ Erledigt (+${q.statPoints} Statpunkte)`
+    ? (q.statPoints > 0 ? `✅ Erledigt (+${q.statPoints} Statpunkte)` : '✅ Heute schon eingelöst')
     : q.minutes >= 10
       ? `⏱️ ${q.minutes} Min. erkannt → ${points.total} Statpunkte bereit`
       : '⏱️ Noch kein Training heute erkannt.';
@@ -4339,6 +4373,7 @@ function renderWorkoutSection(){
     <div class="mission-card ${q.done?'':'exp-focus'}" style="${q.done?'opacity:.5':''}">
       <div class="mc-title">${q.icon} ${q.title} ${q.done?'✅':''}</div>
       <div class="mc-desc">Trainiere heute und erhalte Statpunkte für deinen Charakter.</div>
+      ${planTxt}
       <div style="font-size:.72rem;color:var(--dim);margin:4px 0 6px">
         ⚠️ Nur einmal täglich einlösbar – stelle sicher, dass dein Training für heute abgeschlossen ist!
       </div>
@@ -4448,6 +4483,7 @@ function showWorkoutStep2(minutes, points) {
     <div style="font-size:.9rem;color:var(--text);margin-bottom:4px">
       Was für ein Training war es?
     </div>
+    ${plannedWorkoutToday() ? `<div style="font-size:.72rem;color:var(--gold-l);margin-bottom:6px">📅 = heute im Wochenplan geplant (+1 Bonus-Punkt bei Umsetzung)</div>` : ''}
     <div style="font-size:.72rem;color:var(--dim);margin-bottom:14px">
       ${points.fixed > 0
         ? `${points.fixed} Punkt${points.fixed>1?'e':''} werden automatisch vergeben, ${points.free} frei wählbar.`
@@ -4460,7 +4496,7 @@ function showWorkoutStep2(minutes, points) {
           border:1px solid var(--border);border-radius:3px;cursor:pointer;
           font-family:Cinzel,serif;font-size:.7rem;letter-spacing:.06em;
           color:var(--text);text-align:left;display:flex;justify-content:space-between;align-items:center">
-          <span>${cat.label}</span>
+          <span>${cat.label}${plannedWorkoutToday() === cat.id ? ' 📅' : ''}</span>
           ${cat.stat && points.fixed > 0
             ? `<span style="font-size:.6rem;color:var(--gold-l)">+${points.fixed}× ${cat.statLabel} fest</span>`
             : `<span style="font-size:.6rem;color:var(--dim)">alle Punkte frei</span>`}
@@ -4485,6 +4521,11 @@ function onWorkoutCategorySelected(minutes, categoryId) {
     _workoutState.freeRemaining = points.total;
   }
 
+  // Wochenplan-Bonus: geplantes Workout umgesetzt -> +1 freier Punkt
+  const bonus = plannedWorkoutBonus(cat);
+  _workoutState.bonus = bonus;
+  _workoutState.freeRemaining += bonus;
+
   if (_workoutState.freeRemaining > 0) {
     showWorkoutStep3();
   } else {
@@ -4506,6 +4547,9 @@ function showWorkoutStep3() {
       💪 Statpunkte verteilen
     </div>
     ${fixedTxt}
+    ${_workoutState.bonus ? `<div style="font-size:.75rem;color:var(--gold-l);margin-bottom:10px">
+        📅 Wochenplan-Bonus: +1 freier Punkt, weil du dein geplantes Workout umgesetzt hast.
+       </div>` : ''}
     <div style="font-size:.85rem;color:var(--text);margin-bottom:4px">
       Du hast noch <strong id="freePointsLeft">${freeRemaining}</strong> freie Punkt${freeRemaining!==1?'e':''} zu verteilen:
     </div>
@@ -4610,6 +4654,11 @@ function openWorkoutStatDialog(minutes, points, categoryId) {
     _workoutState.freeRemaining = points.total;
   }
 
+  // Wochenplan-Bonus: geplantes Workout umgesetzt -> +1 freier Punkt
+  const bonus = plannedWorkoutBonus(cat);
+  _workoutState.bonus = bonus;
+  _workoutState.freeRemaining += bonus;
+
   document.getElementById('workoutOverlay').classList.add('active');
   if (_workoutState.freeRemaining > 0) {
     showWorkoutStep3();
@@ -4632,7 +4681,7 @@ async function applyWorkoutStats() {
   const q = WORKOUT_QUEST;
   if (!q || q.done) return;
 
-  const { statsChosen } = _workoutState;
+  const { statsChosen, bonus } = _workoutState;
   const totalPoints = Object.values(statsChosen).reduce((a,b)=>a+b, 0);
   // q.done erst NACH erfolgreichem Speichern setzen
   _workoutState = null;
@@ -4643,7 +4692,7 @@ async function applyWorkoutStats() {
 
     const { data: chars, error: loadErr } = await sb
       .from('characters')
-      .select('id, staerke, gewandheit, intelligenz, schnelligkeit, ausdauer, lebenskraft, krit_chance, krit_schaden')
+      .select('id, staerke, gewandheit, intelligenz, schnelligkeit, ausdauer, lebenskraft, krit_chance, krit_schaden, workout_quest_day')
       .eq('user_id', session.user.id)
       .order('created_at', {ascending:false})
       .limit(1);
@@ -4652,12 +4701,22 @@ async function applyWorkoutStats() {
     if (!chars || !chars.length) throw new Error('Kein Charakter gefunden');
     const char = chars[0];
 
+    // Heute schon eingelöst (z. B. vor einem Neuladen oder auf einem anderen Gerät)? Dann keine zweite Belohnung.
+    if (char.workout_quest_day === getTodayKey()) {
+      if (character) character.workout_quest_day = char.workout_quest_day;
+      q.done = true;
+      renderDailyQuests();
+      showToast('ℹ️', 'Die Workout-Belohnung wurde heute schon eingelöst.');
+      return;
+    }
+
     // Stats addieren
     const updates = {};
     for (const [stat, pts] of Object.entries(statsChosen)) {
       if (pts > 0) updates[stat] = (char[stat] || 0) + pts;
     }
 
+    updates.workout_quest_day = getTodayKey(); // Einlösung für heute merken (im selben Update wie die Stats)
     if (Object.keys(updates).length > 0) {
       const { error: updateErr } = await sb.from('characters').update(updates).eq('id', char.id);
       if (updateErr) throw new Error('Speichern fehlgeschlagen: ' + updateErr.message);
@@ -4682,7 +4741,7 @@ async function applyWorkoutStats() {
       .filter(([,v])=>v>0)
       .map(([k,v])=>`+${v} ${statNames[k]||k}`)
       .join(', ');
-    showToast('💪', `Workout-Belohnung erhalten! ${summary}`);
+    showToast('💪', `Workout-Belohnung erhalten! ${summary}${bonus ? ' (inkl. 📅 Wochenplan-Bonus)' : ''}`);
 
   } catch(err) {
     console.error('Workout-Quest Fehler:', err);
@@ -5411,8 +5470,8 @@ loadCharacter().then(async () => {
     <div style="padding:18px 18px 10px;text-align:center">
       <div style="font-family:Cinzel,serif;font-size:.8rem;letter-spacing:.15em;color:var(--gold);
         text-transform:uppercase;margin-bottom:6px">📅 Wochenplan</div>
-      <div style="font-size:.82rem;color:var(--dim)">Lege fest, welche Quest du an welchem Tag haben willst.
-        „nach Wahl“ heißt: wie bisher selbst wählen.</div>
+      <div style="font-size:.82rem;color:var(--dim)">Lege fest, welche Quest du an welchem Tag haben willst – und welches Workout du machst
+        (geplant und umgesetzt gibt es +1 Bonus-Statpunkt). „nach Wahl“ heißt: wie bisher selbst wählen.</div>
     </div>
     <div id="weekPlanBody" style="padding:0 18px;overflow-y:auto;flex:1"></div>
     <div style="padding:12px 18px 16px;border-top:1px solid var(--border)">
