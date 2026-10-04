@@ -3491,7 +3491,7 @@ function timedSelectColumns() {
 // Hat man heute eine Quest des Platzes schon abgeholt, bleibt sie für den Tag fest (kein Wechseln mehr).
 // `categories` = Kategorien samt Quests (Anzeige auf der Karte und in der Auswahl), `options` = alle Quests des Platzes.
 const QUEST_SLOTS = [
-  {id:'focus', swapLabel:'Hobby / Aufgabe wechseln', def:'read',
+  {id:'focus', swapLabel:'Hobby / Aufgabe wechseln', planLabel:'🎭 Hobby / 🧹 Aufgabe', def:'read',
    categories:[
      {id:'hobbies', label:'Hobbys',             icon:'🎭', options:['read', 'instrument', 'hobby']},
      {id:'chores',  label:'Aufgaben erledigen', icon:'🧹', options:['tidy', 'garden', 'otherchores']},
@@ -3499,7 +3499,7 @@ const QUEST_SLOTS = [
    options:['read', 'instrument', 'hobby', 'tidy', 'garden', 'otherchores'],
   },
   // Zweiter Platz: Gesundheit (Wasser oder eine der beiden Schlaf-Quests)
-  {id:'health', swapLabel:'Gesundheit wechseln', def:'water',
+  {id:'health', swapLabel:'Gesundheit wechseln', planLabel:'💚 Gesundheit', def:'water',
    categories:[
      {id:'health', label:'Gesundheit', icon:'💚', options:['water', 'sleepbed', 'sleepdur']},
    ],
@@ -3528,8 +3528,67 @@ function getSlotChoice(slot) {
   for (const o of slot.options) {
     if (questDayCol(o) && c[questDayCol(o)] === today) return o; // heute abgeholt -> bleibt
   }
-  const v = (c.quest_choices || {})[slot.id];
+  const ch = c.quest_choices || {};
+  const planned = plannedChoice(slot);
+  if (planned) {
+    // Wer heute von Hand wechselt, überschreibt den Wochenplan nur für heute
+    if (ch[slot.id + '_day'] === today && slot.options.includes(ch[slot.id])) return ch[slot.id];
+    return planned;
+  }
+  const v = ch[slot.id];
   return slot.options.includes(v) ? v : slot.def;
+}
+
+// ── WOCHENPLAN: welche Quest an welchem Wochentag ──
+// Gespeichert in characters.week_plan (JSONB):
+//   {repeat:true|false, weekStart:20261005 (Montag der Woche, in der gespeichert wurde),
+//    days:{mon:{focus:'read', health:'water'}, tue:{...}, ...}}
+// Ein Tag/Platz ohne Eintrag = wie bisher selbst wählen. repeat=false: Plan gilt nur in der Woche von weekStart.
+const WEEK_DAYS = [
+  {key:'mon', label:'Montag'}, {key:'tue', label:'Dienstag'}, {key:'wed', label:'Mittwoch'},
+  {key:'thu', label:'Donnerstag'}, {key:'fri', label:'Freitag'}, {key:'sat', label:'Samstag'}, {key:'sun', label:'Sonntag'},
+];
+
+const QUEST_SHORT = {
+  read:'Lesen', instrument:'Instrument üben', hobby:'Andere Hobbys',
+  tidy:'Aufräumen', garden:'Gartenarbeit', otherchores:'Andere Aufgaben erledigen',
+  water:'Wasser trinken', sleepbed:'Früh ins Bett', sleepdur:'7–9 Stunden schlafen',
+};
+
+function weekdayKey(date) {
+  return WEEK_DAYS[(date.getDay() + 6) % 7].key;
+}
+
+// Datum (YYYYMMDD) des Montags der Woche von `date` (lokale Zeit)
+function mondayKeyOf(date) {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+}
+
+function weekPlanActive() {
+  const p = character && character.week_plan;
+  if (!p || typeof p !== 'object' || !p.days) return false;
+  return p.repeat ? true : p.weekStart === mondayKeyOf(new Date());
+}
+
+// Welche Quest des Platzes sieht der Wochenplan für heute vor? (null = nichts geplant)
+function plannedChoice(slot) {
+  if (!weekPlanActive()) return null;
+  const day = character.week_plan.days[weekdayKey(new Date())];
+  const v = day && day[slot.id];
+  return slot.options.includes(v) ? v : null;
+}
+
+// Kleiner Hinweis auf der Karte, wenn die Quest vom Wochenplan kommt
+function planBadge(q) {
+  const slot = QUEST_SLOTS.find(s => s.options.includes(q.id));
+  return (slot && plannedChoice(slot) === q.id) ? ' · 📅 Wochenplan' : '';
+}
+
+function updateWeekPlanButton() {
+  const b = document.getElementById('weekPlanBtn');
+  if (b) b.textContent = weekPlanActive() ? '📅 Wochenplan · aktiv' : '📅 Wochenplan';
 }
 
 // Die täglichen Quests, die heute angezeigt werden (Schritte, Wasser + je Platz die gewählte Option = 3 Quests)
@@ -3694,7 +3753,7 @@ async function chooseSlotQuest(slotId, optId) {
   try {
     const { data:{session} } = await sb.auth.getSession();
     if (!session) return;
-    const choices = Object.assign({}, character.quest_choices || {}, {[slot.id]: next});
+    const choices = Object.assign({}, character.quest_choices || {}, {[slot.id]: next, [slot.id + '_day']: getTodayKey()});
     const { error } = await sb.from('characters').update({quest_choices: choices}).eq('id', character.id);
     if (error) throw error;
     character.quest_choices = choices;
@@ -3864,7 +3923,7 @@ function renderTimedQuestCard(q) {
 
   return `
     <div class="mission-card ${q.done ? '' : 'exp-focus'}" style="${q.done ? 'opacity:.5' : ''}">
-      ${cat ? `<div style="font-family:Cinzel,serif;font-size:.55rem;letter-spacing:.2em;color:var(--dim);text-transform:uppercase;margin-bottom:3px">${cat.icon} ${cat.label}</div>` : ''}
+      ${cat ? `<div style="font-family:Cinzel,serif;font-size:.55rem;letter-spacing:.2em;color:var(--dim);text-transform:uppercase;margin-bottom:3px">${cat.icon} ${cat.label}${planBadge(q)}</div>` : ''}
       <div class="mc-title">${q.icon} ${q.title} ${q.done ? '✅' : ''}</div>
       <div class="mc-desc">${q.desc}</div>
       ${progress}
@@ -4081,7 +4140,7 @@ function renderSimpleQuestCard(q) {
 
   return `
     <div class="mission-card ${q.done ? '' : 'exp-focus'}" style="${q.done ? 'opacity:.5' : ''}">
-      ${cat ? `<div style="font-family:Cinzel,serif;font-size:.55rem;letter-spacing:.2em;color:var(--dim);text-transform:uppercase;margin-bottom:3px">${cat.icon} ${cat.label}</div>` : ''}
+      ${cat ? `<div style="font-family:Cinzel,serif;font-size:.55rem;letter-spacing:.2em;color:var(--dim);text-transform:uppercase;margin-bottom:3px">${cat.icon} ${cat.label}${planBadge(q)}</div>` : ''}
       <div class="mc-title">${q.icon} ${title} ${q.done ? '✅' : ''}</div>
       <div class="mc-desc">${desc}</div>
       ${q.done ? '' : sleepInfoHtml(q.id)}
@@ -4104,6 +4163,95 @@ async function claimSimpleQuest(id) {
     if (!ok) return;
   }
   completeQuest(id);
+}
+
+// ── WOCHENPLAN-EDITOR ──
+function weekPlanOptionsHtml(slot, selected) {
+  let h = `<option value="">– nach Wahl (wie bisher)</option>`;
+  const cats = slot.categories || [{id:'all', label:'', icon:'', options: slot.options}];
+  cats.forEach(c => {
+    const opts = c.options.map(o => {
+      const q = DAILY_QUESTS.find(x => x.id === o);
+      return `<option value="${o}" ${o === selected ? 'selected' : ''}>${q.icon} ${QUEST_SHORT[o] || q.title}</option>`;
+    }).join('');
+    h += cats.length > 1 ? `<optgroup label="${c.icon} ${c.label}">${opts}</optgroup>` : opts;
+  });
+  return h;
+}
+
+function renderWeekPlanEditor() {
+  const has = !!(character && character.week_plan && character.week_plan.days);
+  const p = has ? character.week_plan : {repeat: false, days: {}};
+  const todayKey = weekdayKey(new Date());
+  const selStyle = "width:100%;padding:8px;background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:3px;color:var(--text);font-family:'Crimson Pro',serif;font-size:.9rem";
+
+  document.getElementById('weekPlanBody').innerHTML = WEEK_DAYS.map(d => {
+    const dd = p.days[d.key] || {};
+    const isToday = d.key === todayKey;
+    const sels = QUEST_SLOTS.map(slot => `
+      <label style="display:block;font-size:.7rem;color:var(--dim);margin:7px 0 2px">${slot.planLabel}</label>
+      <select id="wp_${d.key}_${slot.id}" style="${selStyle}">${weekPlanOptionsHtml(slot, dd[slot.id])}</select>`).join('');
+    return `<div style="border:1px solid ${isToday ? 'var(--gold)' : 'var(--border)'};border-radius:3px;padding:10px 12px;margin-bottom:10px">
+      <div style="font-family:Cinzel,serif;font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:${isToday ? 'var(--gold)' : 'var(--text)'}">${d.label}${isToday ? ' · heute' : ''}</div>${sels}
+    </div>`;
+  }).join('');
+
+  document.getElementById('weekPlanRepeat').checked = !!p.repeat;
+  let status = 'Noch kein Wochenplan gespeichert.';
+  if (has) status = p.repeat ? 'Der Plan wiederholt sich jede Woche.'
+    : (weekPlanActive() ? 'Der Plan gilt nur in dieser Woche.' : '⚠️ Der Plan galt nur eine Woche und ist abgelaufen.');
+  document.getElementById('weekPlanStatus').textContent = status;
+}
+
+function openWeekPlan() {
+  if (!character) return;
+  renderWeekPlanEditor();
+  document.getElementById('weekPlanOverlay').classList.add('active');
+}
+
+function closeWeekPlan() {
+  const ov = document.getElementById('weekPlanOverlay');
+  if (ov) ov.classList.remove('active');
+}
+
+// Plan (oder null = löschen) speichern. Von Hand getroffene Tageswahlen von heute werden dabei zurückgesetzt,
+// damit der neue Plan sofort gilt.
+async function persistWeekPlan(plan, doneMsg) {
+  if (!character) return;
+  try {
+    const cleaned = {};
+    Object.entries(character.quest_choices || {}).forEach(([k, v]) => { if (!k.endsWith('_day')) cleaned[k] = v; });
+    const { error } = await sb.from('characters').update({week_plan: plan, quest_choices: cleaned}).eq('id', character.id);
+    if (error) throw error;
+    character.week_plan = plan;
+    character.quest_choices = cleaned;
+    closeWeekPlan();
+    showToast('📅', doneMsg);
+    renderDailyQuests();
+  } catch(err) {
+    console.error('Wochenplan speichern fehlgeschlagen:', err);
+    showToast('⚠️', 'Speichern fehlgeschlagen. Bitte nochmal versuchen.');
+  }
+}
+
+async function saveWeekPlan() {
+  const days = {};
+  WEEK_DAYS.forEach(d => {
+    const e = {};
+    QUEST_SLOTS.forEach(slot => {
+      const el = document.getElementById(`wp_${d.key}_${slot.id}`);
+      if (el && el.value && slot.options.includes(el.value)) e[slot.id] = el.value;
+    });
+    if (Object.keys(e).length) days[d.key] = e;
+  });
+  const repeat = document.getElementById('weekPlanRepeat').checked;
+  const plan = Object.keys(days).length ? {repeat, weekStart: mondayKeyOf(new Date()), days} : null;
+  await persistWeekPlan(plan, plan ? 'Wochenplan gespeichert' : 'Wochenplan geleert');
+}
+
+async function clearWeekPlan() {
+  const ok = await showConfirmDialog('📅', 'Den gesamten Wochenplan löschen?', 'Löschen', 'Abbrechen');
+  if (ok) await persistWeekPlan(null, 'Wochenplan gelöscht');
 }
 
 // ── SCHLAFENSZEIT FESTLEGEN ──
@@ -4174,6 +4322,7 @@ function renderDailyQuests(){
 
   renderWorkoutSection();
   ensureTimedTick();
+  updateWeekPlanButton();
 }
 
 function renderWorkoutSection(){
@@ -5202,9 +5351,12 @@ loadCharacter().then(async () => {
       </div>
 
       <!-- Tägliche Quests -->
-      <div style="padding:6px 18px 2px">
+      <div style="padding:6px 18px 2px;display:flex;justify-content:space-between;align-items:center;gap:8px">
         <div style="font-family:Cinzel,serif;font-size:.6rem;letter-spacing:.12em;
           text-transform:uppercase;color:var(--dim)">📋 Tägliche Aufgaben</div>
+        <button id="weekPlanBtn" onclick="openWeekPlan()" style="padding:4px 10px;background:rgba(255,255,255,.08);
+          border:1px solid var(--border);border-radius:2px;color:var(--text);font-family:Cinzel,serif;
+          font-size:.55rem;letter-spacing:.08em;cursor:pointer">📅 Wochenplan</button>
       </div>
       <div class="mp-missions" id="dailyQuestList">
         <!-- filled by JS -->
@@ -5250,6 +5402,37 @@ loadCharacter().then(async () => {
   </div>
   <div id="focusState" style="font-family:Cinzel,serif;font-size:.75rem;letter-spacing:.2em;color:#5c5540;min-height:1em"></div>
   <div id="focusButtons" style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center"></div>
+</div>
+
+<!-- Wochenplan: welche Quest an welchem Wochentag -->
+<div class="overlay" id="weekPlanOverlay" style="z-index:190">
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:4px;
+    width:min(380px,94vw);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 0 40px rgba(0,0,0,.9)">
+    <div style="padding:18px 18px 10px;text-align:center">
+      <div style="font-family:Cinzel,serif;font-size:.8rem;letter-spacing:.15em;color:var(--gold);
+        text-transform:uppercase;margin-bottom:6px">📅 Wochenplan</div>
+      <div style="font-size:.82rem;color:var(--dim)">Lege fest, welche Quest du an welchem Tag haben willst.
+        „nach Wahl“ heißt: wie bisher selbst wählen.</div>
+    </div>
+    <div id="weekPlanBody" style="padding:0 18px;overflow-y:auto;flex:1"></div>
+    <div style="padding:12px 18px 16px;border-top:1px solid var(--border)">
+      <label style="display:flex;align-items:center;gap:8px;font-size:.9rem;color:var(--text);cursor:pointer">
+        <input type="checkbox" id="weekPlanRepeat" style="width:18px;height:18px"> Plan jede Woche wiederholen
+      </label>
+      <div id="weekPlanStatus" style="font-size:.75rem;color:var(--dim);margin:6px 0 12px"></div>
+      <div style="display:flex;gap:10px">
+        <button onclick="closeWeekPlan()" style="flex:1;padding:11px;background:transparent;
+          border:1px solid var(--border);border-radius:3px;color:var(--dim);font-family:Cinzel,serif;
+          font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;cursor:pointer">Abbrechen</button>
+        <button onclick="saveWeekPlan()" style="flex:1;padding:11px;background:linear-gradient(135deg,var(--gold-d),var(--gold));
+          border:none;border-radius:3px;color:#1a1200;font-family:Cinzel,serif;
+          font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;cursor:pointer">Speichern</button>
+      </div>
+      <button onclick="clearWeekPlan()" style="width:100%;margin-top:10px;padding:8px;background:transparent;
+        border:none;color:var(--dim);font-family:Cinzel,serif;font-size:.6rem;letter-spacing:.1em;
+        text-transform:uppercase;cursor:pointer;text-decoration:underline">Plan löschen</button>
+    </div>
+  </div>
 </div>
 
 <!-- Schlafenszeit festlegen (Schlaf-Quest "Früh ins Bett") -->
