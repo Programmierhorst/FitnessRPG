@@ -3485,8 +3485,8 @@ function getBedtime() {
 // Spalten, die beim Abholen aus Supabase gelesen werden (alle Tages-Spalten + betroffene Stats)
 function timedSelectColumns() {
   const cfgs = Object.values(TIMED_QUESTS);
-  const cols = ['id', 'level', 'xp', 'gold', 'steps_quest_day', 'steps_quest_tier']
-    .concat(allQuestDayCols(), cfgs.map(c => c.stat));
+  const cols = ['id', 'level', 'xp', 'gold', 'steps_quest_day', 'steps_quest_tier', 'extra_quest_day']
+    .concat(allQuestDayCols(), cfgs.map(c => c.stat), WORKOUT_FREE_STATS.map(s => s.id));
   return [...new Set(cols)].join(', ');
 }
 
@@ -3589,20 +3589,510 @@ function planBadge(q) {
   return (slot && plannedChoice(slot) === q.id) ? ' · 📅 Wochenplan' : '';
 }
 
-// Welches Workout (Kategorie-ID aus WORKOUT_CATEGORIES) ist für heute im Wochenplan eingetragen? (null = keins)
-function plannedWorkoutToday() {
-  if (!weekPlanActive()) return null;
-  const day = character.week_plan.days[weekdayKey(new Date())];
-  const v = day && day.workout;
-  return WORKOUT_CATEGORIES.some(c => c.id === v) ? v : null;
+// ══ TRAININGS-SPLIT ══
+// Der Spieler wählt einen Split (2er–6er) und legt pro Wochentag fest: Training / Erholung / Frei.
+//  - Trainingstag: Workout-Belohnung einlösen. Erholungstag: statt Training eine Zusatzaufgabe (+2 freie Statpunkte),
+//    sobald die normalen Aufgaben (Hobby/Aufgabe + Gesundheit, ohne Schritte) erledigt sind. Frei: keine Vorgabe.
+//  - Wochenbelohnung (3 freie Statpunkte + EXP + Gold), wenn in der Vorwoche an allen Trainingstagen trainiert und an
+//    keinem Erholungstag trainiert wurde. Training am Erholungstag ist erlaubt (normale Belohnung), kostet aber die Wochenbelohnung.
+// Gespeichert in characters.split_plan (JSONB): {active:{n,days,from,rewardFrom}|null, pending:{...}|null}
+//   days = {mon:'train'|'rest'|'free', ...}; from = Montag (YYYYMMDD), ab dem der Plan gilt;
+//   rewardFrom = erster Montag, ab dem die Wochenbelohnung zählt (davor: Testwoche). n=0 bedeutet "kein Split".
+// und characters.split_log (JSONB): {weeks:{"<Montag>":[<Trainingstage als YYYYMMDD>,...]}, claimed:<Montag der abgeholten Woche>}
+const SPLITS = {
+  2:{train:2, rest:2}, 3:{train:3, rest:3}, 4:{train:4, rest:3}, 5:{train:5, rest:2}, 6:{train:6, rest:1},
+};
+// ACHTUNG: Werte vorläufig – Balancing folgt später.
+const SPLIT_WEEK_REWARD = {exp:300, gold:30, points:3};
+const SPLIT_REST_EXTRA_POINTS = 2;
+const SPLIT_TYPE_LABEL = {train:'🏋️ Training', rest:'😌 Erholung', free:'➖ Frei'};
+const SPLIT_DEFAULT_DAYS = {
+  2:{mon:'train', thu:'train', tue:'rest', fri:'rest'},
+  3:{mon:'train', wed:'train', fri:'train', tue:'rest', thu:'rest', sat:'rest'},
+  4:{mon:'train', tue:'train', thu:'train', fri:'train', wed:'rest', sat:'rest', sun:'rest'},
+  5:{mon:'train', tue:'train', wed:'train', fri:'train', sat:'train', thu:'rest', sun:'rest'},
+  6:{mon:'train', tue:'train', wed:'train', thu:'train', fri:'train', sat:'train', sun:'rest'},
+};
+
+function splitDefaultDays(n) {
+  const d = {};
+  WEEK_DAYS.forEach(w => { d[w.key] = (SPLIT_DEFAULT_DAYS[n] || {})[w.key] || 'free'; });
+  return d;
 }
 
-// Bonus-Statpunkt (0 oder 1) für ein umgesetztes, geplantes Workout. `cat` = gewählte/erkannte Kategorie oder null
-// (Art unbekannt: z. B. wenn die Belohnung direkt über die Quest-Karte eingelöst wird -> zählt als umgesetzt).
-function plannedWorkoutBonus(cat) {
-  const planned = plannedWorkoutToday();
-  if (!planned) return 0;
-  return (!cat || cat.id === planned) ? 1 : 0;
+function dateFromKey(key) { return new Date(Math.floor(key / 10000), Math.floor(key / 100) % 100 - 1, key % 100); }
+function dateKeyOf(d) { return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(); }
+function addDaysKey(key, n) { const d = dateFromKey(key); d.setDate(d.getDate() + n); return dateKeyOf(d); }
+function fmtDateKey(key) {
+  const d = dateFromKey(key);
+  return String(d.getDate()).padStart(2, '0') + '.' + String(d.getMonth() + 1).padStart(2, '0') + '.';
+}
+
+// Der Split, der in der Woche mit dem Montag W gilt (null = keiner)
+function effectiveSplit(W) {
+  const sp = character && character.split_plan;
+  if (!sp || typeof sp !== 'object') return null;
+  const pick = (sp.pending && sp.pending.from <= W) ? sp.pending
+    : ((sp.active && sp.active.from <= W) ? sp.active : null);
+  return (pick && pick.n > 0) ? pick : null;
+}
+
+function splitRewardEligible(sp, W) {
+  return !sp.rewardFrom || sp.rewardFrom <= W;
+}
+
+// Tagestyp von heute: 'train' | 'rest' | 'free' | null (kein Split)
+function todaySplitType() {
+  const now = new Date();
+  const sp = effectiveSplit(mondayKeyOf(now));
+  if (!sp) return null;
+  return sp.days[weekdayKey(now)] || 'free';
+}
+
+// Prüft eine Woche (Montag W). upToKey = nur Tage bis heute prüfen (laufende Woche); ohne = ganze Woche.
+function splitWeekCheck(W, upToKey) {
+  const sp = effectiveSplit(W);
+  if (!sp) return null;
+  const trained = new Set((((character.split_log || {}).weeks) || {})[W] || []);
+  const fails = [];
+  for (let i = 0; i < 7; i++) {
+    const key = addDaysKey(W, i);
+    if (upToKey !== undefined && key > upToKey) break;
+    const type = sp.days[WEEK_DAYS[i].key] || 'free';
+    const did = trained.has(key);
+    if (type === 'train' && !did && (upToKey === undefined || key < upToKey)) fails.push(`${WEEK_DAYS[i].label}: Training fehlt`);
+    if (type === 'rest' && did) fails.push(`${WEEK_DAYS[i].label}: trotz Erholungstag trainiert`);
+  }
+  return {sp, ok: fails.length === 0, fails, eligible: splitRewardEligible(sp, W)};
+}
+
+// Trainingstag in das Wochenprotokoll eintragen (nur die letzten 3 Wochen werden behalten)
+function splitLogWithToday(log) {
+  const l = {weeks: Object.assign({}, (log && log.weeks) || {}), claimed: (log && log.claimed) || 0};
+  const W = mondayKeyOf(new Date());
+  const today = getTodayKey();
+  const arr = Array.isArray(l.weeks[W]) ? l.weeks[W].slice() : [];
+  if (!arr.includes(today)) arr.push(today);
+  l.weeks[W] = arr;
+  const keep = new Set([W, addDaysKey(W, -7), addDaysKey(W, -14)]);
+  Object.keys(l.weeks).forEach(k => { if (!keep.has(Number(k))) delete l.weeks[k]; });
+  return l;
+}
+
+// Wochenbelohnung für die Vorwoche: {week, ok, fails, claimed} oder null
+function splitRewardInfo() {
+  const W = addDaysKey(mondayKeyOf(new Date()), -7);
+  const chk = splitWeekCheck(W);
+  if (!chk || !chk.eligible) return null;
+  const claimed = ((character.split_log || {}).claimed) === W;
+  return {week: W, ok: chk.ok, fails: chk.fails, claimed, n: chk.sp.n};
+}
+
+// Hinweiszeile für die Workout-Karte
+function splitInfoHtml() {
+  const now = new Date();
+  const thisMon = mondayKeyOf(now);
+  const sp = effectiveSplit(thisMon);
+  if (!sp) return '';
+  const type = sp.days[weekdayKey(now)] || 'free';
+  const txt = type === 'train' ? `🏋️ Heute: Trainingstag (${sp.n}er-Split)`
+    : type === 'rest' ? `😌 Heute: Erholungstag (${sp.n}er-Split). Training ist erlaubt und wird normal belohnt, kostet aber die Wochenbelohnung.`
+    : `➖ Heute: freier Tag (${sp.n}er-Split)`;
+  let status;
+  if (!splitRewardEligible(sp, thisMon)) status = 'ℹ️ Testwoche – die Wochenbelohnung zählt ab nächstem Montag.';
+  else {
+    const chk = splitWeekCheck(thisMon, getTodayKey());
+    status = chk.ok ? '✅ Wochenbelohnung bisher auf Kurs.' : `❌ Wochenbelohnung dieser Woche verloren (${chk.fails[0]}).`;
+  }
+  return `<div style="font-size:.78rem;color:var(--gold-l);margin:4px 0;line-height:1.5">${txt}<br>${status}</div>`;
+}
+
+// Warnhinweis im Workout-Dialog, wenn heute Erholungstag ist
+function restDayWarningHtml() {
+  const now = new Date();
+  const thisMon = mondayKeyOf(now);
+  const sp = effectiveSplit(thisMon);
+  if (!sp || (sp.days[weekdayKey(now)] || 'free') !== 'rest') return '';
+  const eligible = splitRewardEligible(sp, thisMon);
+  return `<div style="font-size:.82rem;color:var(--gold-l);margin-bottom:16px;line-height:1.6">
+    😌 Heute ist dein <strong>Erholungstag</strong>. Wenn du trotzdem trainierst, bekommst du die normale Belohnung${eligible ? ', aber deine <strong>Wochenbelohnung entfällt</strong>' : ''}.</div>`;
+}
+
+function updateSplitButton() {
+  const b = document.getElementById('splitBtn');
+  if (!b) return;
+  const sp = effectiveSplit(mondayKeyOf(new Date()));
+  b.textContent = sp ? `🏋️ ${sp.n}er-Split` : '🏋️ Split';
+}
+
+// ── Freie Statpunkte verteilen (allgemeiner Dialog; gibt die Verteilung zurück oder null bei Abbruch) ──
+let _fp = null;
+
+function pickFreeStats(points, title, intro) {
+  return new Promise(resolve => {
+    _fp = {remaining: points, chosen: {}, resolve};
+    document.getElementById('freePointsTitle').textContent = title;
+    document.getElementById('freePointsIntro').textContent = intro || '';
+    renderFreePoints();
+    document.getElementById('freePointsOverlay').classList.add('active');
+  });
+}
+
+function renderFreePoints() {
+  const f = _fp;
+  if (!f) return;
+  document.getElementById('freePointsGrid').innerHTML = WORKOUT_FREE_STATS.map(s => {
+    const n = f.chosen[s.id] || 0;
+    return `<div style="display:flex;gap:4px;align-items:stretch">
+      <button onclick="freePointsAdd('${s.id}')" style="flex:1;padding:10px 8px;background:rgba(201,168,76,.08);
+        border:1px solid var(--border);border-radius:3px;cursor:pointer;font-family:Cinzel,serif;font-size:.65rem;
+        letter-spacing:.05em;color:var(--text);text-align:center">
+        <div>${s.label}</div>
+        <div style="font-size:.85rem;color:var(--gold-l);font-weight:600;margin-top:3px">+${n}</div>
+      </button>
+      <button onclick="freePointsRemove('${s.id}')" ${n === 0 ? 'disabled' : ''} style="width:28px;padding:0;
+        background:${n > 0 ? 'rgba(201,68,68,.2)' : 'rgba(255,255,255,.04)'};border:1px solid var(--border);border-radius:3px;
+        color:${n > 0 ? '#e07070' : 'var(--dim)'};font-size:1rem;cursor:${n > 0 ? 'pointer' : 'not-allowed'}">−</button>
+    </div>`;
+  }).join('');
+  document.getElementById('fpLeft').textContent = f.remaining;
+  const btn = document.getElementById('freePointsConfirm');
+  const ready = f.remaining === 0;
+  btn.disabled = !ready;
+  btn.style.background = ready ? 'linear-gradient(135deg,var(--gold-d),var(--gold))' : 'rgba(255,255,255,.06)';
+  btn.style.border = ready ? 'none' : '1px solid var(--border)';
+  btn.style.color = ready ? '#1a1200' : 'var(--dim)';
+  btn.style.cursor = ready ? 'pointer' : 'not-allowed';
+}
+
+function freePointsAdd(id) {
+  if (!_fp || _fp.remaining <= 0) return;
+  _fp.chosen[id] = (_fp.chosen[id] || 0) + 1;
+  _fp.remaining--;
+  renderFreePoints();
+}
+
+function freePointsRemove(id) {
+  if (!_fp || (_fp.chosen[id] || 0) <= 0) return;
+  _fp.chosen[id]--;
+  _fp.remaining++;
+  renderFreePoints();
+}
+
+function freePointsConfirm() {
+  if (!_fp || _fp.remaining !== 0) return;
+  const done = _fp.resolve, chosen = _fp.chosen;
+  _fp = null;
+  document.getElementById('freePointsOverlay').classList.remove('active');
+  done(chosen);
+}
+
+function freePointsCancel() {
+  if (!_fp) return;
+  const done = _fp.resolve;
+  _fp = null;
+  document.getElementById('freePointsOverlay').classList.remove('active');
+  done(null);
+}
+
+// ── Wochenbelohnung abholen ──
+async function claimSplitWeekReward() {
+  const info = splitRewardInfo();
+  if (!info || !info.ok || info.claimed) return;
+  const stats = await pickFreeStats(SPLIT_WEEK_REWARD.points, '🏆 Wochenbelohnung',
+    'Du hast deinen Split letzte Woche eingehalten! Verteile deine freien Statpunkte:');
+  if (!stats) return;
+  try {
+    const { data:{session} } = await sb.auth.getSession();
+    if (!session) return;
+    const cols = ['id', 'level', 'xp', 'gold', 'split_log'].concat(WORKOUT_FREE_STATS.map(s => s.id)).join(', ');
+    const { data: chars, error: loadErr } = await sb.from('characters').select(cols)
+      .eq('user_id', session.user.id).order('created_at', {ascending:false}).limit(1);
+    if (loadErr || !chars || !chars.length) throw new Error('Laden fehlgeschlagen');
+    const char = chars[0];
+    const log = char.split_log || {};
+    if (log.claimed === info.week) {
+      character.split_log = log;
+      renderDailyQuests();
+      showToast('ℹ️', 'Die Wochenbelohnung wurde schon abgeholt.');
+      return;
+    }
+    const rewards = getQuestRewards({exp: SPLIT_WEEK_REWARD.exp, gold: SPLIT_WEEK_REWARD.gold}, character?.level || 1);
+    rewards.exp  = applyGuildBonus(rewards.exp,  'exp');
+    rewards.gold = applyGuildBonus(rewards.gold, 'gold');
+    let newXP = (char.xp || 0) + rewards.exp, newGold = (char.gold || 0) + rewards.gold;
+    let newLevel = char.level || 1, leveledUp = false;
+    while (true) {
+      const needed = expRequired(newLevel + 1);
+      if (newXP >= needed && newLevel < 9999) { newXP -= needed; newLevel++; leveledUp = true; } else break;
+    }
+    const upd = {xp: newXP, gold: newGold, level: newLevel, split_log: Object.assign({}, log, {claimed: info.week})};
+    for (const [st, pts] of Object.entries(stats)) if (pts > 0) upd[st] = (char[st] || 0) + pts;
+    const { error: updErr } = await sb.from('characters').update(upd).eq('id', char.id);
+    if (updErr) throw updErr;
+    Object.entries(upd).forEach(([k, v]) => { character[k] = v; });
+    updateHUD();
+    if (leveledUp) showLevelUpBanner(newLevel);
+    showToast('🏆', `Wochenbelohnung! +${rewards.exp} EXP +${rewards.gold} 💰 +${SPLIT_WEEK_REWARD.points} Statpunkte`);
+    renderDailyQuests();
+  } catch(err) {
+    console.error('Wochenbelohnung fehlgeschlagen:', err);
+    showToast('⚠️', 'Fehler beim Speichern: ' + (err.message || err));
+  }
+}
+
+// ── Zusatzaufgabe am Erholungstag ──
+// Pool: alle Quests der tauschbaren Plätze, die heute noch nicht als normale Aufgabe abgeholt wurden.
+// Die Wahl wird nur lokal gemerkt (pro Tag); ob die Zusatzaufgabe erledigt ist, steht in characters.extra_quest_day.
+const EXTRA_PICK_KEY = 'extraQuestPick';
+
+function extraQuestPool() {
+  const today = getTodayKey();
+  return QUEST_SLOTS.flatMap(s => s.options).filter(id => questDayCol(id) && character[questDayCol(id)] !== today);
+}
+
+// Zustand: none (kein Erholungstag) | done | locked (normale Aufgaben fehlen noch) | pick | active
+function extraQuestState() {
+  if (!character || todaySplitType() !== 'rest') return {state: 'none'};
+  const today = getTodayKey();
+  if (character.extra_quest_day === today) return {state: 'done'};
+  if (!QUEST_SLOTS.every(s => slotClaimedToday(s, character))) return {state: 'locked'};
+  const pool = extraQuestPool();
+  let pick = null;
+  try {
+    const p = JSON.parse(localStorage.getItem(EXTRA_PICK_KEY) || 'null');
+    if (p && p.day === today && pool.includes(p.id)) pick = p.id;
+  } catch(e) {}
+  return pick ? {state: 'active', pickId: pick, pool} : {state: 'pick', pool};
+}
+
+function isExtraId(id) {
+  const st = extraQuestState();
+  return st.state === 'active' && st.pickId === id;
+}
+
+// Abholen: Zusatzaufgabe läuft über einen eigenen Weg, normale Quests wie bisher
+function claimQuestRouted(id) {
+  if (isExtraId(id)) claimExtraQuest(id);
+  else completeQuest(id);
+}
+
+async function claimExtraQuest(id) {
+  const stats = await pickFreeStats(SPLIT_REST_EXTRA_POINTS, '🛋️ Zusatzaufgabe geschafft',
+    `Du bekommst ${SPLIT_REST_EXTRA_POINTS} freie Statpunkte für deine Zusatzaufgabe. Verteile sie:`);
+  if (!stats) return;
+  await completeQuest(id, {extra: true, bonusStats: stats});
+}
+
+function openExtraPicker() {
+  const st = extraQuestState();
+  if (st.state !== 'pick' && st.state !== 'active') return;
+  document.getElementById('slotPickTitle').textContent = 'Zusatzaufgabe wählen';
+  document.getElementById('slotPickTabs').innerHTML = '';
+  const cur = st.pickId || null;
+  let html = '';
+  QUEST_SLOTS.forEach(slot => {
+    (slot.categories || [{id:'all', label:'', icon:'', options: slot.options}]).forEach(c => {
+      const opts = c.options.filter(o => st.pool.includes(o));
+      if (!opts.length) return;
+      if (c.label) html += `<div style="font-family:Cinzel,serif;font-size:.55rem;letter-spacing:.2em;color:var(--dim);text-transform:uppercase;margin:6px 0 0">${c.icon} ${c.label}</div>`;
+      html += opts.map(o => {
+        const q = DAILY_QUESTS.find(x => x.id === o);
+        const cfg = TIMED_QUESTS[o];
+        const isCur = o === cur;
+        return `<button onclick="chooseExtraQuest('${o}')" style="width:100%;display:flex;justify-content:space-between;align-items:center;gap:10px;
+          padding:11px 14px;background:${isCur ? 'rgba(201,168,76,.12)' : 'transparent'};border:1px solid ${isCur ? 'var(--gold)' : 'var(--border)'};
+          border-radius:3px;color:var(--text);font-family:'Crimson Pro',serif;font-size:.95rem;text-align:left;cursor:pointer">
+          <span>${q.icon} ${QUEST_SHORT[o] || q.title}</span>
+          <span style="font-size:.8rem;color:var(--dim);white-space:nowrap">${cfg ? `${cfg.statIcon} +1 ${cfg.statLabel}` : `✨ ${q.exp} EXP`}${isCur ? ' · aktuell' : ''}</span>
+        </button>`;
+      }).join('');
+    });
+  });
+  document.getElementById('slotPickList').innerHTML = html;
+  document.getElementById('slotPickOverlay').classList.add('active');
+}
+
+function chooseExtraQuest(id) {
+  closeSlotPicker();
+  const st = extraQuestState();
+  if (!st.pool || !st.pool.includes(id)) return;
+  if (st.pickId && st.pickId !== id && TIMED_QUESTS[st.pickId]) timedPauseSilent(st.pickId); // Fortschritt bleibt erhalten
+  try { localStorage.setItem(EXTRA_PICK_KEY, JSON.stringify({day: getTodayKey(), id})); } catch(e) {}
+  renderDailyQuests();
+}
+
+// Timer, die im Aufgaben-Fenster mitlaufen sollen: die sichtbaren Quests plus die gewählte Zusatzaufgabe
+function timedQuestsToTick() {
+  const list = getActiveDailyQuests().slice();
+  const st = extraQuestState();
+  if (st.state === 'active') {
+    const q = DAILY_QUESTS.find(x => x.id === st.pickId);
+    if (q && !list.includes(q)) list.push(q);
+  }
+  return list;
+}
+
+function extraCardShell(inner, dim) {
+  return `<div class="mission-card ${dim ? '' : 'exp-focus'}" style="${dim ? 'opacity:.6' : ''}">
+    <div style="font-family:Cinzel,serif;font-size:.55rem;letter-spacing:.2em;color:var(--dim);text-transform:uppercase;margin-bottom:3px">🛋️ Erholungstag · Zusatzaufgabe</div>
+    ${inner}
+  </div>`;
+}
+
+function renderExtraQuestHtml() {
+  const st = extraQuestState();
+  if (st.state === 'none') return '';
+  const gold = 'padding:5px 12px;background:linear-gradient(135deg,var(--gold-d),var(--gold));border:none;border-radius:2px;color:#1a1200;font-family:Cinzel,serif;font-size:.6rem;letter-spacing:.08em;cursor:pointer';
+  if (st.state === 'done') {
+    return extraCardShell(`<div class="mc-title">✅ Zusatzaufgabe erledigt</div>
+      <div class="mc-desc">Heute ist Erholungstag – deine Zusatzaufgabe ist geschafft.</div>`, true);
+  }
+  if (st.state === 'locked') {
+    return extraCardShell(`<div class="mc-title">🔒 Zusatzaufgabe</div>
+      <div class="mc-desc">Heute ist Erholungstag. Erledige zuerst deine Aufgaben aus Hobby/Aufgabe und Gesundheit (die Schritte-Aufgabe zählt nicht mit). Danach kannst du statt Training eine Zusatzaufgabe machen und bekommst ${SPLIT_REST_EXTRA_POINTS} freie Statpunkte.</div>`, true);
+  }
+  if (st.state === 'pick') {
+    return extraCardShell(`<div class="mc-title">🛋️ Zusatzaufgabe wählen</div>
+      <div class="mc-desc">Du hast deine normalen Aufgaben erledigt. Wähle eine weitere Aufgabe und erhalte zusätzlich ${SPLIT_REST_EXTRA_POINTS} freie Statpunkte.</div>
+      <div style="display:flex;margin-top:10px"><button style="${gold}" onclick="openExtraPicker()">Zusatzaufgabe wählen</button></div>`, false);
+  }
+  const q = DAILY_QUESTS.find(x => x.id === st.pickId);
+  return TIMED_QUESTS[q.id] ? renderTimedQuestCard(q, true) : renderSimpleQuestCard(q, true);
+}
+
+// Karten, die unter den normalen Quests erscheinen: Wochenbelohnung und Zusatzaufgabe
+function splitCardsHtml() {
+  let html = '';
+  const r = splitRewardInfo();
+  if (r && r.ok && !r.claimed) {
+    html += `<div class="mission-card exp-focus">
+      <div style="font-family:Cinzel,serif;font-size:.55rem;letter-spacing:.2em;color:var(--dim);text-transform:uppercase;margin-bottom:3px">🏋️ ${r.n}er-Split</div>
+      <div class="mc-title">🏆 Wochenbelohnung</div>
+      <div class="mc-desc">Du hast deinen Split letzte Woche eingehalten. Hol dir deine Belohnung!</div>
+      <div class="mc-rewards" style="margin-top:8px">
+        <span class="mc-reward exp">✨ ${SPLIT_WEEK_REWARD.exp} EXP</span>
+        <span class="mc-reward gold">💰 ${SPLIT_WEEK_REWARD.gold} Gold</span>
+        <span class="mc-reward">🎁 +${SPLIT_WEEK_REWARD.points} freie Statpunkte</span>
+      </div>
+      <div style="display:flex;margin-top:10px"><button onclick="claimSplitWeekReward()" style="padding:5px 12px;background:linear-gradient(135deg,var(--gold-d),var(--gold));border:none;border-radius:2px;color:#1a1200;font-family:Cinzel,serif;font-size:.6rem;letter-spacing:.08em;cursor:pointer">Belohnung abholen ✓</button></div>
+    </div>`;
+  }
+  html += renderExtraQuestHtml();
+  return html;
+}
+
+// ── Split-Editor ──
+let _splitEdit = null;
+
+function openSplitEditor() {
+  if (!character) return;
+  const thisMon = mondayKeyOf(new Date());
+  const sp = character.split_plan || {};
+  const cur = sp.pending || effectiveSplit(thisMon);
+  _splitEdit = (cur && cur.n > 0) ? {n: cur.n, days: Object.assign({}, cur.days)} : {n: 0, days: {}};
+  renderSplitEditor();
+  document.getElementById('splitOverlay').classList.add('active');
+}
+
+function closeSplitEditor() {
+  const ov = document.getElementById('splitOverlay');
+  if (ov) ov.classList.remove('active');
+}
+
+function renderSplitEditor() {
+  const e = _splitEdit;
+  if (!e) return;
+  const selStyle = "padding:8px;background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:3px;color:var(--text);font-family:'Crimson Pro',serif;font-size:.95rem";
+  document.getElementById('splitCount').innerHTML = `<option value="0" ${e.n === 0 ? 'selected' : ''}>Kein Split</option>` +
+    Object.keys(SPLITS).map(k => `<option value="${k}" ${Number(k) === e.n ? 'selected' : ''}>${k}er-Split · ${SPLITS[k].train}× Training, ${SPLITS[k].rest}× Erholung</option>`).join('');
+  document.getElementById('splitDays').innerHTML = e.n === 0 ? '' : WEEK_DAYS.map(d => {
+    const v = e.days[d.key] || 'free';
+    return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px">
+      <span style="font-family:Cinzel,serif;font-size:.7rem;letter-spacing:.1em;text-transform:uppercase">${d.label}</span>
+      <select id="splitDay_${d.key}" onchange="onSplitDayChange()" style="${selStyle}">
+        ${Object.keys(SPLIT_TYPE_LABEL).map(t => `<option value="${t}" ${t === v ? 'selected' : ''}>${SPLIT_TYPE_LABEL[t]}</option>`).join('')}
+      </select>
+    </div>`;
+  }).join('');
+
+  // Status: aktueller Split, Startzeitpunkt, Ergebnis der Vorwoche
+  const now = new Date(), thisMon = mondayKeyOf(now), nextMon = addDaysKey(thisMon, 7);
+  const sp = character.split_plan || {};
+  const eff = effectiveSplit(thisMon);
+  let status = eff ? `Aktuell: ${eff.n}er-Split.` : 'Aktuell: kein Split.';
+  if (sp.pending && sp.pending.from > thisMon) status += ` Neue Einstellung gilt ab ${fmtDateKey(sp.pending.from)}.`;
+  const last = splitRewardInfo();
+  if (last) status += last.ok ? (last.claimed ? ' Letzte Woche: ✅ eingehalten (Belohnung abgeholt).' : ' Letzte Woche: ✅ eingehalten.')
+    : ` Letzte Woche: ❌ nicht eingehalten (${last.fails[0]}).`;
+  status += ` Änderungen an einem bestehenden Split gelten ab Montag, ${fmtDateKey(nextMon)}.`;
+  document.getElementById('splitStatus').textContent = status;
+  updateSplitCounter();
+}
+
+function onSplitCountChange() {
+  const n = Number(document.getElementById('splitCount').value);
+  _splitEdit.n = n;
+  _splitEdit.days = n ? splitDefaultDays(n) : {};
+  renderSplitEditor();
+}
+
+function onSplitDayChange() {
+  WEEK_DAYS.forEach(d => {
+    const el = document.getElementById('splitDay_' + d.key);
+    if (el) _splitEdit.days[d.key] = el.value;
+  });
+  updateSplitCounter();
+}
+
+function splitCounts() {
+  const cnt = {train: 0, rest: 0, free: 0};
+  WEEK_DAYS.forEach(d => { cnt[_splitEdit.days[d.key] || 'free']++; });
+  return cnt;
+}
+
+function updateSplitCounter() {
+  const el = document.getElementById('splitCounter');
+  if (!el || !_splitEdit) return;
+  if (_splitEdit.n === 0) { el.textContent = ''; return; }
+  const need = SPLITS[_splitEdit.n], c = splitCounts();
+  const ok = c.train === need.train && c.rest === need.rest;
+  el.style.color = ok ? 'var(--gold-l)' : '#e07070';
+  el.textContent = `Training ${c.train}/${need.train} · Erholung ${c.rest}/${need.rest} · Frei ${c.free}/${7 - need.train - need.rest}`;
+}
+
+async function saveSplit() {
+  if (!character || !_splitEdit) return;
+  const n = _splitEdit.n;
+  if (n !== 0) {
+    const need = SPLITS[n], c = splitCounts();
+    if (c.train !== need.train || c.rest !== need.rest) {
+      showToast('⚠️', `${n}er-Split: genau ${need.train} Trainingstage und ${need.rest} Erholungstage nötig (jetzt ${c.train} / ${c.rest}).`);
+      return;
+    }
+  }
+  const now = new Date(), thisMon = mondayKeyOf(now), nextMon = addDaysKey(thisMon, 7);
+  const hadSplit = !!effectiveSplit(thisMon);
+  if (n === 0 && !hadSplit) { closeSplitEditor(); return; }
+  const old = character.split_plan || {};
+  let active = old.active || null, pending = old.pending || null;
+  if (pending && pending.from <= thisMon) { active = pending; pending = null; }
+  const days = {};
+  if (n) WEEK_DAYS.forEach(d => { days[d.key] = _splitEdit.days[d.key] || 'free'; });
+  // Erster Split: gilt sofort (Testwoche, Wochenbelohnung zählt ab nächstem Montag). Spätere Änderungen: ab nächstem Montag.
+  pending = {n, days, from: hadSplit ? nextMon : thisMon, rewardFrom: nextMon};
+  const plan = {active, pending};
+  try {
+    const { error } = await sb.from('characters').update({split_plan: plan}).eq('id', character.id);
+    if (error) throw error;
+    character.split_plan = plan;
+    closeSplitEditor();
+    showToast('🏋️', n ? (hadSplit ? `Split gespeichert – gilt ab ${fmtDateKey(nextMon)}` : 'Split gespeichert – diese Woche ist Testwoche') : `Split beendet – gilt ab ${fmtDateKey(nextMon)}`);
+    renderDailyQuests();
+  } catch(err) {
+    console.error('Split speichern fehlgeschlagen:', err);
+    showToast('⚠️', 'Speichern fehlgeschlagen. Bitte nochmal versuchen.');
+  }
 }
 
 function updateWeekPlanButton() {
@@ -3697,7 +4187,7 @@ async function timedReset(id) {
 
 // Abholen, nachdem der Timer abgelaufen ist
 function claimTimedTimer(id) {
-  if (timedView(id).finished) completeQuest(id);
+  if (timedView(id).finished) claimQuestRouted(id);
 }
 
 // Abholen per Angabe (mit Sicherheitsabfrage, wie beim Workout)
@@ -3706,7 +4196,7 @@ async function claimTimedManual(id) {
   const cfg = TIMED_QUESTS[id];
   if (!q || !cfg || q.done) return;
   const ok = await showConfirmDialog(cfg.icon, cfg.confirmText, cfg.yesLabel, 'Abbrechen');
-  if (ok) completeQuest(id);
+  if (ok) claimQuestRouted(id);
 }
 
 // Hobby-Auswahl öffnen: zeigt alle Optionen des Platzes zur Auswahl (nur solange heute nichts abgeholt wurde)
@@ -3787,7 +4277,7 @@ async function chooseSlotQuest(slotId, optId) {
 
 // Sekundentakt nur, solange ein Timer läuft und das Aufgaben-Fenster offen ist
 function ensureTimedTick() {
-  const need = getActiveDailyQuests().some(q => TIMED_QUESTS[q.id] && !q.done && timedView(q.id).running);
+  const need = timedQuestsToTick().some(q => TIMED_QUESTS[q.id] && !q.done && timedView(q.id).running);
   if (need && !_timedTick) _timedTick = setInterval(timedTickFn, 1000);
   if (!need && _timedTick) { clearInterval(_timedTick); _timedTick = null; }
 }
@@ -3795,7 +4285,7 @@ function ensureTimedTick() {
 function timedTickFn() {
   const ov = document.getElementById('knightOverlay');
   if (!ov || !ov.classList.contains('active')) { clearInterval(_timedTick); _timedTick = null; return; }
-  for (const q of getActiveDailyQuests()) {
+  for (const q of timedQuestsToTick()) {
     if (!TIMED_QUESTS[q.id] || q.done) continue;
     const t = timedView(q.id);
     if (t.finished) {
@@ -3901,14 +4391,14 @@ function renderFocus() {
   document.getElementById('focusButtons').innerHTML = html;
 }
 
-function renderTimedQuestCard(q) {
+function renderTimedQuestCard(q, isExtra) {
   const cfg = TIMED_QUESTS[q.id];
   const gold  = 'padding:5px 12px;background:linear-gradient(135deg,var(--gold-d),var(--gold));border:none;border-radius:2px;color:#1a1200;font-family:Cinzel,serif;font-size:.6rem;letter-spacing:.08em;cursor:pointer';
   const ghost = 'padding:5px 12px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:2px;color:var(--text);font-family:Cinzel,serif;font-size:.6rem;letter-spacing:.08em;cursor:pointer';
   const t = timedView(q.id);
   const pct = Math.round(t.elapsed / TIMED_GOAL_MS * 100);
-  const slot = QUEST_SLOTS.find(s => s.options.includes(q.id));
-  const cat  = slot ? slotCategoryOf(slot, q.id) : null;
+  const slot = isExtra ? null : QUEST_SLOTS.find(s => s.options.includes(q.id));
+  const cat  = isExtra ? {icon:'🛋️', label:'Erholungstag · Zusatzaufgabe'} : (slot ? slotCategoryOf(slot, q.id) : null);
 
   let progress = '';
   let buttons = '';
@@ -3938,11 +4428,14 @@ function renderTimedQuestCard(q) {
     if (slot && slot.options.length > 1 && !t.finished) {
       buttons += `<button style="${ghost}" onclick="swapQuestSlot('${slot.id}')">🔄 ${slot.swapLabel || 'Tauschen'}</button>`;
     }
+    if (isExtra && !t.finished) {
+      buttons += `<button style="${ghost}" onclick="openExtraPicker()">🔄 Andere Zusatzaufgabe</button>`;
+    }
   }
 
   return `
     <div class="mission-card ${q.done ? '' : 'exp-focus'}" style="${q.done ? 'opacity:.5' : ''}">
-      ${cat ? `<div style="font-family:Cinzel,serif;font-size:.55rem;letter-spacing:.2em;color:var(--dim);text-transform:uppercase;margin-bottom:3px">${cat.icon} ${cat.label}${planBadge(q)}</div>` : ''}
+      ${cat ? `<div style="font-family:Cinzel,serif;font-size:.55rem;letter-spacing:.2em;color:var(--dim);text-transform:uppercase;margin-bottom:3px">${cat.icon} ${cat.label}${isExtra ? '' : planBadge(q)}</div>` : ''}
       <div class="mc-title">${q.icon} ${q.title} ${q.done ? '✅' : ''}</div>
       <div class="mc-desc">${q.desc}</div>
       ${progress}
@@ -3950,6 +4443,7 @@ function renderTimedQuestCard(q) {
         <span class="mc-reward exp">✨ ${q.exp} EXP</span>
         <span class="mc-reward gold">💰 ${q.gold} Gold</span>
         <span class="mc-reward">${cfg.statIcon} +1 ${cfg.statLabel}</span>
+        ${isExtra ? `<span class="mc-reward">🎁 +${SPLIT_REST_EXTRA_POINTS} freie Statpunkte</span>` : ''}
       </div>
       ${buttons ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">${buttons}</div>` : ''}
     </div>`;
@@ -4137,12 +4631,12 @@ function sleepInfoHtml(id) {
 }
 
 // ── EINFACHE QUESTS (Wasser, Schlaf): Karte ohne Timer ──
-function renderSimpleQuestCard(q) {
+function renderSimpleQuestCard(q, isExtra) {
   const cfg = SIMPLE_QUESTS[q.id];
   const gold  = 'padding:5px 12px;background:linear-gradient(135deg,var(--gold-d),var(--gold));border:none;border-radius:2px;color:#1a1200;font-family:Cinzel,serif;font-size:.6rem;letter-spacing:.08em;cursor:pointer';
   const ghost = 'padding:5px 12px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:2px;color:var(--text);font-family:Cinzel,serif;font-size:.6rem;letter-spacing:.08em;cursor:pointer';
-  const slot = QUEST_SLOTS.find(s => s.options.includes(q.id));
-  const cat  = slot ? slotCategoryOf(slot, q.id) : null;
+  const slot = isExtra ? null : QUEST_SLOTS.find(s => s.options.includes(q.id));
+  const cat  = isExtra ? {icon:'🛋️', label:'Erholungstag · Zusatzaufgabe'} : (slot ? slotCategoryOf(slot, q.id) : null);
   const bt   = getBedtime();
   const title = q.id === 'sleepbed' ? `Schlaf verbessern: vor ${bt} Uhr ins Bett` : q.title;
   const desc  = q.id === 'sleepbed'
@@ -4155,17 +4649,19 @@ function renderSimpleQuestCard(q) {
     buttons = `<button style="${gold}" onclick="claimSimpleQuest('${q.id}')">${verified ? 'Belohnung abholen ✓' : cfg.claimLabel}</button>`;
     if (q.id === 'sleepbed') buttons += `<button style="${ghost}" onclick="openBedtimeEditor()">🕙 Schlafenszeit: ${bt}</button>`;
     if (slot && slot.options.length > 1) buttons += `<button style="${ghost}" onclick="swapQuestSlot('${slot.id}')">🔄 ${slot.swapLabel || 'Wechseln'}</button>`;
+    if (isExtra) buttons += `<button style="${ghost}" onclick="openExtraPicker()">🔄 Andere Zusatzaufgabe</button>`;
   }
 
   return `
     <div class="mission-card ${q.done ? '' : 'exp-focus'}" style="${q.done ? 'opacity:.5' : ''}">
-      ${cat ? `<div style="font-family:Cinzel,serif;font-size:.55rem;letter-spacing:.2em;color:var(--dim);text-transform:uppercase;margin-bottom:3px">${cat.icon} ${cat.label}${planBadge(q)}</div>` : ''}
+      ${cat ? `<div style="font-family:Cinzel,serif;font-size:.55rem;letter-spacing:.2em;color:var(--dim);text-transform:uppercase;margin-bottom:3px">${cat.icon} ${cat.label}${isExtra ? '' : planBadge(q)}</div>` : ''}
       <div class="mc-title">${q.icon} ${title} ${q.done ? '✅' : ''}</div>
       <div class="mc-desc">${desc}</div>
       ${q.done ? '' : sleepInfoHtml(q.id)}
       <div class="mc-rewards" style="margin-top:8px">
         <span class="mc-reward exp">✨ ${q.exp} EXP</span>
         <span class="mc-reward gold">💰 ${q.gold} Gold</span>
+        ${isExtra ? `<span class="mc-reward">🎁 +${SPLIT_REST_EXTRA_POINTS} freie Statpunkte</span>` : ''}
       </div>
       ${buttons ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">${buttons}</div>` : ''}
     </div>`;
@@ -4181,15 +4677,10 @@ async function claimSimpleQuest(id) {
     const ok = await showConfirmDialog(cfg.icon, msg, cfg.yesLabel || 'Ja', 'Abbrechen');
     if (!ok) return;
   }
-  completeQuest(id);
+  claimQuestRouted(id);
 }
 
 // ── WOCHENPLAN-EDITOR ──
-function weekPlanWorkoutOptionsHtml(selected) {
-  return `<option value="">– kein Workout geplant</option>` +
-    WORKOUT_CATEGORIES.map(c => `<option value="${c.id}" ${c.id === selected ? 'selected' : ''}>${c.label}</option>`).join('');
-}
-
 function weekPlanOptionsHtml(slot, selected) {
   let h = `<option value="">– nach Wahl (wie bisher)</option>`;
   const cats = slot.categories || [{id:'all', label:'', icon:'', options: slot.options}];
@@ -4214,10 +4705,7 @@ function renderWeekPlanEditor() {
     const isToday = d.key === todayKey;
     const sels = QUEST_SLOTS.map(slot => `
       <label style="display:block;font-size:.7rem;color:var(--dim);margin:7px 0 2px">${slot.planLabel}</label>
-      <select id="wp_${d.key}_${slot.id}" style="${selStyle}">${weekPlanOptionsHtml(slot, dd[slot.id])}</select>`).join('')
-      + `
-      <label style="display:block;font-size:.7rem;color:var(--dim);margin:7px 0 2px">💪 Workout (+1 Bonus-Statpunkt bei Umsetzung)</label>
-      <select id="wp_${d.key}_workout" style="${selStyle}">${weekPlanWorkoutOptionsHtml(dd.workout)}</select>`;
+      <select id="wp_${d.key}_${slot.id}" style="${selStyle}">${weekPlanOptionsHtml(slot, dd[slot.id])}</select>`).join('');
     return `<div style="border:1px solid ${isToday ? 'var(--gold)' : 'var(--border)'};border-radius:3px;padding:10px 12px;margin-bottom:10px">
       <div style="font-family:Cinzel,serif;font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:${isToday ? 'var(--gold)' : 'var(--text)'}">${d.label}${isToday ? ' · heute' : ''}</div>${sels}
     </div>`;
@@ -4269,8 +4757,6 @@ async function saveWeekPlan() {
       const el = document.getElementById(`wp_${d.key}_${slot.id}`);
       if (el && el.value && slot.options.includes(el.value)) e[slot.id] = el.value;
     });
-    const wEl = document.getElementById(`wp_${d.key}_workout`);
-    if (wEl && WORKOUT_CATEGORIES.some(c => c.id === wEl.value)) e.workout = wEl.value;
     if (Object.keys(e).length) days[d.key] = e;
   });
   const repeat = document.getElementById('weekPlanRepeat').checked;
@@ -4349,19 +4835,17 @@ function renderDailyQuests(){
     </div>`;
   }).join('');
 
+  list.insertAdjacentHTML('beforeend', splitCardsHtml());
   renderWorkoutSection();
   ensureTimedTick();
   updateWeekPlanButton();
+  updateSplitButton();
 }
 
 function renderWorkoutSection(){
   const q = WORKOUT_QUEST;
   const points = getWorkoutPoints(q.minutes);
-  const plannedId  = plannedWorkoutToday();
-  const plannedCat = plannedId ? WORKOUT_CATEGORIES.find(c => c.id === plannedId) : null;
-  const planTxt = (plannedCat && !q.done)
-    ? `<div style="font-size:.78rem;color:var(--gold-l);margin:4px 0">📅 Heute geplant: ${plannedCat.label} – bei Umsetzung +1 Bonus-Statpunkt (frei wählbar)</div>`
-    : '';
+  const planTxt = splitInfoHtml();
   const statusTxt = q.done
     ? (q.statPoints > 0 ? `✅ Erledigt (+${q.statPoints} Statpunkte)` : '✅ Heute schon eingelöst')
     : q.minutes >= 10
@@ -4416,6 +4900,7 @@ function openWorkoutManualDialog() {
       du kannst die Belohnung nicht ein zweites Mal einlösen,
       auch wenn du später noch trainierst.
     </div>
+    ${restDayWarningHtml()}
     <div style="display:flex;flex-direction:column;gap:8px">
       <button onclick="showWorkoutStep1()"
         style="padding:12px;background:linear-gradient(135deg,var(--gold-d),var(--gold));
@@ -4483,7 +4968,6 @@ function showWorkoutStep2(minutes, points) {
     <div style="font-size:.9rem;color:var(--text);margin-bottom:4px">
       Was für ein Training war es?
     </div>
-    ${plannedWorkoutToday() ? `<div style="font-size:.72rem;color:var(--gold-l);margin-bottom:6px">📅 = heute im Wochenplan geplant (+1 Bonus-Punkt bei Umsetzung)</div>` : ''}
     <div style="font-size:.72rem;color:var(--dim);margin-bottom:14px">
       ${points.fixed > 0
         ? `${points.fixed} Punkt${points.fixed>1?'e':''} werden automatisch vergeben, ${points.free} frei wählbar.`
@@ -4496,7 +4980,7 @@ function showWorkoutStep2(minutes, points) {
           border:1px solid var(--border);border-radius:3px;cursor:pointer;
           font-family:Cinzel,serif;font-size:.7rem;letter-spacing:.06em;
           color:var(--text);text-align:left;display:flex;justify-content:space-between;align-items:center">
-          <span>${cat.label}${plannedWorkoutToday() === cat.id ? ' 📅' : ''}</span>
+          <span>${cat.label}</span>
           ${cat.stat && points.fixed > 0
             ? `<span style="font-size:.6rem;color:var(--gold-l)">+${points.fixed}× ${cat.statLabel} fest</span>`
             : `<span style="font-size:.6rem;color:var(--dim)">alle Punkte frei</span>`}
@@ -4521,11 +5005,6 @@ function onWorkoutCategorySelected(minutes, categoryId) {
     _workoutState.freeRemaining = points.total;
   }
 
-  // Wochenplan-Bonus: geplantes Workout umgesetzt -> +1 freier Punkt
-  const bonus = plannedWorkoutBonus(cat);
-  _workoutState.bonus = bonus;
-  _workoutState.freeRemaining += bonus;
-
   if (_workoutState.freeRemaining > 0) {
     showWorkoutStep3();
   } else {
@@ -4547,9 +5026,6 @@ function showWorkoutStep3() {
       💪 Statpunkte verteilen
     </div>
     ${fixedTxt}
-    ${_workoutState.bonus ? `<div style="font-size:.75rem;color:var(--gold-l);margin-bottom:10px">
-        📅 Wochenplan-Bonus: +1 freier Punkt, weil du dein geplantes Workout umgesetzt hast.
-       </div>` : ''}
     <div style="font-size:.85rem;color:var(--text);margin-bottom:4px">
       Du hast noch <strong id="freePointsLeft">${freeRemaining}</strong> freie Punkt${freeRemaining!==1?'e':''} zu verteilen:
     </div>
@@ -4654,11 +5130,6 @@ function openWorkoutStatDialog(minutes, points, categoryId) {
     _workoutState.freeRemaining = points.total;
   }
 
-  // Wochenplan-Bonus: geplantes Workout umgesetzt -> +1 freier Punkt
-  const bonus = plannedWorkoutBonus(cat);
-  _workoutState.bonus = bonus;
-  _workoutState.freeRemaining += bonus;
-
   document.getElementById('workoutOverlay').classList.add('active');
   if (_workoutState.freeRemaining > 0) {
     showWorkoutStep3();
@@ -4681,7 +5152,7 @@ async function applyWorkoutStats() {
   const q = WORKOUT_QUEST;
   if (!q || q.done) return;
 
-  const { statsChosen, bonus } = _workoutState;
+  const { statsChosen } = _workoutState;
   const totalPoints = Object.values(statsChosen).reduce((a,b)=>a+b, 0);
   // q.done erst NACH erfolgreichem Speichern setzen
   _workoutState = null;
@@ -4692,7 +5163,7 @@ async function applyWorkoutStats() {
 
     const { data: chars, error: loadErr } = await sb
       .from('characters')
-      .select('id, staerke, gewandheit, intelligenz, schnelligkeit, ausdauer, lebenskraft, krit_chance, krit_schaden, workout_quest_day')
+      .select('id, staerke, gewandheit, intelligenz, schnelligkeit, ausdauer, lebenskraft, krit_chance, krit_schaden, workout_quest_day, split_log')
       .eq('user_id', session.user.id)
       .order('created_at', {ascending:false})
       .limit(1);
@@ -4717,6 +5188,7 @@ async function applyWorkoutStats() {
     }
 
     updates.workout_quest_day = getTodayKey(); // Einlösung für heute merken (im selben Update wie die Stats)
+    updates.split_log = splitLogWithToday(char.split_log); // Trainingstag für den Split-Wochencheck merken
     if (Object.keys(updates).length > 0) {
       const { error: updateErr } = await sb.from('characters').update(updates).eq('id', char.id);
       if (updateErr) throw new Error('Speichern fehlgeschlagen: ' + updateErr.message);
@@ -4741,7 +5213,7 @@ async function applyWorkoutStats() {
       .filter(([,v])=>v>0)
       .map(([k,v])=>`+${v} ${statNames[k]||k}`)
       .join(', ');
-    showToast('💪', `Workout-Belohnung erhalten! ${summary}${bonus ? ' (inkl. 📅 Wochenplan-Bonus)' : ''}`);
+    showToast('💪', `Workout-Belohnung erhalten! ${summary}`);
 
   } catch(err) {
     console.error('Workout-Quest Fehler:', err);
@@ -4751,13 +5223,15 @@ async function applyWorkoutStats() {
   }
 }
 
-async function completeQuest(id){
+async function completeQuest(id, opts){
+  opts = opts || {};
+  const isExtraClaim = !!opts.extra; // Zusatzaufgabe am Erholungstag (siehe Split)
   const q = DAILY_QUESTS.find(q=>q.id===id);
   if(!q||q.done) return;
   // Sicherheitscheck: Schritte-Stufe nur abholbar, wenn das Ziel wirklich erreicht ist
   if(q.goal && (q.current||0) < q.goal) return;
   // Nur Quests, die heute wirklich angezeigt werden (tauschbare Plätze: nur die gewählte Option)
-  if(!getActiveDailyQuests().includes(q)) return;
+  if(!isExtraClaim && !getActiveDailyQuests().includes(q)) return;
   q.done = true;
   renderDailyQuests();
 
@@ -4785,7 +5259,7 @@ async function completeQuest(id){
     const _today = getTodayKey();
     const _tq = TIMED_QUESTS[id]; // Zeit-Aufgabe (Lesen / Instrument)? sonst undefined
     const _slotOfId = QUEST_SLOTS.find(s => s.options.includes(id));
-    const _claimedDb = id === 'steps'
+    const _claimedDb = isExtraClaim ? (char.extra_quest_day === _today ? 1 : 0) : id === 'steps'
       ? (char.steps_quest_day === _today ? (char.steps_quest_tier || 0) : 0)
       // pro Platz zählt nur eine Quest pro Tag: ist irgendeine Option heute abgeholt, gilt der Platz als erledigt
       : ((_slotOfId ? slotClaimedToday(_slotOfId, char) : char[questDayCol(id)] === _today) ? 1 : 0);
@@ -4793,10 +5267,18 @@ async function completeQuest(id){
     if (_claimedDb > _claimedHere) {
       character.steps_quest_day  = char.steps_quest_day;
       character.steps_quest_tier = char.steps_quest_tier;
+      character.extra_quest_day  = char.extra_quest_day;
       allQuestDayCols().forEach(col => { character[col] = char[col]; });
       syncDailyQuestsFromCharacter();
       renderDailyQuests();
       showToast('ℹ️', 'Diese Aufgabe wurde heute schon abgeholt.');
+      return;
+    }
+
+    // Zusatzaufgabe: nur an Erholungstagen und erst nach den normalen Aufgaben (auch serverseitig frisch geprüft)
+    if (isExtraClaim && (todaySplitType() !== 'rest' || !QUEST_SLOTS.every(s => slotClaimedToday(s, char)) || char[questDayCol(id)] === _today)) {
+      q.done = false; renderDailyQuests();
+      showToast('ℹ️', 'Die Zusatzaufgabe ist gerade nicht verfügbar.');
       return;
     }
 
@@ -4814,15 +5296,22 @@ async function completeQuest(id){
 
     const upd = { xp: newXP, gold: newGold, level: newLevel };
     if(id === 'steps') { upd.steps_quest_day = _today; upd.steps_quest_tier = q.tier + 1; }
-    if(id !== 'steps' && questDayCol(id)) { upd[questDayCol(id)] = _today; }
-    if(_tq) { upd[_tq.dayCol] = _today; upd[_tq.stat] = (char[_tq.stat] || 0) + 1; }
+    if(id !== 'steps' && !isExtraClaim && questDayCol(id)) { upd[questDayCol(id)] = _today; }
+    if(_tq) { if(!isExtraClaim) upd[_tq.dayCol] = _today; upd[_tq.stat] = (char[_tq.stat] || 0) + 1; }
+    if(isExtraClaim) {
+      upd.extra_quest_day = _today;
+      for (const [st, pts] of Object.entries(opts.bonusStats || {})) {
+        if (pts > 0) upd[st] = (upd[st] !== undefined ? upd[st] : (char[st] || 0)) + pts;
+      }
+    }
     const { error: updErr } = await sb.from('characters').update(upd).eq('id', char.id);
     if(updErr) throw updErr;
 
     character.xp = newXP; character.gold = newGold; character.level = newLevel;
     if(id === 'steps') { character.steps_quest_day = _today; character.steps_quest_tier = q.tier + 1; }
-    if(id !== 'steps' && questDayCol(id)) { character[questDayCol(id)] = _today; }
-    if(_tq) { character[_tq.dayCol] = _today; character[_tq.stat] = (char[_tq.stat] || 0) + 1; }
+    if(id !== 'steps' && !isExtraClaim && questDayCol(id)) { character[questDayCol(id)] = _today; }
+    if(_tq) { if(!isExtraClaim) character[_tq.dayCol] = _today; character[_tq.stat] = (char[_tq.stat] || 0) + 1; }
+    if(isExtraClaim) { Object.keys(upd).forEach(k => { character[k] = upd[k]; }); }
     updateHUD();
     if(leveledUp) showLevelUpBanner(newLevel);
 
@@ -4830,7 +5319,7 @@ async function completeQuest(id){
     if(id === 'steps' || SIMPLE_QUESTS[id] || _tq) {
       if(_tq) { const _t = timerOf(id); _t.acc = 0; _t.startedAt = null; timedSave(); focusNotifyFlutter('stop', id); }
       syncDailyQuestsFromCharacter();
-      const _extra = _tq ? ` +1 ${_tq.statIcon} ${_tq.statLabel}` : '';
+      const _extra = (_tq ? ` +1 ${_tq.statIcon} ${_tq.statLabel}` : '') + (isExtraClaim ? ` +${SPLIT_REST_EXTRA_POINTS} freie Statpunkte` : '');
       showToast(id === 'steps' ? '🚶' : (_tq ? _tq.icon : ((SIMPLE_QUESTS[id] && SIMPLE_QUESTS[id].icon) || '💧')), `+${rewards.exp} EXP +${rewards.gold} 💰${_extra}`);
       renderDailyQuests();
       return;
@@ -5413,9 +5902,14 @@ loadCharacter().then(async () => {
       <div style="padding:6px 18px 2px;display:flex;justify-content:space-between;align-items:center;gap:8px">
         <div style="font-family:Cinzel,serif;font-size:.6rem;letter-spacing:.12em;
           text-transform:uppercase;color:var(--dim)">📋 Tägliche Aufgaben</div>
-        <button id="weekPlanBtn" onclick="openWeekPlan()" style="padding:4px 10px;background:rgba(255,255,255,.08);
-          border:1px solid var(--border);border-radius:2px;color:var(--text);font-family:Cinzel,serif;
-          font-size:.55rem;letter-spacing:.08em;cursor:pointer">📅 Wochenplan</button>
+        <div style="display:flex;gap:6px">
+          <button id="splitBtn" onclick="openSplitEditor()" style="padding:4px 10px;background:rgba(255,255,255,.08);
+            border:1px solid var(--border);border-radius:2px;color:var(--text);font-family:Cinzel,serif;
+            font-size:.55rem;letter-spacing:.08em;cursor:pointer">🏋️ Split</button>
+          <button id="weekPlanBtn" onclick="openWeekPlan()" style="padding:4px 10px;background:rgba(255,255,255,.08);
+            border:1px solid var(--border);border-radius:2px;color:var(--text);font-family:Cinzel,serif;
+            font-size:.55rem;letter-spacing:.08em;cursor:pointer">📅 Wochenplan</button>
+        </div>
       </div>
       <div class="mp-missions" id="dailyQuestList">
         <!-- filled by JS -->
@@ -5463,6 +5957,57 @@ loadCharacter().then(async () => {
   <div id="focusButtons" style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center"></div>
 </div>
 
+<!-- Freie Statpunkte verteilen (Zusatzaufgabe, Wochenbelohnung) -->
+<div class="overlay" id="freePointsOverlay" style="z-index:195">
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:4px;
+    width:min(360px,94vw);max-height:92vh;overflow-y:auto;padding:22px 18px;box-shadow:0 0 40px rgba(0,0,0,.9)">
+    <div id="freePointsTitle" style="font-family:Cinzel,serif;font-size:.75rem;letter-spacing:.1em;
+      color:var(--gold-l);text-transform:uppercase;margin-bottom:10px"></div>
+    <div id="freePointsIntro" style="font-size:.82rem;color:var(--dim);margin-bottom:10px"></div>
+    <div style="font-size:.85rem;color:var(--text);margin-bottom:12px">Noch zu verteilen: <strong id="fpLeft">0</strong></div>
+    <div id="freePointsGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px"></div>
+    <button id="freePointsConfirm" onclick="freePointsConfirm()" disabled style="width:100%;padding:11px;
+      border-radius:3px;font-family:Cinzel,serif;font-size:.7rem;font-weight:600;letter-spacing:.1em;cursor:not-allowed">Punkte bestätigen ✓</button>
+    <button onclick="freePointsCancel()" style="width:100%;margin-top:8px;padding:9px;background:transparent;
+      border:1px solid var(--border);border-radius:3px;color:var(--dim);font-family:Cinzel,serif;
+      font-size:.65rem;letter-spacing:.08em;cursor:pointer">Abbrechen</button>
+  </div>
+</div>
+
+<!-- Trainings-Split festlegen -->
+<div class="overlay" id="splitOverlay" style="z-index:190">
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:4px;
+    width:min(380px,94vw);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 0 40px rgba(0,0,0,.9)">
+    <div style="padding:18px 18px 10px;text-align:center">
+      <div style="font-family:Cinzel,serif;font-size:.8rem;letter-spacing:.15em;color:var(--gold);
+        text-transform:uppercase;margin-bottom:6px">🏋️ Trainings-Split</div>
+      <div style="font-size:.8rem;color:var(--dim);line-height:1.5">Wähle einen Split und lege deine Tage fest.
+        An <strong>Erholungstagen</strong> machst du statt Training eine Zusatzaufgabe (+2 freie Statpunkte, nachdem deine normalen
+        Aufgaben erledigt sind). Hältst du den Split in der Woche ein (trainiert an allen Trainingstagen, an keinem Erholungstag),
+        gibt es am Montag die <strong>Wochenbelohnung</strong>: 3 freie Statpunkte, EXP und Gold. Training am Erholungstag
+        ist erlaubt und wird normal belohnt, kostet aber die Wochenbelohnung.</div>
+    </div>
+    <div style="padding:0 18px;overflow-y:auto;flex:1">
+      <select id="splitCount" onchange="onSplitCountChange()" style="width:100%;padding:9px;margin-bottom:12px;
+        background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:3px;color:var(--text);
+        font-family:'Crimson Pro',serif;font-size:.95rem"></select>
+      <div id="splitDays"></div>
+      <div id="splitCounter" style="font-size:.8rem;margin:8px 0"></div>
+    </div>
+    <div style="padding:10px 18px 16px;border-top:1px solid var(--border)">
+      <div id="splitStatus" style="font-size:.75rem;color:var(--dim);margin-bottom:12px;line-height:1.5"></div>
+      <div style="display:flex;gap:10px">
+        <button onclick="closeSplitEditor()" style="flex:1;padding:11px;background:transparent;
+          border:1px solid var(--border);border-radius:3px;color:var(--dim);font-family:Cinzel,serif;
+          font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;cursor:pointer">Abbrechen</button>
+        <button onclick="saveSplit()" style="flex:1;padding:11px;background:linear-gradient(135deg,var(--gold-d),var(--gold));
+          border:none;border-radius:3px;color:#1a1200;font-family:Cinzel,serif;
+          font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;cursor:pointer">Speichern</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Wochenplan: welche Quest an welchem Wochentag -->
 <div class="overlay" id="weekPlanOverlay" style="z-index:190">
   <div style="background:var(--card);border:1px solid var(--border);border-radius:4px;
@@ -5470,8 +6015,8 @@ loadCharacter().then(async () => {
     <div style="padding:18px 18px 10px;text-align:center">
       <div style="font-family:Cinzel,serif;font-size:.8rem;letter-spacing:.15em;color:var(--gold);
         text-transform:uppercase;margin-bottom:6px">📅 Wochenplan</div>
-      <div style="font-size:.82rem;color:var(--dim)">Lege fest, welche Quest du an welchem Tag haben willst – und welches Workout du machst
-        (geplant und umgesetzt gibt es +1 Bonus-Statpunkt). „nach Wahl“ heißt: wie bisher selbst wählen.</div>
+      <div style="font-size:.82rem;color:var(--dim)">Lege fest, welche Quest du an welchem Tag haben willst.
+        „nach Wahl“ heißt: wie bisher selbst wählen. Trainingstage legst du unter „Split“ fest.</div>
     </div>
     <div id="weekPlanBody" style="padding:0 18px;overflow-y:auto;flex:1"></div>
     <div style="padding:12px 18px 16px;border-top:1px solid var(--border)">
