@@ -2733,6 +2733,9 @@ function getPlayerCombatStats() {
     krit_schaden: character.krit_schaden || 0,
   };
   const boni = getEquippedItemBoni();
+  // Echtzeit-Kampf: Waffen-Variante des Kriegers (Schild in Waffe 2 oder zwei Waffen), wird nur von kampf_live.js gelesen
+  const w2 = _invItems.find(i => i.equipped_slot === 'weapon2');
+  stats.weaponSet = (w2 && w2.item_type === 'shield') ? 'schild' : 'zwei';
   Object.entries(boni).forEach(([k, v]) => {
     if (k in stats) stats[k] = (stats[k] || 0) + v;
   });
@@ -3229,7 +3232,7 @@ async function startArenaBattle(defenderCharId) {
 
     // Echtes Inventar des Gegners laden (für Item-Boni)
     const { data: defenderInv } = await sb.from('inventory')
-      .select('stat_bonus, equipped_slot')
+      .select('stat_bonus, equipped_slot, item_type')
       .eq('character_id', defenderCharId);
 
     const defenderBoni = {};
@@ -3249,6 +3252,7 @@ async function startArenaBattle(defenderCharId) {
       lebenskraft:   (defChar.lebenskraft||0)   + (defenderBoni.lebenskraft||0),
       krit_chance:   (defChar.krit_chance||0)   + (defenderBoni.krit_chance||0),
       krit_schaden:  (defChar.krit_schaden||0)  + (defenderBoni.krit_schaden||0),
+      weaponSet: (defenderInv || []).some(i => i.equipped_slot === 'weapon2' && i.item_type === 'shield') ? 'schild' : 'zwei',
     };
 
     // Session für kampf.html ablegen

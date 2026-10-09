@@ -95,8 +95,18 @@ body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text);disp
 /* speed indicator */
 .speed-label{font-family:'Cinzel',serif;font-size:.6rem;letter-spacing:.1em;color:var(--dim);text-align:center}
 @keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── Echtzeit-Kampf (kampf_live.js) ── */
+#liveUI canvas{position:fixed;inset:0;width:100%;height:100%;z-index:1;touch-action:none}
+#liveBadge{position:fixed;top:calc(6px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);z-index:2;font-family:'Cinzel',serif;font-size:.58rem;letter-spacing:.14em;color:var(--gold);text-transform:uppercase;background:rgba(10,12,16,.7);padding:4px 10px;border:1px solid var(--border);border-radius:3px;pointer-events:none;white-space:nowrap}
+#pad{position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom,0px));display:flex;gap:12px;z-index:3}
+#pad button{width:84px;height:84px;border-radius:50%;border:2px solid var(--gold);background:rgba(201,168,76,.14);color:var(--text);font:600 .68rem 'Cinzel',serif;letter-spacing:.06em}
+#pad button:active{background:rgba(201,168,76,.4)}
+#liveHint{position:fixed;left:14px;bottom:12px;z-index:2;font-size:.75rem;color:var(--dim);max-width:46%}
+@media (pointer:coarse){#liveHint{display:none}}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="kampf_live.js"></script>
 </head>
 <body>
 
@@ -183,6 +193,14 @@ body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text);disp
   <!-- combat log -->
   <div class="log-wrap" id="log"></div>
   <div class="speed-label" id="tapHint">Tippe auf ⏭ um zu überspringen</div>
+</div>
+
+<!-- Echtzeit-Kampf: wird von kampf_live.js eingeblendet (ersetzt die alte Kartenansicht) -->
+<div id="liveUI" style="display:none">
+  <canvas id="c"></canvas>
+  <div id="liveBadge"></div>
+  <div id="pad"><button id="bd">Ausweichen</button><button id="ba">Angriff</button></div>
+  <div id="liveHint">WASD bewegen · J oder Leertaste Angriff (halten) · K oder Shift Ausweichen</div>
 </div>
 
 <!-- ENEMY DEFEATED overlay (dungeon mode, between fights) -->
@@ -670,6 +688,8 @@ const SPEEDS={1:{label:'Normal',ms:900},2:{label:'Schnell',ms:400},3:{label:'Tur
 
 // ── Init UI ──────────────────────────────────────────────────
 function initUI(){
+  // Echtzeit-Kampf (kampf_live.js). Altes System: LIVE_DEFAULT in kampf_live.js auf false setzen oder &live=0 an die URL hängen.
+  if (window.__liveInit && window.LIVE_DEFAULT !== false && new URLSearchParams(location.search).get('live') !== '0') { return window.__liveInit(); }
   // Carry-Over HP nur im Dungeon-Modus, und nicht vor dem letzten Gegner (Boss) –
   // davor wird vollständig geheilt.
   let startHp = undefined;
