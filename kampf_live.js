@@ -4,7 +4,8 @@
 window.LIVE_DEFAULT = true;
 
 const LIVE = (function () {
-  const AW = 1000, AH = 650, K = .6, R = 16, WAVE = 500, ARROW = 520, DASHD = 75;
+  let AW = 1700, AH = 1000, K = .6;   // Kartengröße (wird je nach Hoch- oder Querformat in start() gesetzt) und Neigung der Ansicht
+  const R = 16, WAVE = 500, ARROW = 520, DASHD = 75;
   // Typ-Werte. f = Schadensfaktor pro Treffer, damit der Schaden pro Sekunde zu den alten Formeln passt
   const LT = {
     schild: { melee: 1, spd: 180, cd: .7, reach: 70, arc: 1.7, lock: .45, block: 6, f: 1.4, col: '#e05c2a' },
@@ -12,16 +13,16 @@ const LIVE = (function () {
     bogen:  { ranged: 1, spd: 175, cd: 1, range: 300, root: .6, slow: .1, f: 1.6, col: '#3aad6e' },
     magier: { area: 1, spd: 165, cd: 1.4, range: 240, len: 240, w: 70, cast: .35, root: .5, slow: .3, f: 2.1, col: '#5b7fe8' }
   };
-  let cv, g, W = 800, H = 600, S = .8, OX = 0, OY = 0, inited = false, loopOn = false, last = 0;
+  let cv, g, W = 800, H = 600, S = .8, camX = 0, camY = 0, inited = false, loopOn = false, last = 0;
   let U = [], AR = [], FL = [], A = null, B = null, over = true, cdT = 0, T = 0, AUTO = false;
   let keys = {}, held = 0, wd = 0, joy = null, jv = { x: 0, y: 0 }, names = ['', ''];
   const rnd = (a, c) => a + Math.random() * (c - a), clamp = (v, a, c) => Math.max(a, Math.min(c, v)), clr = (x, y) => Math.min(x, AW - x, y, AH - y);
-  const P = (x, y) => [OX + x * S, OY + y * K * S];
+  const P = (x, y) => [W / 2 + (x - camX) * S, H / 2 + (y - camY) * K * S];
 
   function typeOf(cls, s) { if (cls === 'archer') return 'bogen'; if (cls === 'mage') return 'magier'; return s.weaponSet === 'zwei' ? 'zwei' : 'schild'; }
-  function mk(side, cls, s, lv, hp, max) {
+  function mk(side, cls, s, lv, hp, max, px, py) {
     const type = typeOf(cls, s), c = LT[type], a = side === 'A';
-    return { side, cls, s, lv, type, c, x: a ? 300 : AW - 300, y: AH / 2, hp, max, fx: a ? 1 : -1, fy: 0, inv: 0, ch: 2, rt: 0, dt: 0, dx: 0, dy: 0, at: a ? 0 : rnd(.3, 1), ro: 0, bk: 1, bt: 0, wt: 0, ax: 1, ay: 0, cq: 0, hand: 0, sw: 0, wave: null, sdt: 1, sd: Math.random() < .5 ? 1 : -1, run: 0, cbT: 0, dead: false, f: 0, isP: a && !AUTO };
+    return { side, cls, s, lv, type, c, x: px, y: py, hp, max, fx: 1, fy: 0, inv: 0, ch: 2, rt: 0, dt: 0, dx: 0, dy: 0, at: a ? 0 : rnd(.3, 1), ro: 0, bk: 1, bt: 0, wt: 0, ax: 1, ay: 0, cq: 0, hand: 0, sw: 0, wave: null, sdt: 1, sd: Math.random() < .5 ? 1 : -1, run: 0, cbT: 0, dead: false, f: 0, isP: a && !AUTO };
   }
   const foe = u => (u === A ? B : A);
   function say(x, y, t, c) { FL.push({ x, y, t: .8, txt: t, c }); }
@@ -163,20 +164,33 @@ const LIVE = (function () {
   function fit() {
     const r = cv.getBoundingClientRect(), d = devicePixelRatio || 1;
     cv.width = r.width * d; cv.height = r.height * d; g.setTransform(d, 0, 0, d, 0, 0);
-    W = r.width; H = r.height; S = Math.min(W / (AW + 40), (H - 150) / (AH * K + 60)); OX = (W - AW * S) / 2; OY = 84 + (H - 150 - AH * K * S) / 2;
+    W = r.width; H = r.height;
+    const portrait = H > W; K = portrait ? .8 : .6;
+    S = Math.min(W / (portrait ? 480 : 900), H / (K * (portrait ? 700 : 520)));   // sichtbarer Kartenausschnitt, wie bei Handy-Mobas
+  }
+  function updCam(dt, snap) {
+    if (!A) return;
+    // Kamera folgt der Spielfigur und blickt leicht zum Gegner
+    let vx = B.x - A.x, vy = B.y - A.y; const d = Math.hypot(vx, vy) || 1, m = Math.min(d * .25, 180);
+    const tx = A.x + vx / d * m, ty = A.y + vy / d * m, k = snap ? 1 : Math.min(1, dt * 6);
+    camX += (tx - camX) * k; camY += (ty - camY) * k;
+    const hw = W / (2 * S), hh = H / (2 * K * S);
+    camX = AW > 2 * hw ? clamp(camX, hw, AW - hw) : AW / 2;
+    camY = AH > 2 * hh ? clamp(camY, hh, AH - hh) : AH / 2;
   }
   function ell(x, y, rx, ry, fill) { g.beginPath(); g.ellipse(x, y, rx, ry, 0, 0, 7); g.fillStyle = fill; g.fill(); }
   function fan(ox, oy, an, reach, arc, col) { const [sx, sy] = P(ox, oy); g.save(); g.translate(sx, sy); g.scale(1, K); g.beginPath(); g.moveTo(0, 0); g.arc(0, 0, reach * S, an - arc / 2, an + arc / 2); g.closePath(); g.fillStyle = col; g.fill(); g.restore(); }
   function rect(ox, oy, an, w, col, from, to) { const [sx, sy] = P(ox, oy); g.save(); g.translate(sx, sy); g.scale(1, K); g.rotate(an); g.fillStyle = col; g.fillRect(from * S, -w / 2 * S, (to - from) * S, w * S); g.restore(); }
+  function bar(sx, sy, w, frac, col) { g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(sx - w / 2 - 1, sy - 1, w + 2, 7); g.fillStyle = col; g.fillRect(sx - w / 2, sy, w * Math.max(0, frac), 5); }
   function draw() {
-    g.clearRect(0, 0, W, H);
-    const [a0, a1] = P(0, 0), [b0, b1] = P(AW, AH), wall = 46 * S;
-    g.fillStyle = 'rgba(17,21,32,.92)'; g.fillRect(a0 - 10, a1 - wall, b0 - a0 + 20, wall);
+    g.fillStyle = '#080a0e'; g.fillRect(0, 0, W, H);
+    const [a0, a1] = P(0, 0), [b0, b1] = P(AW, AH), wall = 46 * S * K / .6;
+    g.fillStyle = 'rgba(17,21,32,.95)'; g.fillRect(a0 - 10, a1 - wall, b0 - a0 + 20, wall);
     const gr = g.createLinearGradient(0, a1, 0, b1); gr.addColorStop(0, '#171b25'); gr.addColorStop(1, '#0f1218'); g.fillStyle = gr; g.fillRect(a0, a1, b0 - a0, b1 - a1);
-    g.strokeStyle = 'rgba(201,168,76,.06)'; g.lineWidth = 1;
+    g.strokeStyle = 'rgba(201,168,76,.07)'; g.lineWidth = 1;
     for (let x = 0; x <= AW; x += 100) { const [u, v] = P(x, 0), [w, z] = P(x, AH); g.beginPath(); g.moveTo(u, v); g.lineTo(w, z); g.stroke(); }
     for (let y = 0; y <= AH; y += 100) { const [u, v] = P(0, y), [w, z] = P(AW, y); g.beginPath(); g.moveTo(u, v); g.lineTo(w, z); g.stroke(); }
-    g.strokeStyle = 'rgba(201,168,76,.45)'; g.lineWidth = 3; g.strokeRect(a0, a1, b0 - a0, b1 - a1);
+    g.strokeStyle = 'rgba(201,168,76,.5)'; g.lineWidth = 3; g.strokeRect(a0, a1, b0 - a0, b1 - a1);
     for (const u of U) {
       if (u.dead) continue;
       const c = u.c, e = u === B, warn = e ? 'rgba(224,82,108,.2)' : 'rgba(201,168,76,.16)', hot = e ? 'rgba(224,82,108,.5)' : 'rgba(201,168,76,.45)', an = Math.atan2(u.ay, u.ax);
@@ -185,30 +199,44 @@ const LIVE = (function () {
       if (u.wave) { const w = u.wave, wa = Math.atan2(w.dy, w.dx); rect(w.x, w.y, wa, c.w, warn, 0, c.len); rect(w.x, w.y, wa, c.w, hot, Math.max(0, w.f - 60), Math.min(w.f, c.len)); }
     }
     for (const u of U.filter(x => !x.dead).sort((p, q) => p.y - q.y)) {
-      const [sx, sy] = P(u.x, u.y), c = u.c, fl = u.inv > 0 && Math.floor(u.inv * 20) % 2;
+      const [sx, sy] = P(u.x, u.y), c = u.c, fl = u.inv > 0 && Math.floor(u.inv * 20) % 2, body = sy - 22 * S;
       ell(sx, sy, R * S * 1.05, R * S * K * 1.05, 'rgba(0,0,0,.4)');
-      if (c.ranged && u.wt > 0) { const k = 1 - u.wt / .3; ell(sx, sy - 24 * S, (18 + 12 * k) * S, (22 + 12 * k) * S, 'rgba(255,215,100,' + (.2 + .4 * k) + ')'); }
-      g.globalAlpha = fl ? .45 : 1; g.beginPath(); g.ellipse(sx, sy - 22 * S, R * S, R * S * 1.1, 0, 0, 7); g.fillStyle = u.f > 0 ? '#f3d6dc' : c.col; g.fill();
+      if (c.ranged && u.wt > 0) { const k = 1 - u.wt / .3; ell(sx, body, (18 + 12 * k) * S, (22 + 12 * k) * S, 'rgba(255,215,100,' + (.2 + .4 * k) + ')'); }
+      g.globalAlpha = fl ? .45 : 1; g.beginPath(); g.ellipse(sx, body, R * S, R * S * 1.1, 0, 0, 7); g.fillStyle = u.f > 0 ? '#f3d6dc' : c.col; g.fill();
       g.lineWidth = 3; g.strokeStyle = u === B ? '#e0526c' : '#c9a84c'; g.stroke(); g.globalAlpha = 1;
-      if (c.block && u.bk) { g.strokeStyle = '#9fd0ff'; g.lineWidth = 2; g.beginPath(); g.ellipse(sx, sy - 22 * S, (R + 7) * S, (R + 9) * S, 0, 0, 7); g.stroke(); }
+      if (c.block && u.bk) { g.strokeStyle = '#9fd0ff'; g.lineWidth = 2; g.beginPath(); g.ellipse(sx, body, (R + 7) * S, (R + 9) * S, 0, 0, 7); g.stroke(); }
+      // Anzeigen über der Figur (wie bei Mobas): Name, Level, Leben, bei dir zusätzlich Dash und Block
+      const bw = Math.max(54, 70 * S), by = body - R * S * 1.1 - 14, nm = names[u === B ? 1 : 0] + ' · Lv ' + u.lv;
+      g.font = '600 ' + Math.max(10, 11 * S + 3) + 'px Cinzel, serif'; g.textAlign = 'center'; g.fillStyle = u === B ? '#e0826c' : '#e8c97a'; g.fillText(nm, sx, by - 6);
+      bar(sx, by, bw, u.hp / u.max, u === B ? '#c0392b' : (u.hp / u.max < .25 ? '#c0392b' : '#27ae60'));
+      g.font = '600 10px Cinzel, serif'; g.fillStyle = '#e8dcc8'; g.fillText(Math.ceil(u.hp) + ' / ' + u.max, sx, by + 17);
+      if (u === A) {
+        for (let i = 0; i < 2; i++) { g.fillStyle = i < u.ch ? '#e8993a' : '#4a3f5c'; g.fillRect(sx - 20 + i * 22, by + 21, 18, 5); }
+        if (c.block) { g.fillStyle = 'rgba(255,255,255,.15)'; g.fillRect(sx - 20, by + 28, 40, 4); g.fillStyle = u.bk ? '#9fd0ff' : '#5d7a99'; g.fillRect(sx - 20, by + 28, 40 * (u.bk ? 1 : u.bt / c.block), 4); }
+      }
     }
     for (const a of AR) { const [sx, sy] = P(a.x, a.y); ell(sx, sy, 5 * S, 3 * S * K, 'rgba(0,0,0,.4)'); g.strokeStyle = a.src === B ? '#e0526c' : '#e8c97a'; g.lineWidth = 3; g.beginPath(); g.moveTo(sx, sy - 22 * S); g.lineTo(sx - a.dx * 14 * S, sy - 22 * S - a.dy * 14 * S * K); g.stroke(); }
-    for (const f of FL) { const [sx, sy] = P(f.x, f.y); g.globalAlpha = Math.min(1, f.t * 2); g.fillStyle = f.c; g.font = 'bold ' + (14 * S + 6) + 'px Cinzel, serif'; g.textAlign = 'center'; g.fillText(f.txt, sx, sy); g.globalAlpha = 1; }
-    // Anzeige oben: Spieler links, Gegner rechts
-    const half = (W - 48) / 2; g.font = '600 13px Cinzel, serif';
-    g.textAlign = 'left'; g.fillStyle = '#e8c97a'; g.fillText(names[0] + ' · Lv ' + A.lv, 16, 26);
-    g.textAlign = 'right'; g.fillStyle = '#e0826c'; g.fillText(names[1] + ' · Lv ' + B.lv, W - 16, 26);
-    g.fillStyle = 'rgba(255,255,255,.1)'; g.fillRect(16, 34, half, 12); g.fillRect(32 + half, 34, half, 12);
-    g.fillStyle = A.hp / A.max < .25 ? '#c0392b' : '#27ae60'; g.fillRect(16, 34, half * A.hp / A.max, 12);
-    g.fillStyle = '#c0392b'; g.fillRect(W - 16 - half * B.hp / B.max, 34, half * B.hp / B.max, 12);
-    g.font = '600 11px Cinzel, serif'; g.fillStyle = '#e8dcc8'; g.textAlign = 'left'; g.fillText(Math.ceil(A.hp) + ' / ' + A.max, 20, 44); g.textAlign = 'right'; g.fillText(Math.ceil(B.hp) + ' / ' + B.max, W - 20, 44);
-    for (let i = 0; i < 2; i++) { g.fillStyle = i < A.ch ? '#e8993a' : '#4a3f5c'; g.fillRect(16 + i * 22, 54, 18, 6); }
-    if (A.c.block) { g.fillStyle = 'rgba(255,255,255,.1)'; g.fillRect(16, 66, 60, 6); g.fillStyle = A.bk ? '#9fd0ff' : '#5d7a99'; g.fillRect(16, 66, 60 * (A.bk ? 1 : A.bt / A.c.block), 6); }
+    for (const f of FL) { const [sx, sy] = P(f.x, f.y); g.globalAlpha = Math.min(1, f.t * 2); g.fillStyle = f.c; g.font = 'bold ' + Math.max(15, 14 * S + 6) + 'px Cinzel, serif'; g.textAlign = 'center'; g.fillText(f.txt, sx, sy); g.globalAlpha = 1; }
+    // Pfeil am Bildschirmrand, wenn der Gegner außerhalb des Bildes ist
+    if (!B.dead) {
+      const [ex, ey] = P(B.x, B.y), m = 34;
+      if (ex < m || ex > W - m || ey < m + 30 || ey > H - m) {
+        const dx = ex - W / 2, dy = ey - H / 2, k = Math.min((W / 2 - m) / Math.abs(dx || 1e-6), (H / 2 - m - 20) / Math.abs(dy || 1e-6)), px = W / 2 + dx * k, py = H / 2 + dy * k + 10, an = Math.atan2(dy, dx);
+        g.save(); g.translate(px, py); g.rotate(an); g.fillStyle = 'rgba(224,82,108,.9)'; g.beginPath(); g.moveTo(14, 0); g.lineTo(-8, -10); g.lineTo(-8, 10); g.closePath(); g.fill(); g.restore();
+        g.font = '600 10px Cinzel, serif'; g.fillStyle = '#e8dcc8'; g.textAlign = 'center'; g.fillText(Math.round(Math.hypot(B.x - A.x, B.y - A.y) / 10) + ' m', px, py + 24);
+      }
+    }
+    // kleine Übersichtskarte oben rechts
+    { const mw = Math.min(110, W * .3), mh = mw * AH / AW, mx = W - mw - 10, my = 40;
+      g.fillStyle = 'rgba(8,10,14,.6)'; g.fillRect(mx, my, mw, mh); g.strokeStyle = 'rgba(201,168,76,.5)'; g.lineWidth = 1; g.strokeRect(mx, my, mw, mh);
+      const hw = W / (2 * S) / AW * mw, hh = H / (2 * K * S) / AH * mh; g.strokeStyle = 'rgba(255,255,255,.25)'; g.strokeRect(mx + camX / AW * mw - hw, my + camY / AH * mh - hh, hw * 2, hh * 2);
+      for (const u of U) { if (u.dead) continue; g.fillStyle = u === B ? '#e0526c' : '#e8c97a'; g.beginPath(); g.arc(mx + u.x / AW * mw, my + u.y / AH * mh, 3, 0, 7); g.fill(); } }
     g.textAlign = 'center';
-    if (cdT > 0 && !over) { g.fillStyle = '#e8dcc8'; g.font = 'bold 24px Cinzel, serif'; g.fillText('Kampfbeginn in ' + Math.max(0, cdT).toFixed(1) + ' s', W / 2, H / 2 - 60); }
+    if (cdT > 0 && !over) { g.fillStyle = '#e8dcc8'; g.font = 'bold 24px Cinzel, serif'; g.fillText('Kampfbeginn in ' + Math.max(0, cdT).toFixed(1) + ' s', W / 2, H / 2 - 90); }
     if (joy) { g.strokeStyle = 'rgba(232,220,200,.35)'; g.lineWidth = 2; g.beginPath(); g.arc(joy.cx, joy.cy, 50, 0, 7); g.stroke(); g.fillStyle = 'rgba(232,220,200,.3)'; g.beginPath(); g.arc(joy.cx + jv.x * 50, joy.cy + jv.y * 50, 20, 0, 7); g.fill(); }
   }
-  function loop(t) { const dt = Math.min(.05, (t - last) / 1000); last = t; update(dt); draw(); requestAnimationFrame(loop); }
+  function frame(dt) { update(dt); updCam(dt, false); draw(); }
+  function loop(t) { const dt = Math.min(.05, (t - last) / 1000); last = t; frame(dt); requestAnimationFrame(loop); }
 
   // ── Eingabe (Tasten nach Position, nicht nach Zeichen) ──
   const KM = { KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd', ArrowUp: 'arrowup', ArrowDown: 'arrowdown', ArrowLeft: 'arrowleft', ArrowRight: 'arrowright', KeyJ: 'j', Space: ' ', KeyK: 'k', ShiftLeft: 'shift', ShiftRight: 'shift' };
@@ -232,17 +260,22 @@ const LIVE = (function () {
     init();
     const maxA = maxLP(sA.lebenskraft, lvA, (sA.lebenskraft_bonus || 0) * 8), maxB = maxLP(sB.lebenskraft, lvB, (sB.lebenskraft_bonus || 0) * 8);
     const hpA = (typeof startHp === 'number') ? Math.min(startHp, maxA) : maxA;
-    A = mk('A', clsA, sA, lvA, hpA, maxA); B = mk('B', clsB, sB, lvB, maxB, maxB);
+    const portrait = (innerHeight || 700) > (innerWidth || 400);
+    if (portrait) { AW = 1000; AH = 1700; } else { AW = 1700; AH = 1000; }
+    const gap = 450;   // Abstand der Startpositionen zum Kartenrand, die Gegner starten dadurch etwa 800 Einheiten auseinander
+    const pa = portrait ? [AW / 2, AH - gap] : [gap, AH / 2], pb = portrait ? [AW / 2, gap] : [AW - gap, AH / 2];
+    A = mk('A', clsA, sA, lvA, hpA, maxA, pa[0], pa[1]); B = mk('B', clsB, sB, lvB, maxB, maxB, pb[0], pb[1]);
+    A.fx = B.x > A.x ? 1 : 0; A.fy = B.y > A.y ? 1 : (B.y < A.y ? -1 : 0); B.fx = -A.fx; B.fy = -A.fy;
     names = [MODE === 'arena' ? (arenaSession.playerName || sA.name) : sA.name, MODE === 'arena' ? (sB.displayName || sB.name) : sB.name];
     U = [A, B]; AR = []; FL = []; over = false; cdT = 1.5; T = 0; wd = 0; held = 0;
     window._maxA = maxA; window._maxB = maxB; window._winner = null;
-    fit();
+    fit(); camX = A.x; camY = A.y; updCam(0, true);
     if (!loopOn) { loopOn = true; last = performance.now(); requestAnimationFrame(loop); }
   }
   // Für automatische Tests: Spielerfigur von der KI steuern lassen und ohne Zeichnen simulieren
   function auto(v) { AUTO = !!v; }
   function sim(maxSec) { let t = 0; cdT = 0; while (!over && t < (maxSec || 200)) { update(1 / 60); t += 1 / 60; } return { winner: window._winner, t, hpA: A.hp, hpB: B.hp }; }
-  return { start, auto, sim, lt: LT, get units() { return U; } };
+  return { start, auto, sim, frame, lt: LT, get units() { return U; }, get cam() { return { x: camX, y: camY, w: AW, h: AH, S, K, W, H }; } };
 })();
 
 // Wird von kampf.html statt der alten Simulation aufgerufen
