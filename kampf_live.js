@@ -5,7 +5,7 @@ window.LIVE_DEFAULT = true;
 
 const LIVE = (function () {
   let AW = 1700, AH = 1000, K = .6;   // Kartengröße (wird je nach Hoch- oder Querformat in start() gesetzt) und Neigung der Ansicht
-  const R = 16, WAVE = 500, ARROW = 520, DASHD = 75;
+  const R = 16, WAVE = 500, ARROW = 520, DASHD = 75, DASHCD = 2.5, JR = 56;   // DASHCD: Sekunden bis eine Ausweich-Ladung zurückkommt, JR: Radius des Steuerkreises in Pixeln
   // Typ-Werte. f = Schadensfaktor pro Treffer, damit der Schaden pro Sekunde zu den alten Formeln passt
   const LT = {
     schild: { melee: 1, spd: 180, cd: .7, reach: 70, arc: 1.7, lock: .45, block: 6, f: 1.4, col: '#e05c2a' },
@@ -81,7 +81,7 @@ const LIVE = (function () {
     if (held && !t.dead) {
       const d = Math.hypot(t.x - u.x, t.y - u.y);
       if (c.melee) { if (d < c.reach - 2) ct.att = true; else if (m <= .15 && u.ro <= 0 && u.dt <= 0) { ct.mx = (t.x - u.x) / d; ct.my = (t.y - u.y) / d; } }
-      else ct.att = d < c.range;
+      else ct.att = true;   // Fernkämpfer dürfen immer angreifen, auch wenn der Gegner noch außer Reichweite ist
     }
     return ct;
   }
@@ -126,7 +126,7 @@ const LIVE = (function () {
     const c = u.c;
     u.inv -= dt; u.at -= dt; u.ro -= dt; u.f -= dt; u.sw -= dt; u.cbT -= dt; u.run -= dt;
     if (c.block && !u.bk) { u.bt += dt; if (u.bt >= c.block) u.bk = 1; }
-    if (u.ch < 2) { u.rt += dt; if (u.rt >= 1.6) { u.ch++; u.rt = 0; } }
+    if (u.ch < 2) { u.rt += dt; if (u.rt >= DASHCD) { u.ch++; u.rt = 0; } }
     if (ct.dash && u.ch > 0 && u.dt <= 0) { u.ch--; u.dt = .16; u.inv = .25; u.dx = ct.dash[0]; u.dy = ct.dash[1]; u.ro = 0; u.wt = 0; u.cq = 0; }
     if (u.wt > 0) { u.wt -= dt; if (u.wt <= 0) resolve(u); }
     if (u.cq > 0) { u.cq -= dt; if (u.cq <= 0) { if (u.isP) aim(u); resolve(u, true); } }
@@ -233,7 +233,7 @@ const LIVE = (function () {
       for (const u of U) { if (u.dead) continue; g.fillStyle = u === B ? '#e0526c' : '#e8c97a'; g.beginPath(); g.arc(mx + u.x / AW * mw, my + u.y / AH * mh, 3, 0, 7); g.fill(); } }
     g.textAlign = 'center';
     if (cdT > 0 && !over) { g.fillStyle = '#e8dcc8'; g.font = 'bold 24px Cinzel, serif'; g.fillText('Kampfbeginn in ' + Math.max(0, cdT).toFixed(1) + ' s', W / 2, H / 2 - 90); }
-    if (joy) { g.strokeStyle = 'rgba(232,220,200,.35)'; g.lineWidth = 2; g.beginPath(); g.arc(joy.cx, joy.cy, 50, 0, 7); g.stroke(); g.fillStyle = 'rgba(232,220,200,.3)'; g.beginPath(); g.arc(joy.cx + jv.x * 50, joy.cy + jv.y * 50, 20, 0, 7); g.fill(); }
+    if (joy) { g.strokeStyle = 'rgba(232,220,200,.35)'; g.lineWidth = 2; g.beginPath(); g.arc(joy.cx, joy.cy, JR, 0, 7); g.stroke(); g.fillStyle = 'rgba(232,220,200,.3)'; g.beginPath(); g.arc(joy.cx + jv.x * JR, joy.cy + jv.y * JR, 20, 0, 7); g.fill(); }
   }
   function frame(dt) { update(dt); updCam(dt, false); draw(); }
   function loop(t) { const dt = Math.min(.05, (t - last) / 1000); last = t; frame(dt); requestAnimationFrame(loop); }
@@ -246,10 +246,11 @@ const LIVE = (function () {
     addEventListener('keydown', e => { const k = KM[e.code]; if (!k) return; e.preventDefault(); if (k === 'j' || k === ' ') held = 1; else if ((k === 'k' || k === 'shift') && !e.repeat) wd = 1; keys[k] = 1; });
     addEventListener('keyup', e => { const k = KM[e.code]; if (!k) return; if (k === 'j' || k === ' ') held = 0; keys[k] = 0; });
     addEventListener('blur', () => { keys = {}; held = 0; wd = 0; });
-    cv.addEventListener('pointerdown', e => { if (e.clientX < innerWidth * .6 && !joy) { joy = { id: e.pointerId, cx: e.clientX, cy: e.clientY }; cv.setPointerCapture(e.pointerId); } });
-    cv.addEventListener('pointermove', e => { if (joy && joy.id === e.pointerId) { let x = (e.clientX - joy.cx) / 50, y = (e.clientY - joy.cy) / 50; const m = Math.hypot(x, y); if (m > 1) { x /= m; y /= m; } jv = { x, y }; } });
+    cv.addEventListener('pointerdown', e => { if (e.clientX < innerWidth * .6 && !joy) { joy = { id: e.pointerId, cx: e.clientX, cy: e.clientY }; jv = { x: 0, y: 0 }; try { cv.setPointerCapture(e.pointerId); } catch (_) { } } });
+    // Mitwandernder Steuerkreis: Geht der Finger über den Rand, zieht er den Kreis mit, die Richtung bleibt erhalten
+    addEventListener('pointermove', e => { if (joy && joy.id === e.pointerId) { let dx = e.clientX - joy.cx, dy = e.clientY - joy.cy; const d = Math.hypot(dx, dy); if (d > JR) { const k = (d - JR) / d; joy.cx += dx * k; joy.cy += dy * k; dx = e.clientX - joy.cx; dy = e.clientY - joy.cy; } jv = { x: dx / JR, y: dy / JR }; } });
     const endJoy = e => { if (joy && joy.id === e.pointerId) { joy = null; jv = { x: 0, y: 0 }; } };
-    cv.addEventListener('pointerup', endJoy); cv.addEventListener('pointercancel', endJoy);
+    addEventListener('pointerup', endJoy); addEventListener('pointercancel', endJoy);
     const ba = document.getElementById('ba'), bd = document.getElementById('bd');
     ba.addEventListener('pointerdown', () => held = 1); ['pointerup', 'pointerleave', 'pointercancel'].forEach(t => ba.addEventListener(t, () => held = 0));
     bd.addEventListener('pointerdown', () => wd = 1);
