@@ -241,7 +241,7 @@ const LIVE = (function () {
   // ── Eingabe (Tasten nach Position, nicht nach Zeichen) ──
   const KM = { KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd', ArrowUp: 'arrowup', ArrowDown: 'arrowdown', ArrowLeft: 'arrowleft', ArrowRight: 'arrowright', KeyJ: 'j', Space: ' ', KeyK: 'k', ShiftLeft: 'shift', ShiftRight: 'shift' };
   // Mittelpunkt des festen Steuerkreises (unten links) und Richtung aus der Fingerposition
-  const jc = () => [Math.max(JR + 28, 92), H - JR - 36];
+  const jc = () => [JR + 56, H - JR - 60];   // 56 Pixel Abstand zum linken, 60 zum unteren Bildschirmrand
   function setJoy(e) {
     const [cx, cy] = jc(), dx = e.clientX - cx, dy = e.clientY - cy, d = Math.hypot(dx, dy);
     if (d < 10) { jv = { x: 0, y: 0 }; return; }   // kleine tote Zone in der Mitte
