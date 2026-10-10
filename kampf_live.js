@@ -5,7 +5,7 @@ window.LIVE_DEFAULT = true;
 
 const LIVE = (function () {
   let AW = 1700, AH = 1000, K = .6;   // Kartengröße (wird je nach Hoch- oder Querformat in start() gesetzt) und Neigung der Ansicht
-  const R = 16, WAVE = 500, ARROW = 520, DASHD = 75, DASHCD = 2.5, JR = 48;   // DASHCD: Sekunden bis eine Ausweich-Ladung zurückkommt, JR: Radius des festen Steuerkreises in Pixeln
+  const R = 16, WAVE = 500, ARROW = 520, DASHD = 75, DASHCD = 2.5, JR = 56;   // DASHCD: Sekunden bis eine Ausweich-Ladung zurückkommt, JR: Radius des festen Steuerkreises in Pixeln
   // Typ-Werte. f = Schadensfaktor pro Treffer, damit der Schaden pro Sekunde zu den alten Formeln passt
   const LT = {
     schild: { melee: 1, spd: 180, cd: .7, reach: 70, arc: 1.7, lock: .45, block: 6, f: 1.4, col: '#e05c2a' },
