@@ -5,7 +5,7 @@ window.LIVE_DEFAULT = true;
 
 const LIVE = (function () {
   let AW = 1700, AH = 1000, K = .6;   // Kartengröße (wird je nach Hoch- oder Querformat in start() gesetzt) und Neigung der Ansicht
-  const R = 16, WAVE = 500, ARROW = 520, DASHD = 75, DASHCD = 2.5, JR = 56;   // DASHCD: Sekunden bis eine Ausweich-Ladung zurückkommt, JR: Radius des Steuerkreises in Pixeln
+  const R = 16, WAVE = 500, ARROW = 520, DASHD = 75, DASHCD = 2.5, JR = 64;   // DASHCD: Sekunden bis eine Ausweich-Ladung zurückkommt, JR: Radius des festen Steuerkreises in Pixeln
   // Typ-Werte. f = Schadensfaktor pro Treffer, damit der Schaden pro Sekunde zu den alten Formeln passt
   const LT = {
     schild: { melee: 1, spd: 180, cd: .7, reach: 70, arc: 1.7, lock: .45, block: 6, f: 1.4, col: '#e05c2a' },
@@ -233,22 +233,29 @@ const LIVE = (function () {
       for (const u of U) { if (u.dead) continue; g.fillStyle = u === B ? '#e0526c' : '#e8c97a'; g.beginPath(); g.arc(mx + u.x / AW * mw, my + u.y / AH * mh, 3, 0, 7); g.fill(); } }
     g.textAlign = 'center';
     if (cdT > 0 && !over) { g.fillStyle = '#e8dcc8'; g.font = 'bold 24px Cinzel, serif'; g.fillText('Kampfbeginn in ' + Math.max(0, cdT).toFixed(1) + ' s', W / 2, H / 2 - 90); }
-    if (joy) { g.strokeStyle = 'rgba(232,220,200,.35)'; g.lineWidth = 2; g.beginPath(); g.arc(joy.cx, joy.cy, JR, 0, 7); g.stroke(); g.fillStyle = 'rgba(232,220,200,.3)'; g.beginPath(); g.arc(joy.cx + jv.x * JR, joy.cy + jv.y * JR, 20, 0, 7); g.fill(); }
+    { const [jx, jy] = jc(); g.strokeStyle = 'rgba(232,220,200,' + (joy ? .55 : .3) + ')'; g.lineWidth = 2; g.beginPath(); g.arc(jx, jy, JR, 0, 7); g.stroke(); g.fillStyle = 'rgba(232,220,200,' + (joy ? .12 : .05) + ')'; g.fill(); g.fillStyle = 'rgba(232,220,200,' + (joy ? .5 : .3) + ')'; g.beginPath(); g.arc(jx + jv.x * JR, jy + jv.y * JR, 24, 0, 7); g.fill(); }
   }
   function frame(dt) { update(dt); updCam(dt, false); draw(); }
   function loop(t) { const dt = Math.min(.05, (t - last) / 1000); last = t; frame(dt); requestAnimationFrame(loop); }
 
   // ── Eingabe (Tasten nach Position, nicht nach Zeichen) ──
   const KM = { KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd', ArrowUp: 'arrowup', ArrowDown: 'arrowdown', ArrowLeft: 'arrowleft', ArrowRight: 'arrowright', KeyJ: 'j', Space: ' ', KeyK: 'k', ShiftLeft: 'shift', ShiftRight: 'shift' };
+  // Mittelpunkt des festen Steuerkreises (unten links) und Richtung aus der Fingerposition
+  const jc = () => [Math.max(JR + 28, 92), H - JR - 36];
+  function setJoy(e) {
+    const [cx, cy] = jc(), dx = e.clientX - cx, dy = e.clientY - cy, d = Math.hypot(dx, dy);
+    if (d < 10) { jv = { x: 0, y: 0 }; return; }   // kleine tote Zone in der Mitte
+    const k = Math.min(1, d / JR); jv = { x: dx / d * k, y: dy / d * k };
+  }
   function init() {
     if (inited) return; inited = true;
     cv = document.getElementById('c'); g = cv.getContext('2d'); addEventListener('resize', fit);
     addEventListener('keydown', e => { const k = KM[e.code]; if (!k) return; e.preventDefault(); if (k === 'j' || k === ' ') held = 1; else if ((k === 'k' || k === 'shift') && !e.repeat) wd = 1; keys[k] = 1; });
     addEventListener('keyup', e => { const k = KM[e.code]; if (!k) return; if (k === 'j' || k === ' ') held = 0; keys[k] = 0; });
     addEventListener('blur', () => { keys = {}; held = 0; wd = 0; });
-    cv.addEventListener('pointerdown', e => { if (e.clientX < innerWidth * .6 && !joy) { joy = { id: e.pointerId, cx: e.clientX, cy: e.clientY }; jv = { x: 0, y: 0 }; try { cv.setPointerCapture(e.pointerId); } catch (_) { } } });
-    // Mitwandernder Steuerkreis: Geht der Finger über den Rand, zieht er den Kreis mit, die Richtung bleibt erhalten
-    addEventListener('pointermove', e => { if (joy && joy.id === e.pointerId) { let dx = e.clientX - joy.cx, dy = e.clientY - joy.cy; const d = Math.hypot(dx, dy); if (d > JR) { const k = (d - JR) / d; joy.cx += dx * k; joy.cy += dy * k; dx = e.clientX - joy.cx; dy = e.clientY - joy.cy; } jv = { x: dx / JR, y: dy / JR }; } });
+    // Fester Steuerkreis unten links. Berührt wird irgendwo auf der linken Bildschirmseite, die Richtung ergibt sich vom Mittelpunkt des Kreises zum Finger, auch wenn der Finger weit außerhalb liegt
+    cv.addEventListener('pointerdown', e => { if (e.clientX < innerWidth * .6 && !joy) { joy = { id: e.pointerId }; setJoy(e); try { cv.setPointerCapture(e.pointerId); } catch (_) { } } });
+    addEventListener('pointermove', e => { if (joy && joy.id === e.pointerId) setJoy(e); });
     const endJoy = e => { if (joy && joy.id === e.pointerId) { joy = null; jv = { x: 0, y: 0 }; } };
     addEventListener('pointerup', endJoy); addEventListener('pointercancel', endJoy);
     const ba = document.getElementById('ba'), bd = document.getElementById('bd');
