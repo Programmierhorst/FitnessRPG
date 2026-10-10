@@ -5,7 +5,7 @@ window.LIVE_DEFAULT = true;
 
 const LIVE = (function () {
   let AW = 1700, AH = 1000, K = .6;   // Kartengröße (wird je nach Hoch- oder Querformat in start() gesetzt) und Neigung der Ansicht
-  const R = 16, WAVE = 500, ARROW = 520, DASHD = 75, DASHCD = 2.5, JR = 64;   // DASHCD: Sekunden bis eine Ausweich-Ladung zurückkommt, JR: Radius des festen Steuerkreises in Pixeln
+  const R = 16, WAVE = 500, ARROW = 520, DASHD = 75, DASHCD = 2.5, JR = 48;   // DASHCD: Sekunden bis eine Ausweich-Ladung zurückkommt, JR: Radius des festen Steuerkreises in Pixeln
   // Typ-Werte. f = Schadensfaktor pro Treffer, damit der Schaden pro Sekunde zu den alten Formeln passt
   const LT = {
     schild: { melee: 1, spd: 180, cd: .7, reach: 70, arc: 1.7, lock: .45, block: 6, f: 1.4, col: '#e05c2a' },
@@ -241,7 +241,7 @@ const LIVE = (function () {
   // ── Eingabe (Tasten nach Position, nicht nach Zeichen) ──
   const KM = { KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd', ArrowUp: 'arrowup', ArrowDown: 'arrowdown', ArrowLeft: 'arrowleft', ArrowRight: 'arrowright', KeyJ: 'j', Space: ' ', KeyK: 'k', ShiftLeft: 'shift', ShiftRight: 'shift' };
   // Mittelpunkt des festen Steuerkreises (unten links) und Richtung aus der Fingerposition
-  const jc = () => [JR + 56, H - JR - 56];   // 56 Pixel Abstand zum linken und zum unteren Bildschirmrand
+  const jc = () => [JR + 56, H - JR - (H > W ? 56 : 28)];   // 56 Pixel Abstand zum linken Rand; unten 56 im Hochformat, 28 im Querformat (dort ist der Bildschirm niedrig)
   function setJoy(e) {
     const [cx, cy] = jc(), dx = e.clientX - cx, dy = e.clientY - cy, d = Math.hypot(dx, dy);
     if (d < 10) { jv = { x: 0, y: 0 }; return; }   // kleine tote Zone in der Mitte
