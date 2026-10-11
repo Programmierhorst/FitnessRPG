@@ -15,7 +15,7 @@ const LIVE = (function () {
   };
   let cv, g, W = 800, H = 600, S = .8, camX = 0, camY = 0, inited = false, loopOn = false, last = 0;
   let U = [], AR = [], FL = [], A = null, B = null, over = true, cdT = 0, T = 0, AUTO = false;
-  let keys = {}, held = 0, wd = 0, joy = null, jv = { x: 0, y: 0 }, names = ['', ''];
+  let keys = {}, held = 0, wd = 0, atkId = null, joy = null, jv = { x: 0, y: 0 }, names = ['', ''];
   const rnd = (a, c) => a + Math.random() * (c - a), clamp = (v, a, c) => Math.max(a, Math.min(c, v)), clr = (x, y) => Math.min(x, AW - x, y, AH - y);
   const P = (x, y) => [W / 2 + (x - camX) * S, H / 2 + (y - camY) * K * S];
 
@@ -235,7 +235,7 @@ const LIVE = (function () {
     if (cdT > 0 && !over) { g.fillStyle = '#e8dcc8'; g.font = 'bold 24px Cinzel, serif'; g.fillText('Kampfbeginn in ' + Math.max(0, cdT).toFixed(1) + ' s', W / 2, H / 2 - 90); }
     { const [jx, jy] = jc(); g.strokeStyle = 'rgba(232,220,200,' + (joy ? .55 : .3) + ')'; g.lineWidth = 2; g.beginPath(); g.arc(jx, jy, JR, 0, 7); g.stroke(); g.fillStyle = 'rgba(232,220,200,' + (joy ? .12 : .05) + ')'; g.fill(); g.fillStyle = 'rgba(232,220,200,' + (joy ? .5 : .3) + ')'; g.beginPath(); g.arc(jx + jv.x * JR, jy + jv.y * JR, 24, 0, 7); g.fill(); }
   }
-  function frame(dt) { update(dt); updCam(dt, false); draw(); }
+  function frame(dt) { update(dt); updCam(dt, false); draw(); const b = document.getElementById('bd'); if (b && A) b.style.opacity = A.ch > 0 ? '1' : '.4'; }   // Dash-Knopf blass, solange keine Ladung bereit ist
   function loop(t) { const dt = Math.min(.05, (t - last) / 1000); last = t; frame(dt); requestAnimationFrame(loop); }
 
   // ── Eingabe (Tasten nach Position, nicht nach Zeichen) ──
@@ -254,7 +254,15 @@ const LIVE = (function () {
     addEventListener('keyup', e => { const k = KM[e.code]; if (!k) return; if (k === 'j' || k === ' ') held = 0; keys[k] = 0; });
     addEventListener('blur', () => { keys = {}; held = 0; wd = 0; });
     // Fester Steuerkreis unten links. Berührt wird irgendwo auf der linken Bildschirmseite, die Richtung ergibt sich vom Mittelpunkt des Kreises zum Finger, auch wenn der Finger weit außerhalb liegt
-    cv.addEventListener('pointerdown', e => { if (e.clientX < innerWidth * .6 && !joy) { joy = { id: e.pointerId }; setJoy(e); try { cv.setPointerCapture(e.pointerId); } catch (_) { } } });
+    cv.addEventListener('pointerdown', e => {
+      // Dash- und Angriffsknopf: Berührungen bis 18 Pixel neben dem runden Knopf zählen auch (größere Trefferfläche, auch bei ungenauem oder schwitzigem Finger)
+      const near = el => { const r = el.getBoundingClientRect(); return Math.hypot(e.clientX - (r.left + r.width / 2), e.clientY - (r.top + r.height / 2)) - r.width / 2; };
+      const dd = near(document.getElementById('bd')), da = near(document.getElementById('ba'));
+      if (Math.min(dd, da) <= 18) { if (dd <= da) wd = 1; else { held = 1; atkId = e.pointerId; } return; }
+      if (e.clientX < innerWidth * .6 && !joy) { joy = { id: e.pointerId }; setJoy(e); try { cv.setPointerCapture(e.pointerId); } catch (_) { } }
+    });
+    const endAtk = e => { if (atkId !== null && e.pointerId === atkId) { held = 0; atkId = null; } };
+    addEventListener('pointerup', endAtk); addEventListener('pointercancel', endAtk);
     addEventListener('pointermove', e => { if (joy && joy.id === e.pointerId) setJoy(e); });
     const endJoy = e => { if (joy && joy.id === e.pointerId) { joy = null; jv = { x: 0, y: 0 }; } };
     addEventListener('pointerup', endJoy); addEventListener('pointercancel', endJoy);
