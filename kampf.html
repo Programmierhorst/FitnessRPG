@@ -587,6 +587,59 @@ function loadPlayerStats(cls) {
   return CLASSES[cls];
 }
 
+// ── Gegner-Stats: feste Kurve pro Level + Ausrüstungsrang (Stand 11.10.2026) ──────────────
+// Gegner-Punkte = Trainingsanteil + Ausrüstung. Ausrüstung = Set-Punkte × itemMult(Level), langsam einschleichend.
+// Alle Zahlen zum Einstellen stehen hier in ENEMY_TUNING. Mission = Level des Spielers, Dungeon = Level des Gegners.
+const ENEMY_TUNING = {
+  trainPerDay:  4,      // Trainingspunkte pro Tag (passend zum Levelplan: Level 100 nach ca. 90 Tagen)
+  setNormal:    122,    // Punkte eines kompletten normalen Sets (vor itemMult)
+  setLegendary: 309,    // Punkte eines kompletten legendären Sets (vor itemMult)
+  missionEarly: [5,5,6,6,7,7,8,8,8,8],             // Gesamtpunkte Missionsgegner Level 1-10 (ohne Ausrüstung)
+  mission: { train: 0.5, gearFrom: 10, gearFull: 30, set: 'setNormal'    },   // ab Level 30 komplettes normales Set
+  dungeon: { train: 0.8, gearFrom: 5,  gearFull: 25, set: 'setNormal'    },   // Dungeon-Vorgegner
+  boss:    { train: 1.0, gearFrom: 5,  gearFull: 30, set: 'setLegendary' },   // Endboss: volles legendäres Set (set darf auch eine Zahl sein, z. B. 215 = Zwischenstufe)
+  boss1Points: 54,      // Dungeon 1: der erste Boss ist bewusst leichter (erstes Erfolgserlebnis)
+  // So verteilen sich die Punkte auf die Stats (Hauptstat je nach Klasse). sub = jeder der beiden Nebenstats.
+  trainSplit: { main: 0.45, lebenskraft: 0.20, ausdauer: 0.10, schnelligkeit: 0.10, krit_chance: 0.05, krit_schaden: 0.05, sub: 0.025 },
+  setSplit:   { main: 0.23, lebenskraft: 0.19, ausdauer: 0.14, schnelligkeit: 0.13, krit_chance: 0.12, krit_schaden: 0.12, sub: 0.035 }
+  // Platz für später: Waffenschaden der Gegner (wenn der Waffenschaden in den Kampf eingebaut wird)
+};
+function enemyTrainDays(lv){
+  const P = [[1,0],[25,7],[100,90],[300,365],[500,730],[1000,1825]];
+  if (lv <= 1) return 0;
+  if (lv >= 1000) return 1825 + (lv-1000)*7;
+  for (let i = 0; i < P.length-1; i++) {
+    if (lv <= P[i+1][0]) return P[i][1] + (P[i+1][1]-P[i][1]) * (lv-P[i][0]) / (P[i+1][0]-P[i][0]);
+  }
+  return 1825;
+}
+function enemyRamp(lv, from, full){ return lv <= from ? 0 : Math.min(1, (lv-from)/(full-from)); }
+// Liefert {train, gear}: Punkte aus Training und aus Ausrüstung
+function enemyParts(kind, lv, dungeonNum){
+  const T = ENEMY_TUNING;
+  if (kind === 'mission' && lv <= 10) return { train: T.missionEarly[Math.max(1, lv)-1], gear: 0 };
+  if (kind === 'boss' && dungeonNum === 1) return { train: T.boss1Points, gear: 0 };
+  const c = T[kind] || T.dungeon;
+  return {
+    train: c.train * T.trainPerDay * enemyTrainDays(lv),
+    gear:  (typeof c.set === 'number' ? c.set : T[c.set]) * itemMult(lv) * enemyRamp(lv, c.gearFrom, c.gearFull)
+  };
+}
+function buildEnemyStats(cls, parts){
+  const T = ENEMY_TUNING;
+  const mainKey = { warrior:'staerke', archer:'gewandheit', mage:'intelligenz' }[cls];
+  const stats = {};
+  const add = (key, share, pts) => { stats[key] = (stats[key] || 0) + pts * share; };
+  for (const [split, pts] of [[T.trainSplit, parts.train], [T.setSplit, parts.gear]]) {
+    add('lebenskraft', split.lebenskraft, pts); add('ausdauer', split.ausdauer, pts);
+    add('schnelligkeit', split.schnelligkeit, pts); add('krit_chance', split.krit_chance, pts);
+    add('krit_schaden', split.krit_schaden, pts);
+    for (const k of ['staerke','gewandheit','intelligenz']) add(k, k === mainKey ? split.main : split.sub, pts);
+  }
+  for (const k in stats) stats[k] = Math.max(1, Math.round(stats[k]));
+  return stats;
+}
+
 function setupFighters(){
   if (MODE === 'dungeon') {
     clsA = dungeonSession.player;
@@ -620,7 +673,16 @@ function setupFighters(){
       displayName: arenaSession.defenderName,
     };
   } else {
-    sB = enemyKey && ENEMIES[enemyKey] ? ENEMIES[enemyKey] : CLASSES[clsB];
+    // Gegner (Mission/Dungeon): Name, Symbol und Farbe wie bisher, Stats aus der festen Kurve (siehe ENEMY_TUNING)
+    const base = enemyKey && ENEMIES[enemyKey] ? ENEMIES[enemyKey] : CLASSES[clsB];
+    let parts;
+    if (MODE === 'dungeon') {
+      const isBoss = dungeonFightIdx === dungeonSession.enemies.length - 1;
+      parts = enemyParts(isBoss ? 'boss' : 'dungeon', lvB, dungeonSession.dungeonNum);
+    } else {
+      parts = enemyParts('mission', lvA, 0);
+    }
+    sB = { ...base, ...buildEnemyStats(clsB, parts) };
   }
 }
 setupFighters();
