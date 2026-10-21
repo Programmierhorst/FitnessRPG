@@ -85,6 +85,24 @@ const sb = supabase.createClient(
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpqeWtmYmZzcm1kc2xscmJibG16Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk4NTUwOTksImV4cCI6MjA5NTQzMTA5OX0.I8mFhiKo-Fv_GpF-ATWXXYXUUKxu6OzxZdkJr4COGIE'
 );
 
+// ── Mehrere Charaktere pro Account (Stand 21.10.2026) ──────────────────────────
+// Der aktive Charakter wird pro Browser-Tab (sessionStorage) und als Vorgabe für neue Tabs (localStorage) gemerkt.
+// Ohne gemerkte Auswahl gilt wie bisher der zuletzt erstellte Charakter.
+const ACTIVE_CHAR_KEY = 'fitnessrpg_active_char';
+function getActiveCharId(){
+  try { return sessionStorage.getItem(ACTIVE_CHAR_KEY) || localStorage.getItem(ACTIVE_CHAR_KEY) || null; } catch(e) { return null; }
+}
+function setActiveCharId(id){
+  try {
+    if (id) { sessionStorage.setItem(ACTIVE_CHAR_KEY, id); localStorage.setItem(ACTIVE_CHAR_KEY, id); }
+    else    { sessionStorage.removeItem(ACTIVE_CHAR_KEY); localStorage.removeItem(ACTIVE_CHAR_KEY); }
+  } catch(e) {}
+}
+// Für Abfragen an 'characters': .match(activeCharMatch()) schränkt auf den aktiven Charakter ein (leer = wie bisher)
+function activeCharMatch(){ const id = getActiveCharId(); return id ? { id } : {}; }
+// Lokale Browserwerte (Timer, Shop, Dungeon-Versuche) pro Charakter trennen
+function charKey(k){ const id = getActiveCharId(); return id ? k + '_' + id : k; }
+
 const CLASS_DE = { warrior:'Krieger', archer:'Bogenschütze', mage:'Magier' };
 
 let slides       = [];
@@ -98,7 +116,7 @@ async function loadCharacter() {
   const { data:{ session } } = await sb.auth.getSession();
   if (!session) { window.location.href = 'index.html'; return; }
   const { data } = await sb.from('characters')
-    .select('class').eq('user_id', session.user.id)
+    .select('class').eq('user_id', session.user.id).match(activeCharMatch())
     .order('created_at', { ascending: false }).limit(1);
   if (data && data.length > 0) {
     charClass = CLASS_DE[data[0].class] || 'Held';

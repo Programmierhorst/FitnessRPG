@@ -399,6 +399,25 @@ const SUPABASE_URL = 'https://zjykfbfsrmdsllrbblmz.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpqeWtmYmZzcm1kc2xscmJibG16Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk4NTUwOTksImV4cCI6MjA5NTQzMTA5OX0.I8mFhiKo-Fv_GpF-ATWXXYXUUKxu6OzxZdkJr4COGIE';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// ── Mehrere Charaktere pro Account (Stand 21.10.2026) ──────────────────────────
+// Der aktive Charakter wird pro Browser-Tab (sessionStorage) und als Vorgabe für neue Tabs (localStorage) gemerkt.
+// Ohne gemerkte Auswahl gilt wie bisher der zuletzt erstellte Charakter.
+const ACTIVE_CHAR_KEY = 'fitnessrpg_active_char';
+function getActiveCharId(){
+  try { return sessionStorage.getItem(ACTIVE_CHAR_KEY) || localStorage.getItem(ACTIVE_CHAR_KEY) || null; } catch(e) { return null; }
+}
+function setActiveCharId(id){
+  try {
+    if (id) { sessionStorage.setItem(ACTIVE_CHAR_KEY, id); localStorage.setItem(ACTIVE_CHAR_KEY, id); }
+    else    { sessionStorage.removeItem(ACTIVE_CHAR_KEY); localStorage.removeItem(ACTIVE_CHAR_KEY); }
+  } catch(e) {}
+}
+// Für Abfragen an 'characters': .match(activeCharMatch()) schränkt auf den aktiven Charakter ein (leer = wie bisher)
+function activeCharMatch(){ const id = getActiveCharId(); return id ? { id } : {}; }
+// Lokale Browserwerte (Timer, Shop, Dungeon-Versuche) pro Charakter trennen
+function charKey(k){ const id = getActiveCharId(); return id ? k + '_' + id : k; }
+
+
 // ── State ───────────────────────────────────────────────────
 const state = {
   name:'', heroClass:'',
@@ -675,7 +694,7 @@ async function saveCharacter(){
     created_at: new Date().toISOString()
   };
 
-  const { error } = await sb.from('characters').insert([charData]);
+  const { data: newChars, error } = await sb.from('characters').insert([charData]).select('id');
   btn.disabled=false;
   btn.innerHTML='⚔️ Abenteuer beginnen!';
 
@@ -684,12 +703,17 @@ async function saveCharacter(){
     if(error.code==='42P01'){
       msg.className='msg error';
       msg.textContent='Die Datenbanktabelle fehlt noch. Bitte die Anleitung im Chat befolgen!';
+    } else if(error.code==='23505'){
+      msg.className='msg error';
+      msg.textContent='Für diesen Account ist in der Datenbank nur ein Charakter erlaubt (Regel „unique“ auf user_id in Supabase). Bitte aufheben, dann geht es.';
     } else {
       msg.className='msg error'; msg.textContent='Fehler: '+error.message;
     }
   } else {
     msg.className='msg success';
     msg.textContent='🎉 Dein Held wurde erschaffen! Das Abenteuer beginnt...';
+    // Neuen Charakter direkt als aktiven Charakter merken (sonst gilt der zuletzt erstellte)
+    setActiveCharId(newChars && newChars[0] ? newChars[0].id : null);
     setTimeout(()=>{ window.location.href='index.html'; },2000);
   }
 }

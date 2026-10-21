@@ -467,6 +467,7 @@ body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text)}
       <div class="hud-name" id="hudName">Held</div>
       <div class="hud-level" id="hudLevel">Level 1</div>
       <button class="hud-guild-btn" id="hudGuildBtn" onclick="openGuild()">🏰 <span id="hudGuildLabel">Gilde</span><span class="guild-chat-dot" id="hudGuildDot"></span></button>
+      <button class="hud-guild-btn" id="hudCharBtn" style="margin-left:4px" onclick="openCharPicker()" title="Charakter wechseln oder neu erstellen">🧙 Charaktere</button>
     </div>
     <div class="hud-gold">💰 <span id="hudGold">0</span> Gold</div>
     </div>
@@ -1106,6 +1107,20 @@ body{font-family:'Crimson Pro',serif;background:var(--bg);color:var(--text)}
   </div>
 </div>
 
+<!-- ── CHARAKTERE: AUSWAHL (mehrere Charaktere pro Account) ── -->
+<div class="overlay" id="charPickerOverlay">
+  <div class="rp-panel" style="width:min(420px,94vw)">
+    <div class="rp-header">
+      <div class="rp-title">🧙 Meine Charaktere</div>
+      <button class="btn-close" onclick="closeOverlay('charPickerOverlay')">✕</button>
+    </div>
+    <div class="rp-body" style="padding:12px 16px">
+      <div id="charPickerList"></div>
+      <button class="hud-guild-btn" style="width:100%;margin-top:10px;padding:8px 10px;font-size:.7rem" onclick="window.location.href='charakter.html'">➕ Neuen Charakter erstellen</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── GILDE: BEITRITTSANFRAGEN ── -->
 <div class="overlay" id="guildRequestsOverlay">
   <div class="rp-panel" style="width:min(420px,94vw)">
@@ -1250,7 +1265,7 @@ function getDungeonLegendaryChance(num) {
 // ── Dungeon-Versuche (3x täglich, persistiert) ───────────────
 function getDungeonAttemptsLeft() {
   try {
-    const stored = JSON.parse(localStorage.getItem('dungeonAttempts') || '{}');
+    const stored = JSON.parse(localStorage.getItem(charKey('dungeonAttempts')) || '{}');
     if (stored.day === getTodayKey()) {
       return Math.max(0, DUNGEON_ATTEMPTS_PER_DAY - (stored.used || 0));
     }
@@ -1261,13 +1276,13 @@ function getDungeonAttemptsLeft() {
 function useDungeonAttempt() {
   let stored;
   try {
-    stored = JSON.parse(localStorage.getItem('dungeonAttempts') || '{}');
+    stored = JSON.parse(localStorage.getItem(charKey('dungeonAttempts')) || '{}');
   } catch(e) { stored = {}; }
   if (stored.day !== getTodayKey()) {
     stored = {day: getTodayKey(), used: 0};
   }
   stored.used = (stored.used || 0) + 1;
-  localStorage.setItem('dungeonAttempts', JSON.stringify(stored));
+  localStorage.setItem(charKey('dungeonAttempts'), JSON.stringify(stored));
 }
 
 
@@ -1277,6 +1292,24 @@ const sb = supabase.createClient(
   'https://zjykfbfsrmdsllrbblmz.supabase.co',
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpqeWtmYmZzcm1kc2xscmJibG16Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk4NTUwOTksImV4cCI6MjA5NTQzMTA5OX0.I8mFhiKo-Fv_GpF-ATWXXYXUUKxu6OzxZdkJr4COGIE'
 );
+
+// ── Mehrere Charaktere pro Account (Stand 21.10.2026) ──────────────────────────
+// Der aktive Charakter wird pro Browser-Tab (sessionStorage) und als Vorgabe für neue Tabs (localStorage) gemerkt.
+// Ohne gemerkte Auswahl gilt wie bisher der zuletzt erstellte Charakter.
+const ACTIVE_CHAR_KEY = 'fitnessrpg_active_char';
+function getActiveCharId(){
+  try { return sessionStorage.getItem(ACTIVE_CHAR_KEY) || localStorage.getItem(ACTIVE_CHAR_KEY) || null; } catch(e) { return null; }
+}
+function setActiveCharId(id){
+  try {
+    if (id) { sessionStorage.setItem(ACTIVE_CHAR_KEY, id); localStorage.setItem(ACTIVE_CHAR_KEY, id); }
+    else    { sessionStorage.removeItem(ACTIVE_CHAR_KEY); localStorage.removeItem(ACTIVE_CHAR_KEY); }
+  } catch(e) {}
+}
+// Für Abfragen an 'characters': .match(activeCharMatch()) schränkt auf den aktiven Charakter ein (leer = wie bisher)
+function activeCharMatch(){ const id = getActiveCharId(); return id ? { id } : {}; }
+// Lokale Browserwerte (Timer, Shop, Dungeon-Versuche) pro Charakter trennen
+function charKey(k){ const id = getActiveCharId(); return id ? k + '_' + id : k; }
 
 const CLASS_ICONS = {warrior:'⚔️',archer:'🏹',mage:'🔮'};
 const CLASS_NAMES = {warrior:'Krieger',archer:'Bogenschütze',mage:'Magier'};
@@ -1335,11 +1368,23 @@ function showToast(icon, message) {
 async function loadCharacter(){
   const {data:{session}} = await sb.auth.getSession();
   if(!session){ window.location.href='index.html'; return; }
-  const {data} = await sb.from('characters').select('*')
-    .eq('user_id',session.user.id)
-    .order('created_at',{ascending:false}).limit(1);
-  if(!data||!data.length){ window.location.href='charakter.html'; return; }
+  // Aktiver Charakter (falls gemerkt und noch vorhanden), sonst wie bisher der zuletzt erstellte
+  let data = null;
+  const activeId = getActiveCharId();
+  if(activeId){
+    const r = await sb.from('characters').select('*')
+      .eq('user_id',session.user.id).eq('id',activeId).limit(1);
+    if(r.data && r.data.length) data = r.data;
+  }
+  if(!data){
+    const r = await sb.from('characters').select('*')
+      .eq('user_id',session.user.id)
+      .order('created_at',{ascending:false}).limit(1);
+    data = r.data;
+  }
+  if(!data||!data.length){ setActiveCharId(null); window.location.href='charakter.html'; return; }
   character = data[0];
+  setActiveCharId(character.id);
   syncDailyQuestsFromCharacter();
 
   // Inventar direkt beim Start laden, damit Item-Boni immer
@@ -2399,14 +2444,14 @@ function getTodayKey() {
 // damit er auch nach Schließen/Neuladen des Spiels erhalten bleibt.
 function getManualShopRefreshOffset() {
   try {
-    const stored = JSON.parse(localStorage.getItem('shopRefreshOffset') || '{}');
+    const stored = JSON.parse(localStorage.getItem(charKey('shopRefreshOffset')) || '{}');
     if (stored.day === getTodayKey()) return stored.offset || 0;
   } catch(e) {}
   return 0;
 }
 
 function setManualShopRefreshOffset(offset) {
-  localStorage.setItem('shopRefreshOffset', JSON.stringify({day: getTodayKey(), offset}));
+  localStorage.setItem(charKey('shopRefreshOffset'), JSON.stringify({day: getTodayKey(), offset}));
 }
 
 function getShopSeed() {
@@ -2420,7 +2465,7 @@ function getShopSeed() {
 // und durch welche Ersatz-Items (damit Ersetzung persistent bleibt).
 function getBoughtReplacements(shopType) {
   try {
-    const stored = JSON.parse(localStorage.getItem('shopBoughtReplacements') || '{}');
+    const stored = JSON.parse(localStorage.getItem(charKey('shopBoughtReplacements')) || '{}');
     if (stored.day === getTodayKey() && stored.offset === getManualShopRefreshOffset()) {
       return stored[shopType] || {};
     }
@@ -2431,14 +2476,14 @@ function getBoughtReplacements(shopType) {
 function saveBoughtReplacement(shopType, originalKey, replacementKey) {
   let stored;
   try {
-    stored = JSON.parse(localStorage.getItem('shopBoughtReplacements') || '{}');
+    stored = JSON.parse(localStorage.getItem(charKey('shopBoughtReplacements')) || '{}');
   } catch(e) { stored = {}; }
   if (stored.day !== getTodayKey() || stored.offset !== getManualShopRefreshOffset()) {
     stored = {day: getTodayKey(), offset: getManualShopRefreshOffset()};
   }
   if (!stored[shopType]) stored[shopType] = {};
   stored[shopType][originalKey] = replacementKey;
-  localStorage.setItem('shopBoughtReplacements', JSON.stringify(stored));
+  localStorage.setItem(charKey('shopBoughtReplacements'), JSON.stringify(stored));
 }
 
 function seededRandom(seed, index) {
@@ -2802,6 +2847,42 @@ async function sellItem(itemId, sellPrice, itemName) {
   } catch(err) {
     alert('Fehler: '+err.message);
   }
+}
+
+// ── Charakter wechseln (mehrere Charaktere pro Account) ──────────────────────
+async function openCharPicker(){
+  document.getElementById('charPickerOverlay').classList.add('active');
+  const list = document.getElementById('charPickerList');
+  list.innerHTML = '<div style="color:var(--dim);font-size:.8rem">Lade Charaktere…</div>';
+  try {
+    const {data:{session}} = await sb.auth.getSession();
+    if(!session) return;
+    const {data, error} = await sb.from('characters').select('id,name,class,level,created_at')
+      .eq('user_id', session.user.id).order('created_at', {ascending:true});
+    if(error) throw error;
+    const CL = {warrior:'⚔️ Krieger', archer:'🏹 Bogenschütze', mage:'🔮 Magier'};
+    list.innerHTML = (data||[]).map(c => {
+      const isActive = character && c.id === character.id;
+      return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(201,168,76,.12)">
+        <div>
+          <div style="font-family:Cinzel,serif;font-size:.75rem;color:var(--gold-l)">${escapeHtml(c.name || 'Held')}${isActive ? ' <span style="color:var(--dim);font-size:.6rem">(aktiv)</span>' : ''}</div>
+          <div style="font-size:.7rem;color:var(--dim)">${CL[c.class] || 'Held'} · Level ${c.level || 1}</div>
+        </div>
+        ${isActive ? '' : `<button class="hud-guild-btn" style="margin:0" onclick="switchCharacter('${c.id}')">Wechseln</button>`}
+      </div>`;
+    }).join('') || '<div style="color:var(--dim);font-size:.8rem">Keine Charaktere gefunden.</div>';
+  } catch(e) {
+    console.error('Charaktere laden fehlgeschlagen:', e);
+    list.innerHTML = '<div style="color:#e74c3c;font-size:.8rem">Die Charaktere konnten nicht geladen werden.</div>';
+  }
+}
+
+function switchCharacter(id){
+  if(character && id === character.id){ closeOverlay('charPickerOverlay'); return; }
+  setActiveCharId(id);
+  // Zwischengespeicherte Kampfdaten des bisherigen Charakters verwerfen
+  ['playerCombatStats','dungeonSession','arenaSession','openArenaOnLoad'].forEach(k => { try { sessionStorage.removeItem(k); } catch(e) {} });
+  window.location.reload();
 }
 
 function closeOverlay(id){
@@ -3331,6 +3412,7 @@ async function claimSeasonReward() {
 
     const { data: chars } = await sb.from('characters')
       .select('id,level,xp,gold').eq('user_id',session.user.id)
+      .match(activeCharMatch())
       .order('created_at',{ascending:false}).limit(1);
     if (!chars?.[0]) return;
 
@@ -3840,7 +3922,7 @@ async function claimSplitWeekReward() {
     if (!session) return;
     const cols = ['id', 'level', 'xp', 'gold', 'split_log'].concat(WORKOUT_FREE_STATS.map(s => s.id)).join(', ');
     const { data: chars, error: loadErr } = await sb.from('characters').select(cols)
-      .eq('user_id', session.user.id).order('created_at', {ascending:false}).limit(1);
+      .eq('user_id', session.user.id).match(activeCharMatch()).order('created_at', {ascending:false}).limit(1);
     if (loadErr || !chars || !chars.length) throw new Error('Laden fehlgeschlagen');
     const char = chars[0];
     const log = char.split_log || {};
@@ -3893,7 +3975,7 @@ function extraQuestState() {
   const pool = extraQuestPool();
   let pick = null;
   try {
-    const p = JSON.parse(localStorage.getItem(EXTRA_PICK_KEY) || 'null');
+    const p = JSON.parse(localStorage.getItem(charKey(EXTRA_PICK_KEY)) || 'null');
     if (p && p.day === today && pool.includes(p.id)) pick = p.id;
   } catch(e) {}
   return pick ? {state: 'active', pickId: pick, pool} : {state: 'pick', pool};
@@ -3951,7 +4033,7 @@ function chooseExtraQuest(id) {
   const st = extraQuestState();
   if (!st.pool || !st.pool.includes(id)) return;
   if (st.pickId && st.pickId !== id && TIMED_QUESTS[st.pickId]) timedPauseSilent(st.pickId); // Fortschritt bleibt erhalten
-  try { localStorage.setItem(EXTRA_PICK_KEY, JSON.stringify({day: getTodayKey(), id})); } catch(e) {}
+  try { localStorage.setItem(charKey(EXTRA_PICK_KEY), JSON.stringify({day: getTodayKey(), id})); } catch(e) {}
   renderDailyQuests();
 }
 
@@ -4147,12 +4229,12 @@ function timedLoad() {
   const today = getTodayKey();
   if (_timedState.day === today) return;
   let s = null;
-  try { s = JSON.parse(localStorage.getItem(TIMED_KEY) || 'null'); } catch(e) {}
+  try { s = JSON.parse(localStorage.getItem(charKey(TIMED_KEY)) || 'null'); } catch(e) {}
   _timedState = (s && s.day === today && s.timers) ? {day: today, timers: s.timers} : {day: today, timers: {}};
 }
 
 function timedSave() {
-  try { localStorage.setItem(TIMED_KEY, JSON.stringify(_timedState)); } catch(e) {}
+  try { localStorage.setItem(charKey(TIMED_KEY), JSON.stringify(_timedState)); } catch(e) {}
 }
 
 function timerOf(id) {
@@ -5198,6 +5280,7 @@ async function applyWorkoutStats() {
       .from('characters')
       .select('id, staerke, gewandheit, intelligenz, schnelligkeit, ausdauer, lebenskraft, krit_chance, krit_schaden, workout_quest_day, split_log')
       .eq('user_id', session.user.id)
+      .match(activeCharMatch())
       .order('created_at', {ascending:false})
       .limit(1);
 
@@ -5282,6 +5365,7 @@ async function completeQuest(id, opts){
       .from('characters')
       .select(timedSelectColumns())
       .eq('user_id', session.user.id)
+      .match(activeCharMatch())
       .order('created_at', {ascending:false})
       .limit(1);
 
