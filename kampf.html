@@ -613,6 +613,7 @@ function enemyTrainDays(lv){
   }
   return 1825;
 }
+const ENEMY_WEAPON_AVG = 40;   // Waffenschaden-Basis wie bei Spielern (Waffe 1 + Waffe 2 zusammen), wird mit itemMult und der Gear-Rampe skaliert
 function enemyRamp(lv, from, full){ return lv <= from ? 0 : Math.min(1, (lv-from)/(full-from)); }
 // Liefert {train, gear}: Punkte aus Training und aus Ausrüstung
 function enemyParts(kind, lv, dungeonNum){
@@ -622,7 +623,8 @@ function enemyParts(kind, lv, dungeonNum){
   const c = T[kind] || T.dungeon;
   return {
     train: c.train * T.trainPerDay * enemyTrainDays(lv),
-    gear:  (typeof c.set === 'number' ? c.set : T[c.set]) * itemMult(lv) * enemyRamp(lv, c.gearFrom, c.gearFull)
+    gear:  (typeof c.set === 'number' ? c.set : T[c.set]) * itemMult(lv) * enemyRamp(lv, c.gearFrom, c.gearFull),
+    weapon: ENEMY_WEAPON_AVG * itemMult(lv) * enemyRamp(lv, c.gearFrom, c.gearFull)
   };
 }
 function buildEnemyStats(cls, parts){
@@ -637,6 +639,7 @@ function buildEnemyStats(cls, parts){
     for (const k of ['staerke','gewandheit','intelligenz']) add(k, k === mainKey ? split.main : split.sub, pts);
   }
   for (const k in stats) stats[k] = Math.max(1, Math.round(stats[k]));
+  if (parts.weapon > 0) { stats.weapon_dmg_min = parts.weapon * 0.9; stats.weapon_dmg_max = parts.weapon * 1.1; }   // Gegner-Waffenschaden, ±10 %
   return stats;
 }
 
@@ -690,10 +693,15 @@ setupFighters();
 function maxLP(lk,lv,lpBonus){ return 70+lk*6+lv*9+(lpBonus||0); }
 function gmain(cls,s){ return {warrior:s.staerke,archer:s.gewandheit,mage:s.intelligenz}[cls]; }
 
+// Waffenschaden (Design vom 21.–24. September, am 13. Oktober wiederhergestellt): Zufälliger Wert aus damage_min/damage_max der ausgerüsteten Waffen (Summe Waffe 1 + Waffe 2) ersetzt den Term lv*0.5.
+// Ohne Waffenwerte (frühe Gegner, Spieler ohne Waffe) gilt weiter lv*0.5. Auf false setzen, um den alten Stand zu nutzen.
+const WEAPON_DMG_ON = true;
 function calcDmg(cls,s,r,lv,vsCls){
   const m=gmain(cls,s);
   const b=(r<=5?s.schnelligkeit:s.ausdauer)*0.5;
-  let d=(m*2.2+b+lv*0.5);
+  const wmax=s.weapon_dmg_max||0, wmin=s.weapon_dmg_min||0;
+  const wd=(WEAPON_DMG_ON && wmax>0) ? wmin+Math.random()*(wmax-wmin) : lv*0.5;
+  let d=(m*2.2+b+wd);
   if(cls==='warrior'&&vsCls==='mage')    d*=1.12;
   if(cls==='archer' &&vsCls==='warrior') d*=1.12;
   if(cls==='mage'   &&vsCls==='archer')  d*=1.12;
