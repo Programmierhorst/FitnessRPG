@@ -182,15 +182,69 @@ const LIVE = (function () {
   function fan(ox, oy, an, reach, arc, col) { const [sx, sy] = P(ox, oy); g.save(); g.translate(sx, sy); g.scale(1, K); g.beginPath(); g.moveTo(0, 0); g.arc(0, 0, reach * S, an - arc / 2, an + arc / 2); g.closePath(); g.fillStyle = col; g.fill(); g.restore(); }
   function rect(ox, oy, an, w, col, from, to) { const [sx, sy] = P(ox, oy); g.save(); g.translate(sx, sy); g.scale(1, K); g.rotate(an); g.fillStyle = col; g.fillRect(from * S, -w / 2 * S, (to - from) * S, w * S); g.restore(); }
   function bar(sx, sy, w, frac, col) { g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(sx - w / 2 - 1, sy - 1, w + 2, 7); g.fillStyle = col; g.fillRect(sx - w / 2, sy, w * Math.max(0, frac), 5); }
+  // ── Arena-Hintergrund: Steinplatten, Rückwand mit Säulen und Fackeln, Rand (nur Optik, keine Kampflogik) ──
+  const hs = (i, j) => { const n = Math.sin(i * 127.1 + j * 311.7) * 43758.5453; return n - Math.floor(n); };   // fester Zufallswert pro Platte, damit der Boden nicht flackert
+  function glow(x, y, r, col, a, flat) { g.save(); g.translate(x, y); if (flat) g.scale(1, K); const gr = g.createRadialGradient(0, 0, 0, 0, 0, r); gr.addColorStop(0, 'rgba(' + col + ',' + a + ')'); gr.addColorStop(1, 'rgba(' + col + ',0)'); g.fillStyle = gr; g.beginPath(); g.arc(0, 0, r, 0, 7); g.fill(); g.restore(); }
+  function drawBG() {
+    const [a0, a1] = P(0, 0), [b0, b1] = P(AW, AH), TW = 100, TH = 50, tw = TW * S, th = TH * S * K, now = performance.now() / 1000;
+    const wh = 130 * S, pw = 44 * S, side = 16 * S, flick = k => .5 + .5 * Math.sin(now * 9 + k * 2.3) * Math.sin(now * 5.3 + k);
+    // Boden: Steinplatten im Versatz, helle Oberkante und dunkle Fuge geben Tiefe
+    g.save(); g.beginPath(); g.rect(a0, a1, b0 - a0, b1 - a1); g.clip();
+    for (let j = 0; j * TH < AH; j++) {
+      const y0 = a1 + j * th; if (y0 > H || y0 + th < 0) continue;
+      const off = (j % 2) * TW / 2;
+      for (let i = 0; i * TW - off < AW; i++) {
+        const x0 = a0 + (i * TW - off) * S; if (x0 > W || x0 + tw < 0) continue;
+        const l = 22 + Math.floor(hs(i, j) * 12);
+        g.fillStyle = 'rgb(' + l + ',' + (l + 4) + ',' + (l + 14) + ')'; g.fillRect(x0, y0, tw, th);
+        g.fillStyle = 'rgba(255,255,255,.05)'; g.fillRect(x0, y0, tw, 2);
+        g.fillStyle = 'rgba(0,0,0,.45)'; g.fillRect(x0, y0 + th - 1.5, tw, 1.5); g.fillRect(x0 + tw - 1.5, y0, 1.5, th);
+        if (hs(i + 7, j + 3) > .94) { g.strokeStyle = 'rgba(0,0,0,.5)'; g.lineWidth = 1; g.beginPath(); g.moveTo(x0 + tw * .25, y0 + th * .1); g.lineTo(x0 + tw * .45, y0 + th * .5); g.lineTo(x0 + tw * .4, y0 + th * .9); g.stroke(); }
+      }
+    }
+    // Rune in der Kartenmitte (liegt flach auf dem Boden)
+    { const [cx, cy] = P(AW / 2, AH / 2); g.save(); g.translate(cx, cy); g.scale(1, K); g.strokeStyle = 'rgba(201,168,76,.16)'; g.lineWidth = 3 * S;
+      for (const r of [150, 190]) { g.beginPath(); g.arc(0, 0, r * S, 0, 7); g.stroke(); }
+      g.lineWidth = 2 * S; for (let i = 0; i < 12; i++) { const a = i * Math.PI / 6; g.beginPath(); g.moveTo(Math.cos(a) * 150 * S, Math.sin(a) * 150 * S); g.lineTo(Math.cos(a) * 190 * S, Math.sin(a) * 190 * S); g.stroke(); }
+      g.restore(); }
+    // Schatten der Wand und Fackellicht auf dem Boden
+    const sh = g.createLinearGradient(0, a1, 0, a1 + 70 * S * K); sh.addColorStop(0, 'rgba(0,0,0,.45)'); sh.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = sh; g.fillRect(a0, a1, b0 - a0, 70 * S * K);
+    for (let k = 0; k <= 4; k++) glow(P(AW * k / 4, 0)[0], P(0, 110)[1], 260 * S, '255,150,60', .07 + .06 * flick(k), true);
+    g.restore();
+    // Rückwand aus Steinblöcken
+    const wg = g.createLinearGradient(0, a1 - wh, 0, a1); wg.addColorStop(0, '#0d1017'); wg.addColorStop(1, '#222736');
+    g.fillStyle = wg; g.fillRect(a0 - side, a1 - wh, b0 - a0 + 2 * side, wh);
+    g.save(); g.beginPath(); g.rect(a0 - side, a1 - wh, b0 - a0 + 2 * side, wh); g.clip();
+    g.strokeStyle = 'rgba(0,0,0,.38)'; g.lineWidth = 1.5;
+    const bh = 26 * S, bw = 70 * S;
+    for (let r = 0; r * bh < wh; r++) {
+      const y = a1 - r * bh; g.beginPath(); g.moveTo(a0 - side, y); g.lineTo(b0 + side, y); g.stroke();
+      for (let x = a0 - side + (r % 2) * bw / 2; x < b0 + side; x += bw) { if (x > W || x < -bw) continue; g.beginPath(); g.moveTo(x, y); g.lineTo(x, y - bh); g.stroke(); }
+    }
+    g.restore();
+    // Säulen mit Fackeln
+    for (let k = 0; k <= 4; k++) {
+      const px = P(AW * k / 4, 0)[0]; if (px < -pw || px > W + pw) continue;
+      const f = flick(k), x0 = px - pw / 2, top = a1 - wh - 10 * S, bot = a1 + 8 * S, ty = a1 - wh * .5;
+      const pg = g.createLinearGradient(x0, 0, x0 + pw, 0); pg.addColorStop(0, '#3a4052'); pg.addColorStop(.5, '#2a2f3d'); pg.addColorStop(1, '#171a24');
+      g.fillStyle = pg; g.fillRect(x0, top, pw, bot - top);
+      g.fillStyle = '#4a5166'; g.fillRect(x0 - 5 * S, top - 6 * S, pw + 10 * S, 10 * S); g.fillRect(x0 - 5 * S, bot - 8 * S, pw + 10 * S, 10 * S);
+      glow(px, ty, 120 * S, '255,150,60', .22 + .12 * f, false);
+      g.fillStyle = '#5a4630'; g.fillRect(px - 3 * S, ty, 6 * S, 14 * S);
+      g.beginPath(); g.ellipse(px, ty - 4 * S, (5 + 1.5 * f) * S, (9 + 4 * f) * S, 0, 0, 7); g.fillStyle = '#ffb347'; g.fill();
+      g.beginPath(); g.ellipse(px, ty - 2 * S, 2.5 * S, 5 * S, 0, 0, 7); g.fillStyle = '#fff0b0'; g.fill();
+    }
+    // Seitenränder, vordere Kante und goldene Begrenzung
+    const sg = g.createLinearGradient(0, a1, 0, b1); sg.addColorStop(0, '#171a24'); sg.addColorStop(1, '#0c0e14');
+    g.fillStyle = sg; g.fillRect(a0 - side, a1, side, b1 - a1); g.fillRect(b0, a1, side, b1 - a1);
+    const fg = g.createLinearGradient(0, b1, 0, b1 + 28 * S); fg.addColorStop(0, '#262b3a'); fg.addColorStop(1, '#0a0c11');
+    g.fillStyle = fg; g.fillRect(a0 - side, b1, b0 - a0 + 2 * side, 28 * S);
+    g.strokeStyle = 'rgba(201,168,76,.45)'; g.lineWidth = 2; g.strokeRect(a0, a1, b0 - a0, b1 - a1);
+  }
+  function drawVignette() { const r = Math.hypot(W, H) / 2, v = g.createRadialGradient(W / 2, H / 2, r * .45, W / 2, H / 2, r); v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.5)'); g.fillStyle = v; g.fillRect(0, 0, W, H); }
   function draw() {
     g.fillStyle = '#080a0e'; g.fillRect(0, 0, W, H);
-    const [a0, a1] = P(0, 0), [b0, b1] = P(AW, AH), wall = 46 * S * K / .6;
-    g.fillStyle = 'rgba(17,21,32,.95)'; g.fillRect(a0 - 10, a1 - wall, b0 - a0 + 20, wall);
-    const gr = g.createLinearGradient(0, a1, 0, b1); gr.addColorStop(0, '#171b25'); gr.addColorStop(1, '#0f1218'); g.fillStyle = gr; g.fillRect(a0, a1, b0 - a0, b1 - a1);
-    g.strokeStyle = 'rgba(201,168,76,.07)'; g.lineWidth = 1;
-    for (let x = 0; x <= AW; x += 100) { const [u, v] = P(x, 0), [w, z] = P(x, AH); g.beginPath(); g.moveTo(u, v); g.lineTo(w, z); g.stroke(); }
-    for (let y = 0; y <= AH; y += 100) { const [u, v] = P(0, y), [w, z] = P(AW, y); g.beginPath(); g.moveTo(u, v); g.lineTo(w, z); g.stroke(); }
-    g.strokeStyle = 'rgba(201,168,76,.5)'; g.lineWidth = 3; g.strokeRect(a0, a1, b0 - a0, b1 - a1);
+    drawBG();
     for (const u of U) {
       if (u.dead) continue;
       const c = u.c, e = u === B, warn = e ? 'rgba(224,82,108,.2)' : 'rgba(201,168,76,.16)', hot = e ? 'rgba(224,82,108,.5)' : 'rgba(201,168,76,.45)', an = Math.atan2(u.ay, u.ax);
@@ -217,6 +271,7 @@ const LIVE = (function () {
     }
     for (const a of AR) { const [sx, sy] = P(a.x, a.y); ell(sx, sy, 5 * S, 3 * S * K, 'rgba(0,0,0,.4)'); g.strokeStyle = a.src === B ? '#e0526c' : '#e8c97a'; g.lineWidth = 3; g.beginPath(); g.moveTo(sx, sy - 22 * S); g.lineTo(sx - a.dx * 14 * S, sy - 22 * S - a.dy * 14 * S * K); g.stroke(); }
     for (const f of FL) { const [sx, sy] = P(f.x, f.y); g.globalAlpha = Math.min(1, f.t * 2); g.fillStyle = f.c; g.font = 'bold ' + Math.max(15, 14 * S + 6) + 'px Cinzel, serif'; g.textAlign = 'center'; g.fillText(f.txt, sx, sy); g.globalAlpha = 1; }
+    drawVignette();
     // Pfeil am Bildschirmrand, wenn der Gegner außerhalb des Bildes ist
     if (!B.dead) {
       const [ex, ey] = P(B.x, B.y), m = 34;
