@@ -4,7 +4,7 @@
 window.R3D = (function () {
   const FOV = 24, TAN = Math.tan(FOV * Math.PI / 360), R = 16;
   let ren = null, scene = null, cam = null, dirL = null, stat = null, key = '', W = 800, H = 600, vec = null;
-  let objs = [], arrows = [], torchL = [], flames = [], lastNow = 0, perf = { n: 0, acc: 0, done: false };
+  let objs = [], arrows = [], torchL = [], flames = [], cvs = [], debris = [], lastNow = 0, perf = { n: 0, acc: 0, done: false };
   const G = {}, M = {};
   const hs = (i, j) => { const n = Math.sin(i * 127.1 + j * 311.7) * 43758.5453; return n - Math.floor(n); };   // fester Zufallswert pro Stein
   const keep = o => { o.userData.keep = true; return o; };
@@ -35,6 +35,7 @@ window.R3D = (function () {
     M.flame = new T.MeshBasicMaterial({ color: 0xffb347 });
     M.stone = new T.MeshLambertMaterial({ color: 0x4a5166 });
     M.dark = new T.MeshLambertMaterial({ color: 0x2a2218 });
+    M.debris = new T.MeshLambertMaterial({ color: 0x6a5036 });
   }
   const circ = arc => G.circ[arc] || (G.circ[arc] = keep(new THREE.CircleGeometry(1, 24, -arc / 2, arc).rotateX(-Math.PI / 2)));
 
@@ -159,9 +160,26 @@ window.R3D = (function () {
     for (const m of [q.fanW, q.fanH, q.rcW, q.rcH]) if (m) { m.visible = false; m.position.y = 1; scene.add(m); q.dec.push(m); }
     return q;
   }
-  function build(AW, AH, U) {
+  // ── Hindernisse: Holzkisten, die Treffer abfangen (Zustand kommt aus kampf_live.js), mit Splittern beim Zerbrechen ──
+  function mkCover(o) {
+    const T = THREE, grp = new T.Group(), mat = new T.MeshLambertMaterial({ color: 0x6a5036 }), mat2 = new T.MeshLambertMaterial({ color: 0x3c2d1e });
+    const add = (w, h, d, x, y, z, m) => { const b = new T.Mesh(G.box, m); b.scale.set(w, h, d); b.position.set(x, y, z); b.castShadow = b.receiveShadow = true; grp.add(b); };
+    add(52, 46, 52, 0, 23, 0, mat); add(58, 6, 58, 0, 49, 0, mat2); add(58, 6, 58, 0, 3, 0, mat2); add(8, 46, 54, -16, 23, 0, mat2); add(8, 46, 54, 16, 23, 0, mat2);
+    grp.position.set(o.x, 0, o.y); grp.rotation.y = (o.x * 13 + o.y * 7) % 6.28; scene.add(grp);
+    return { o, grp, mat, dead: false };
+  }
+  function spawnDebris(o) {
+    for (let i = 0; i < 9; i++) {
+      const m = new THREE.Mesh(G.box, M.debris), s = 8 + Math.random() * 8, a = Math.random() * 6.28, v = 80 + Math.random() * 140;
+      m.scale.set(s, s * .6, s); m.position.set(o.x, 20 + Math.random() * 20, o.y); m.castShadow = true; scene.add(m);
+      debris.push({ m, vx: Math.cos(a) * v, vy: 160 + Math.random() * 140, vz: Math.sin(a) * v, t: .9, rx: Math.random() * 8, rz: Math.random() * 8 });
+    }
+  }
+  function build(AW, AH, U, CV) {
     if (!ren) return;
     const k = AW + 'x' + AH; if (k !== key) { buildStatic(AW, AH); key = k; }
+    for (const q of cvs) kill(q.grp); for (const d of debris) scene.remove(d.m); debris = [];
+    cvs = (CV || []).map(mkCover);
     for (const q of objs) { kill(q.grp); q.dec.forEach(kill); }
     objs = U.map(mkUnit);
     for (const q of objs) { const f = q.u === U[0] ? U[1] : U[0]; q.face = Math.atan2(f.y - q.u.y, f.x - q.u.x); }
@@ -209,12 +227,25 @@ window.R3D = (function () {
       if (q.fanW) { q.fanW.visible = u.wt > 0; q.fanH.visible = u.sw > 0; for (const m of [q.fanW, q.fanH]) { m.position.set(u.x, 1, u.y); m.rotation.y = -an; m.scale.set(c.reach, 1, c.reach); } }
       if (q.rcW) {
         let vw = false, vh = false;
-        if (u.wave) { const w = u.wave; setRect(q.rcW, w.x, w.y, w.dx, w.dy, 0, c.len, c.w); setRect(q.rcH, w.x, w.y, w.dx, w.dy, Math.max(0, w.f - 60), Math.min(w.f, c.len), c.w); vw = vh = true; }
-        else if (u.wt > 0) { setRect(q.rcW, u.x, u.y, u.ax, u.ay, 0, c.len, c.w); vw = true; }
+        if (u.wave) { const w = u.wave; setRect(q.rcW, w.x, w.y, w.dx, w.dy, 0, w.lim, c.w); setRect(q.rcH, w.x, w.y, w.dx, w.dy, Math.max(0, w.f - 60), Math.min(w.f, w.lim), c.w); vw = vh = true; }
+        else if (u.wt > 0) { setRect(q.rcW, u.x, u.y, u.ax, u.ay, 0, o.rayLim ? o.rayLim(u.x, u.y, u.ax, u.ay, c.len).lim : c.len, c.w); vw = true; }
         q.rcW.visible = vw; q.rcH.visible = vh;
       }
     }
     const AR = o.AR;
+    for (const q of cvs) {   // Kisten: dunkler und schief, je mehr Treffer sie abbekommen haben; wackeln beim Treffer
+      const c = q.o;
+      if (c.dead) { if (!q.dead) { q.dead = true; q.grp.visible = false; spawnDebris(c); } continue; }
+      const f = Math.max(0, c.hp / c.max), k = .45 + .55 * f;
+      q.mat.color.setRGB(.42 * k, .31 * k, .21 * k); q.grp.rotation.z = f < .34 ? .07 : 0;
+      q.grp.position.set(c.x + (c.hit > 0 ? Math.sin(now2 * 90) * 1.6 : 0), 0, c.y);
+    }
+    for (let i = debris.length - 1; i >= 0; i--) {   // Splitter fliegen kurz und fallen zu Boden
+      const p = debris[i]; p.t -= dt; p.vy -= 600 * dt;
+      p.m.position.x += p.vx * dt; p.m.position.z += p.vz * dt; p.m.position.y = Math.max(3, p.m.position.y + p.vy * dt); p.m.rotation.x += p.rx * dt; p.m.rotation.z += p.rz * dt;
+      if (p.m.position.y <= 3) { p.vx *= .8; p.vz *= .8; p.vy = 0; }
+      if (p.t <= 0) { scene.remove(p.m); debris.splice(i, 1); }
+    }
     while (arrows.length < AR.length) { const m = new THREE.Mesh(G.arrow, M.arrA); scene.add(m); arrows.push(m); }
     arrows.forEach((m, i) => { const a = AR[i]; m.visible = !!a; if (a) { m.position.set(a.x, 24, a.y); m.rotation.y = -Math.atan2(a.dy, a.dx); m.material = a.src.side === 'B' ? M.arrB : M.arrA; } });
     ren.render(scene, cam);

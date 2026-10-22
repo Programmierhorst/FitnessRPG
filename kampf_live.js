@@ -3,6 +3,7 @@
 // Auf false setzen: überall wieder das alte Autobattler-System. Pro Kampf umgehen: kampf.html?...&live=0
 window.LIVE_DEFAULT = true;
 window.LIVE3D = true;   // 3D-Ansicht (kampf_3d.js + three.js). Auf false setzen oder &3d=0 an die URL hängen: dann wieder die 2D-Ansicht. Ohne WebGL geht es automatisch in 2D.
+window.LIVE_COVER = true;   // Hindernisse auf der Karte, die Pfeile und Zauber abfangen und nach einigen Treffern kaputtgehen. Auf false setzen oder &cover=0 an die URL hängen: keine Hindernisse.
 
 const LIVE = (function () {
   let AW = 1700, AH = 1000, K = .6;   // Kartengröße (wird je nach Hoch- oder Querformat in start() gesetzt) und Neigung der Ansicht
@@ -18,7 +19,8 @@ const LIVE = (function () {
   let U = [], AR = [], FL = [], A = null, B = null, over = true, cdT = 0, T = 0, AUTO = false;
   let keys = {}, held = 0, wd = 0, atkId = null, joy = null, jv = { x: 0, y: 0 }, names = ['', ''];
   const rnd = (a, c) => a + Math.random() * (c - a), clamp = (v, a, c) => Math.max(a, Math.min(c, v)), clr = (x, y) => Math.min(x, AW - x, y, AH - y);
-  let R3 = null;   // 3D-Darstellung (kampf_3d.js), null = klassische 2D-Ansicht
+  const COVER_HITS = 8, COVER_R = 30;   // Hindernis: so viele Treffer hält es aus (Pfeil = 1, Magier-Welle = 1), Radius in Spieleinheiten
+  let CV = [], R3 = null;   // 3D-Darstellung (kampf_3d.js), null = klassische 2D-Ansicht
   const P = (x, y) => R3 ? R3.project(x, y, 0) : [W / 2 + (x - camX) * S, H / 2 + (y - camY) * K * S];
 
   function typeOf(cls, s) { if (cls === 'archer') return 'bogen'; if (cls === 'mage') return 'magier'; return s.weaponSet === 'zwei' ? 'zwei' : 'schild'; }
@@ -53,7 +55,7 @@ const LIVE = (function () {
       if (!t.dead) { const dx = t.x - u.x, dy = t.y - u.y, d = Math.hypot(dx, dy); let da = Math.abs(Math.atan2(dy, dx) - Math.atan2(u.ay, u.ax)); if (da > Math.PI) da = 2 * Math.PI - da; if (d < c.reach && da < c.arc / 2) { strike(u, t); hit = true; } }
       if (!u.isP && hit) u.ro = c.lock;
       u.hand ^= 1; if (c.combo && !second) u.cq = c.combo;
-    } else if (c.area) { u.wave = { x: u.x, y: u.y, dx: u.ax, dy: u.ay, f: 0, hit: false }; }
+    } else if (c.area) { u.wave = mkWave(u); }
     else {
       if (!u.isP) aim(u);
       const a = Math.atan2(u.ay, u.ax) + (u.isP ? 0 : rnd(-.12, .12));
@@ -68,10 +70,41 @@ const LIVE = (function () {
     else { u.at = ai ? c.cd * rnd(.7, 1.2) : c.cd; u.wt = ai ? .3 : 0; u.ro = c.root; u.f = ai ? .3 : 0; }
     if (u.wt <= 0) resolve(u);
   }
+  // ── Hindernisse (Deckung): fangen Pfeile und Magier-Wellen ab, blockieren Figuren und gehen nach COVER_HITS Treffern kaputt ──
+  function makeCover() {
+    if (window.LIVE_COVER === false || new URLSearchParams(location.search).get('cover') === '0') return [];
+    const cx = AW / 2, cy = AH / 2, pts = AW > AH ? [[-180, -200], [180, 200], [-340, 170], [340, -170]] : [[-200, -180], [200, 180], [170, -340], [-170, 340]];
+    return pts.map(p => ({ x: cx + p[0], y: cy + p[1], r: COVER_R, hp: COVER_HITS, max: COVER_HITS, dead: false, hit: 0 }));
+  }
+  function hitCover(o) { o.hp--; o.hit = .2; if (o.hp <= 0) { o.dead = true; say(o.x, o.y - 30, 'Zerstört', '#c9a06a'); } }
+  // Liegt ein Hindernis auf der Strecke von (x1,y1) nach (x2,y2)? pad vergrößert das Hindernis (z. B. um den Figurenradius)
+  function blocked(x1, y1, x2, y2, pad) {
+    for (const o of CV) {
+      if (o.dead) continue;
+      const dx = x2 - x1, dy = y2 - y1, l2 = dx * dx + dy * dy || 1, s = clamp(((o.x - x1) * dx + (o.y - y1) * dy) / l2, 0, 1), px = x1 + dx * s - o.x, py = y1 + dy * s - o.y, rr = o.r + (pad || 0);
+      if (px * px + py * py < rr * rr) return o;
+    }
+    return null;
+  }
+  // Wie weit kommt ein Strahl (Magier-Welle) von (x,y) in Richtung (dx,dy), bevor ein Hindernis ihn stoppt?
+  function rayLim(x, y, dx, dy, len) {
+    let lim = len, cov = null;
+    for (const o of CV) { if (o.dead) continue; const rx = o.x - x, ry = o.y - y, al = rx * dx + ry * dy, pp = Math.abs(-rx * dy + ry * dx); if (al > 0 && pp < o.r + 18 && al - o.r < lim) { lim = Math.max(0, al - o.r); cov = o; } }
+    return { lim, cov };
+  }
+  function mkWave(u) { const r = rayLim(u.x, u.y, u.ax, u.ay, u.c.len); return { x: u.x, y: u.y, dx: u.ax, dy: u.ay, f: 0, hit: false, lim: r.lim, cov: r.cov }; }
+  // KI weicht Hindernissen auf ihrem Weg aus (schlägt einen Bogen), sonst bleibt sie davor hängen
+  function steer(u, ct) {
+    if (!CV.length || (!ct.mx && !ct.my)) return ct;
+    const m = Math.hypot(ct.mx, ct.my), fx = ct.mx / m, fy = ct.my / m, o = blocked(u.x, u.y, u.x + fx * 110, u.y + fy * 110, R + 6);
+    if (o) { const ox = o.x - u.x, oy = o.y - u.y, cr = fx * oy - fy * ox, sg = Math.abs(cr) < 4 ? u.sd : (cr > 0 ? -1 : 1); ct.mx = fx - fy * sg * 1.4; ct.my = fy + fx * sg * 1.4; }
+    return ct;
+  }
   function updWave(u, dt) {
     const w = u.wave, c = u.c, t = foe(u); w.f += WAVE * dt;
-    if (!w.hit && !t.dead) { const rx = t.x - w.x, ry = t.y - w.y, al = rx * w.dx + ry * w.dy, pp = Math.abs(-rx * w.dy + ry * w.dx); if (al > 0 && al < c.len && pp < c.w / 2 && w.f >= al) { w.hit = true; strike(u, t); } }
-    if (w.f >= c.len) u.wave = null;
+    if (!w.hit && !t.dead) { const rx = t.x - w.x, ry = t.y - w.y, al = rx * w.dx + ry * w.dy, pp = Math.abs(-rx * w.dy + ry * w.dx); if (al > 0 && al < w.lim && pp < c.w / 2 && w.f >= al) { w.hit = true; strike(u, t); } }
+    if (w.cov && !w.cd && w.f >= w.lim) { w.cd = 1; hitCover(w.cov); }
+    if (w.f >= w.lim) u.wave = null;
   }
 
   // ── Steuerung ──
@@ -118,7 +151,7 @@ const LIVE = (function () {
       const lo = c.range * .57, hi = c.range * .87, fl = fleeDir(u), corner = Math.min(u.x, AW - u.x) < 110 && Math.min(u.y, AH - u.y) < 110, cornered = d < 140 && (fl.gain < 12 || (corner && d < 110));
       if (u.run > 0 || d < lo) { ct.mx = fl.x; ct.my = fl.y; } else if (d > hi) { ct.mx = ux; ct.my = uy; } else { ct.mx = -uy * u.sd; ct.my = ux * u.sd; }
       if (u.ch > 0 && u.dt <= 0 && (d < 100 || cornered)) { ct.dash = cornered ? escapeDir(u) : [fl.x, fl.y]; if (cornered) u.run = 1.2; }
-      ct.att = u.at <= 0 && d < c.range && u.run <= 0 && Math.random() < dt * 3;
+      ct.att = u.at <= 0 && d < c.range && u.run <= 0 && Math.random() < dt * 3 && !blocked(u.x, u.y, t.x, t.y, 0);
     }
     return ct;
   }
@@ -143,21 +176,26 @@ const LIVE = (function () {
   function collide() {
     const dx = B.x - A.x, dy = B.y - A.y, d = Math.hypot(dx, dy);
     if (d < 2 * R) { const n = d || .01, px = (dx / n || 1) * (2 * R - d) / 2, py = (dy / n || 0) * (2 * R - d) / 2; A.x -= px; A.y -= py; B.x += px; B.y += py; }
+    for (const o of CV) {   // Hindernisse blockieren Figuren
+      if (o.dead) continue;
+      for (const u of U) { const dx = u.x - o.x, dy = u.y - o.y, d = Math.hypot(dx, dy), m = o.r + R; if (d < m) { const nx = d ? dx / d : 1, ny = d ? dy / d : 0; u.x = o.x + nx * m; u.y = o.y + ny * m; } }
+    }
     for (const u of U) { u.x = clamp(u.x, R, AW - R); u.y = clamp(u.y, R, AH - R); }
   }
   function update(dt) {
     if (over) { FL.forEach(f => { f.t -= dt; f.y -= 30 * dt; }); FL = FL.filter(f => f.t > 0); return; }
     if (cdT > 0) { cdT -= dt; wd = 0; return; }
     T += dt;
-    for (const u of U) if (!u.dead) step(u, u.isP ? playerCtl(u) : ai(u, dt), dt);
+    for (const u of U) if (!u.dead) step(u, u.isP ? playerCtl(u) : steer(u, ai(u, dt)), dt);
     collide();
     for (const a of AR) {
       a.x += a.dx * ARROW * dt; a.y += a.dy * ARROW * dt; a.l += ARROW * dt;
       const t = foe(a.src);
-      if (!t.dead && Math.hypot(t.x - a.x, t.y - a.y) < 20) { a.dead = 1; strike(a.src, t); }
+      for (const o of CV) if (!o.dead && Math.hypot(a.x - o.x, a.y - o.y) < o.r) { a.dead = 1; hitCover(o); break; }
+      if (!a.dead && !t.dead && Math.hypot(t.x - a.x, t.y - a.y) < 20) { a.dead = 1; strike(a.src, t); }
       if (a.l > a.src.c.range) a.dead = 1;
     }
-    AR = AR.filter(a => !a.dead);
+    for (const o of CV) o.hit -= dt; AR = AR.filter(a => !a.dead);
     FL.forEach(f => { f.t -= dt; f.y -= 30 * dt; }); FL = FL.filter(f => f.t > 0);
     if (T > 150 && !over) finish(A.hp / A.max >= B.hp / B.max ? 'A' : 'B');
   }
@@ -246,13 +284,13 @@ const LIVE = (function () {
   function drawVignette() { const r = Math.hypot(W, H) / 2, v = g.createRadialGradient(W / 2, H / 2, r * .45, W / 2, H / 2, r); v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.5)'); g.fillStyle = v; g.fillRect(0, 0, W, H); }
   function draw() {
     g.fillStyle = '#080a0e'; g.fillRect(0, 0, W, H);
-    drawBG();
+    drawBG(); drawCover2D();
     for (const u of U) {
       if (u.dead) continue;
       const c = u.c, e = u === B, warn = e ? 'rgba(224,82,108,.2)' : 'rgba(201,168,76,.16)', hot = e ? 'rgba(224,82,108,.5)' : 'rgba(201,168,76,.45)', an = Math.atan2(u.ay, u.ax);
       if (u.wt > 0) { if (c.melee) fan(u.x, u.y, an, c.reach, c.arc, warn); else if (c.area) rect(u.x, u.y, an, c.w, warn, 0, c.len); }
       if (u.sw > 0 && c.melee) fan(u.x, u.y, an, c.reach, c.arc, hot);
-      if (u.wave) { const w = u.wave, wa = Math.atan2(w.dy, w.dx); rect(w.x, w.y, wa, c.w, warn, 0, c.len); rect(w.x, w.y, wa, c.w, hot, Math.max(0, w.f - 60), Math.min(w.f, c.len)); }
+      if (u.wave) { const w = u.wave, wa = Math.atan2(w.dy, w.dx); rect(w.x, w.y, wa, c.w, warn, 0, w.lim); rect(w.x, w.y, wa, c.w, hot, Math.max(0, w.f - 60), Math.min(w.f, w.lim)); }
     }
     for (const u of U.filter(x => !x.dead).sort((p, q) => p.y - q.y)) {
       const [sx, sy] = P(u.x, u.y), c = u.c, fl = u.inv > 0 && Math.floor(u.inv * 20) % 2, body = sy - 22 * S;
@@ -296,10 +334,21 @@ const LIVE = (function () {
     if (cdT > 0 && !over) { g.fillStyle = '#e8dcc8'; g.font = 'bold 24px Cinzel, serif'; g.fillText('Kampfbeginn in ' + Math.max(0, cdT).toFixed(1) + ' s', W / 2, H / 2 - 90); }
     { const [jx, jy] = jc(); g.strokeStyle = 'rgba(232,220,200,' + (joy ? .55 : .3) + ')'; g.lineWidth = 2; g.beginPath(); g.arc(jx, jy, JR, 0, 7); g.stroke(); g.fillStyle = 'rgba(232,220,200,' + (joy ? .12 : .05) + ')'; g.fill(); g.fillStyle = 'rgba(232,220,200,' + (joy ? .5 : .3) + ')'; g.beginPath(); g.arc(jx + jv.x * JR, jy + jv.y * JR, 24, 0, 7); g.fill(); }
   }
+  // ── Hindernisse in der 2D-Ansicht (einfach, nur als Ausweichlösung) ──
+  function drawCover2D() {
+    for (const o of CV) {
+      if (o.dead) continue;
+      const [sx, sy] = P(o.x, o.y), f = o.hp / o.max, k = .45 + .55 * f;
+      ell(sx, sy, o.r * S * 1.05, o.r * S * K * 1.05, 'rgba(0,0,0,.4)');
+      g.beginPath(); g.ellipse(sx, sy - 16 * S, o.r * S, o.r * S * 1.05, 0, 0, 7); g.fillStyle = 'rgb(' + Math.round(106 * k) + ',' + Math.round(80 * k) + ',' + Math.round(54 * k) + ')'; g.fill(); g.lineWidth = 2; g.strokeStyle = '#3c2d1e'; g.stroke();
+      if (f < 1) bar(sx, sy - 16 * S - o.r * S * 1.05 - 10, 40, f, '#c9a06a');
+    }
+  }
   // ── 3D-Ansicht: kampf_3d.js zeichnet Boden, Figuren und Angriffsflächen, hier liegen nur die Anzeigen darüber (Name, Leben, Schadenszahlen, Steuerung) ──
   function draw3D() {
     g.clearRect(0, 0, W, H);
-    R3.render({ U, AR, camX, camY, S, K, W, H });
+    R3.render({ U, AR, CV, rayLim, camX, camY, S, K, W, H });
+    for (const o of CV) if (!o.dead && o.hp < o.max) { const [bx, by] = R3.project(o.x, o.y, 62); bar(bx, by - 6, 40, o.hp / o.max, '#c9a06a'); }   // Haltbarkeit erst nach dem ersten Treffer
     for (const u of U.filter(x => !x.dead).sort((p, q) => p.y - q.y)) {
       const sx = P(u.x, u.y)[0], by = R3.project(u.x, u.y, 62)[1] - 12, bw = Math.max(54, 70 * S), nm = names[u === B ? 1 : 0] + ' · Lv ' + u.lv;
       g.font = '600 ' + Math.max(10, 11 * S + 3) + 'px Cinzel, serif'; g.textAlign = 'center'; g.fillStyle = u === B ? '#e0826c' : '#e8c97a'; g.fillText(nm, sx, by - 6);
@@ -362,17 +411,17 @@ const LIVE = (function () {
     A.fx = B.x > A.x ? 1 : 0; A.fy = B.y > A.y ? 1 : (B.y < A.y ? -1 : 0); B.fx = -A.fx; B.fy = -A.fy;
     names = [MODE === 'arena' ? (arenaSession.playerName || sA.name) : sA.name, MODE === 'arena' ? (sB.displayName || sB.name) : sB.name];
     U = [A, B]; AR = []; FL = []; over = false; cdT = 1.5; T = 0; wd = 0; held = 0;
-    window._maxA = maxA; window._maxB = maxB; window._winner = null;
+    window._maxA = maxA; window._maxB = maxB; window._winner = null; CV = makeCover();
     R3 = (window.R3D && window.LIVE3D !== false && new URLSearchParams(location.search).get('3d') !== '0' && R3D.init(cv)) ? R3D : null;
     if (window.R3D && !R3) R3D.hide();
-    if (R3) R3.build(AW, AH, U);
+    if (R3) R3.build(AW, AH, U, CV);
     fit(); camX = A.x; camY = A.y; updCam(0, true);
     if (!loopOn) { loopOn = true; last = performance.now(); requestAnimationFrame(loop); }
   }
   // Für automatische Tests: Spielerfigur von der KI steuern lassen und ohne Zeichnen simulieren
   function auto(v) { AUTO = !!v; }
   function sim(maxSec) { let t = 0; cdT = 0; while (!over && t < (maxSec || 200)) { update(1 / 60); t += 1 / 60; } return { winner: window._winner, t, hpA: A.hp, hpB: B.hp }; }
-  return { start, auto, sim, frame, lt: LT, get units() { return U; }, get cam() { return { x: camX, y: camY, w: AW, h: AH, S, K, W, H }; } };
+  return { start, auto, sim, frame, lt: LT, get cover() { return CV; }, get units() { return U; }, get cam() { return { x: camX, y: camY, w: AW, h: AH, S, K, W, H }; } };
 })();
 
 // Wird von kampf.html statt der alten Simulation aufgerufen
