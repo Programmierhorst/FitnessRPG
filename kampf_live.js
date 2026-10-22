@@ -2,6 +2,7 @@
 // Ablauf, Belohnungen, Dungeon- und Arena-Logik bleiben in kampf.html unverändert.
 // Auf false setzen: überall wieder das alte Autobattler-System. Pro Kampf umgehen: kampf.html?...&live=0
 window.LIVE_DEFAULT = true;
+window.LIVE3D = true;   // 3D-Ansicht (kampf_3d.js + three.js). Auf false setzen oder &3d=0 an die URL hängen: dann wieder die 2D-Ansicht. Ohne WebGL geht es automatisch in 2D.
 
 const LIVE = (function () {
   let AW = 1700, AH = 1000, K = .6;   // Kartengröße (wird je nach Hoch- oder Querformat in start() gesetzt) und Neigung der Ansicht
@@ -17,7 +18,8 @@ const LIVE = (function () {
   let U = [], AR = [], FL = [], A = null, B = null, over = true, cdT = 0, T = 0, AUTO = false;
   let keys = {}, held = 0, wd = 0, atkId = null, joy = null, jv = { x: 0, y: 0 }, names = ['', ''];
   const rnd = (a, c) => a + Math.random() * (c - a), clamp = (v, a, c) => Math.max(a, Math.min(c, v)), clr = (x, y) => Math.min(x, AW - x, y, AH - y);
-  const P = (x, y) => [W / 2 + (x - camX) * S, H / 2 + (y - camY) * K * S];
+  let R3 = null;   // 3D-Darstellung (kampf_3d.js), null = klassische 2D-Ansicht
+  const P = (x, y) => R3 ? R3.project(x, y, 0) : [W / 2 + (x - camX) * S, H / 2 + (y - camY) * K * S];
 
   function typeOf(cls, s) { if (cls === 'archer') return 'bogen'; if (cls === 'mage') return 'magier'; return s.weaponSet === 'zwei' ? 'zwei' : 'schild'; }
   function mk(side, cls, s, lv, hp, max, px, py) {
@@ -166,7 +168,7 @@ const LIVE = (function () {
     cv.width = r.width * d; cv.height = r.height * d; g.setTransform(d, 0, 0, d, 0, 0);
     W = r.width; H = r.height;
     const portrait = H > W; K = portrait ? .8 : .6;
-    S = Math.min(W / (portrait ? 480 : 900), H / (K * (portrait ? 700 : 520)));   // sichtbarer Kartenausschnitt, wie bei Handy-Mobas
+    S = Math.min(W / (portrait ? 480 : 900), H / (K * (portrait ? 700 : 520))); if (R3) R3.resize(W, H);   // sichtbarer Kartenausschnitt, wie bei Handy-Mobas
   }
   function updCam(dt, snap) {
     if (!A) return;
@@ -272,6 +274,10 @@ const LIVE = (function () {
     for (const a of AR) { const [sx, sy] = P(a.x, a.y); ell(sx, sy, 5 * S, 3 * S * K, 'rgba(0,0,0,.4)'); g.strokeStyle = a.src === B ? '#e0526c' : '#e8c97a'; g.lineWidth = 3; g.beginPath(); g.moveTo(sx, sy - 22 * S); g.lineTo(sx - a.dx * 14 * S, sy - 22 * S - a.dy * 14 * S * K); g.stroke(); }
     for (const f of FL) { const [sx, sy] = P(f.x, f.y); g.globalAlpha = Math.min(1, f.t * 2); g.fillStyle = f.c; g.font = 'bold ' + Math.max(15, 14 * S + 6) + 'px Cinzel, serif'; g.textAlign = 'center'; g.fillText(f.txt, sx, sy); g.globalAlpha = 1; }
     drawVignette();
+    drawHUD();
+  }
+  // Anzeigen, die in 2D und 3D gleich sind: Pfeil zum Gegner, Übersichtskarte, Kampfbeginn-Zähler, Steuerkreis
+  function drawHUD() {
     // Pfeil am Bildschirmrand, wenn der Gegner außerhalb des Bildes ist
     if (!B.dead) {
       const [ex, ey] = P(B.x, B.y), m = 34;
@@ -290,7 +296,24 @@ const LIVE = (function () {
     if (cdT > 0 && !over) { g.fillStyle = '#e8dcc8'; g.font = 'bold 24px Cinzel, serif'; g.fillText('Kampfbeginn in ' + Math.max(0, cdT).toFixed(1) + ' s', W / 2, H / 2 - 90); }
     { const [jx, jy] = jc(); g.strokeStyle = 'rgba(232,220,200,' + (joy ? .55 : .3) + ')'; g.lineWidth = 2; g.beginPath(); g.arc(jx, jy, JR, 0, 7); g.stroke(); g.fillStyle = 'rgba(232,220,200,' + (joy ? .12 : .05) + ')'; g.fill(); g.fillStyle = 'rgba(232,220,200,' + (joy ? .5 : .3) + ')'; g.beginPath(); g.arc(jx + jv.x * JR, jy + jv.y * JR, 24, 0, 7); g.fill(); }
   }
-  function frame(dt) { update(dt); updCam(dt, false); draw(); const b = document.getElementById('bd'); if (b && A) b.style.opacity = A.ch > 0 ? '1' : '.4'; }   // Dash-Knopf blass, solange keine Ladung bereit ist
+  // ── 3D-Ansicht: kampf_3d.js zeichnet Boden, Figuren und Angriffsflächen, hier liegen nur die Anzeigen darüber (Name, Leben, Schadenszahlen, Steuerung) ──
+  function draw3D() {
+    g.clearRect(0, 0, W, H);
+    R3.render({ U, AR, camX, camY, S, K, W, H });
+    for (const u of U.filter(x => !x.dead).sort((p, q) => p.y - q.y)) {
+      const sx = P(u.x, u.y)[0], by = R3.project(u.x, u.y, 62)[1] - 12, bw = Math.max(54, 70 * S), nm = names[u === B ? 1 : 0] + ' · Lv ' + u.lv;
+      g.font = '600 ' + Math.max(10, 11 * S + 3) + 'px Cinzel, serif'; g.textAlign = 'center'; g.fillStyle = u === B ? '#e0826c' : '#e8c97a'; g.fillText(nm, sx, by - 6);
+      bar(sx, by, bw, u.hp / u.max, u === B ? '#c0392b' : (u.hp / u.max < .25 ? '#c0392b' : '#27ae60'));
+      g.font = '600 10px Cinzel, serif'; g.fillStyle = '#e8dcc8'; g.fillText(Math.ceil(u.hp) + ' / ' + u.max, sx, by + 17);
+      if (u === A) {
+        for (let i = 0; i < 2; i++) { g.fillStyle = i < u.ch ? '#e8993a' : '#4a3f5c'; g.fillRect(sx - 20 + i * 22, by + 21, 18, 5); }
+        if (u.c.block) { g.fillStyle = 'rgba(255,255,255,.15)'; g.fillRect(sx - 20, by + 28, 40, 4); g.fillStyle = u.bk ? '#9fd0ff' : '#5d7a99'; g.fillRect(sx - 20, by + 28, 40 * (u.bk ? 1 : u.bt / u.c.block), 4); }
+      }
+    }
+    for (const f of FL) { const [sx, sy] = P(f.x, f.y); g.globalAlpha = Math.min(1, f.t * 2); g.fillStyle = f.c; g.font = 'bold ' + Math.max(15, 14 * S + 6) + 'px Cinzel, serif'; g.textAlign = 'center'; g.fillText(f.txt, sx, sy); g.globalAlpha = 1; }
+    drawHUD();
+  }
+  function frame(dt) { update(dt); updCam(dt, false); if (R3) draw3D(); else draw(); const b = document.getElementById('bd'); if (b && A) b.style.opacity = A.ch > 0 ? '1' : '.4'; }   // Dash-Knopf blass, solange keine Ladung bereit ist
   function loop(t) { const dt = Math.min(.05, (t - last) / 1000); last = t; frame(dt); requestAnimationFrame(loop); }
 
   // ── Eingabe (Tasten nach Position, nicht nach Zeichen) ──
@@ -340,6 +363,9 @@ const LIVE = (function () {
     names = [MODE === 'arena' ? (arenaSession.playerName || sA.name) : sA.name, MODE === 'arena' ? (sB.displayName || sB.name) : sB.name];
     U = [A, B]; AR = []; FL = []; over = false; cdT = 1.5; T = 0; wd = 0; held = 0;
     window._maxA = maxA; window._maxB = maxB; window._winner = null;
+    R3 = (window.R3D && window.LIVE3D !== false && new URLSearchParams(location.search).get('3d') !== '0' && R3D.init(cv)) ? R3D : null;
+    if (window.R3D && !R3) R3D.hide();
+    if (R3) R3.build(AW, AH, U);
     fit(); camX = A.x; camY = A.y; updCam(0, true);
     if (!loopOn) { loopOn = true; last = performance.now(); requestAnimationFrame(loop); }
   }
