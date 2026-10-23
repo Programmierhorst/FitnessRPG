@@ -18,8 +18,8 @@ const LIVE = (function () {
   let cv, g, W = 800, H = 600, S = .8, camX = 0, camY = 0, inited = false, loopOn = false, last = 0;
   let U = [], AR = [], FL = [], A = null, B = null, over = true, cdT = 0, T = 0, AUTO = false;
   let keys = {}, held = 0, wd = 0, atkId = null, joy = null, jv = { x: 0, y: 0 }, names = ['', ''];
-  const rnd = (a, c) => a + Math.random() * (c - a), clamp = (v, a, c) => Math.max(a, Math.min(c, v)), clr = (x, y) => Math.min(x, AW - x, y, AH - y);
-  const COVER_HITS = 8, COVER_R = 30;   // Hindernis: so viele Treffer hält es aus (Pfeil = 1, Magier-Welle = 1), Radius in Spieleinheiten
+  const rnd = (a, c) => a + Math.random() * (c - a), clamp = (v, a, c) => Math.max(a, Math.min(c, v)), clr = (x, y) => { let c = Math.min(x, AW - x, y, AH - y); for (const o of CV) if (!o.dead) c = Math.min(c, Math.hypot(x - o.x, y - o.y) - o.r); return c; };   // Abstand zur nächsten Wand oder zum nächsten Hindernis (für die Fluchtrichtung der KI)
+  const COVER_TYPES = { kiste: { hits: 5, r: 30 }, vase: { hits: 3, r: 17 } };   // Hindernisarten: Treffer bis zum Zerbrechen und Radius in Spieleinheiten (Pfeil = 1 Treffer, Magier-Welle = 1 Treffer)
   let CV = [], R3 = null;   // 3D-Darstellung (kampf_3d.js), null = klassische 2D-Ansicht
   const P = (x, y) => R3 ? R3.project(x, y, 0) : [W / 2 + (x - camX) * S, H / 2 + (y - camY) * K * S];
 
@@ -70,11 +70,11 @@ const LIVE = (function () {
     else { u.at = ai ? c.cd * rnd(.7, 1.2) : c.cd; u.wt = ai ? .3 : 0; u.ro = c.root; u.f = ai ? .3 : 0; }
     if (u.wt <= 0) resolve(u);
   }
-  // ── Hindernisse (Deckung): fangen Pfeile und Magier-Wellen ab, blockieren Figuren und gehen nach COVER_HITS Treffern kaputt ──
+  // ── Hindernisse (Deckung): fangen Pfeile und Magier-Wellen ab, blockieren Figuren und gehen nach einigen Treffern kaputt (Kiste 5, Vase 3, siehe COVER_TYPES) ──
   function makeCover() {
     if (window.LIVE_COVER === false || new URLSearchParams(location.search).get('cover') === '0') return [];
-    const cx = AW / 2, cy = AH / 2, pts = AW > AH ? [[-180, -200], [180, 200], [-340, 170], [340, -170]] : [[-200, -180], [200, 180], [170, -340], [-170, 340]];
-    return pts.map(p => ({ x: cx + p[0], y: cy + p[1], r: COVER_R, hp: COVER_HITS, max: COVER_HITS, dead: false, hit: 0 }));
+    const cx = AW / 2, cy = AH / 2, L = [[-180, -200, 'kiste'], [180, 200, 'kiste'], [-340, 170, 'vase'], [340, -170, 'vase']], pts = AW > AH ? L : L.map(p => [p[1], p[0], p[2]]);
+    return pts.map(p => { const t = COVER_TYPES[p[2]]; return { x: cx + p[0], y: cy + p[1], r: t.r, hp: t.hits, max: t.hits, dead: false, hit: 0, kind: p[2] }; });
   }
   function hitCover(o) { o.hp--; o.hit = .2; if (o.hp <= 0) { o.dead = true; say(o.x, o.y - 30, 'Zerstört', '#c9a06a'); } }
   // Liegt ein Hindernis auf der Strecke von (x1,y1) nach (x2,y2)? pad vergrößert das Hindernis (z. B. um den Figurenradius)
@@ -93,11 +93,16 @@ const LIVE = (function () {
     return { lim, cov };
   }
   function mkWave(u) { const r = rayLim(u.x, u.y, u.ax, u.ay, u.c.len); return { x: u.x, y: u.y, dx: u.ax, dy: u.ay, f: 0, hit: false, lim: r.lim, cov: r.cov }; }
-  // KI weicht Hindernissen auf ihrem Weg aus (schlägt einen Bogen), sonst bleibt sie davor hängen
-  function steer(u, ct) {
+  // KI weicht Hindernissen aus: Sobald eines im Weg ist (nur bis zum Gegner, nicht dahinter), wählt sie eine Seite und bleibt eine Weile dabei, statt jedes Bild die Seite zu wechseln
+  function steer(u, ct, dt) {
+    u.stT = Math.max(0, (u.stT || 0) - dt);
     if (!CV.length || (!ct.mx && !ct.my)) return ct;
-    const m = Math.hypot(ct.mx, ct.my), fx = ct.mx / m, fy = ct.my / m, o = blocked(u.x, u.y, u.x + fx * 110, u.y + fy * 110, R + 6);
-    if (o) { const ox = o.x - u.x, oy = o.y - u.y, cr = fx * oy - fy * ox, sg = Math.abs(cr) < 4 ? u.sd : (cr > 0 ? -1 : 1); ct.mx = fx - fy * sg * 1.4; ct.my = fy + fx * sg * 1.4; }
+    const t = foe(u), m = Math.hypot(ct.mx, ct.my), fx = ct.mx / m, fy = ct.my / m, look = Math.min(110, Math.hypot(t.x - u.x, t.y - u.y)), o = blocked(u.x, u.y, u.x + fx * look, u.y + fy * look, R + 6);
+    if (o) {
+      if (u.stO !== o || u.stT <= 0) { const cr = fx * (o.y - u.y) - fy * (o.x - u.x); if (u.stO !== o) u.stSg = Math.abs(cr) < 4 ? u.sd : (cr > 0 ? -1 : 1); u.stO = o; }
+      u.stT = .7;
+    }
+    if (u.stT > 0 && u.stO && !u.stO.dead) { ct.mx = fx - fy * u.stSg * 1.4; ct.my = fy + fx * u.stSg * 1.4; } else u.stO = null;
     return ct;
   }
   function updWave(u, dt) {
@@ -144,7 +149,7 @@ const LIVE = (function () {
     const dx = t.x - u.x, dy = t.y - u.y, d = Math.hypot(dx, dy) || 1, ux = dx / d, uy = dy / d;
     u.sdt -= dt; if (u.sdt <= 0) { u.sd = -u.sd; u.sdt = rnd(1, 2.2); }
     if (c.melee) {
-      ct.mx = ux; ct.my = uy;
+      if (d > 2 * R + 2) { ct.mx = ux; ct.my = uy; }   // Nahkämpfer bleibt stehen, sobald er die Figur berührt, statt sie weiter vor sich herzuschieben
       if (d > 100 && d < 300 && u.ch > 0 && u.dt <= 0 && Math.random() < dt * 5) { ct.dash = [ux, uy]; u.cbT = .6; }
       ct.att = (u.at <= 0 || u.cbT > 0) && d < c.reach + 20;
     } else {
@@ -174,19 +179,26 @@ const LIVE = (function () {
     if (ct.att && (u.at <= 0 || u.cbT > 0) && u.dt <= 0 && u.wt <= 0 && u.cq <= 0 && !foe(u).dead) beginAttack(u);
   }
   function collide() {
-    const dx = B.x - A.x, dy = B.y - A.y, d = Math.hypot(dx, dy);
-    if (d < 2 * R) { const n = d || .01, px = (dx / n || 1) * (2 * R - d) / 2, py = (dy / n || 0) * (2 * R - d) / 2; A.x -= px; A.y -= py; B.x += px; B.y += py; }
-    for (const o of CV) {   // Hindernisse blockieren Figuren
-      if (o.dead) continue;
-      for (const u of U) { const dx = u.x - o.x, dy = u.y - o.y, d = Math.hypot(dx, dy), m = o.r + R; if (d < m) { const nx = d ? dx / d : 1, ny = d ? dy / d : 0; u.x = o.x + nx * m; u.y = o.y + ny * m; } }
+    // Steht eine Figur direkt an einem Hindernis, wird sie von der anderen nicht dagegen oder daran entlang geschoben: die andere weicht (zuerst die, die sich bewegt)
+    const pinned = u => CV.some(o => !o.dead && Math.hypot(u.x - o.x, u.y - o.y) < o.r + R + 3), score = u => pinned(u) ? (u.mv ? 1 : 2) : 0;   // 2 = steht still am Hindernis, 1 = bewegt sich am Hindernis, 0 = frei
+    for (let it = 0; it < 3; it++) {
+      const dx = B.x - A.x, dy = B.y - A.y, d = Math.hypot(dx, dy);
+      if (d < 2 * R) {
+        const ux = d ? dx / d : 1, uy = d ? dy / d : 0, ov = 2 * R - d, pa = score(A), pb = score(B), wa = pa === pb ? .5 : (pa > pb ? 0 : 1), wb = 1 - wa;
+        A.x -= ux * ov * wa; A.y -= uy * ov * wa; B.x += ux * ov * wb; B.y += uy * ov * wb;
+      }
+      for (const o of CV) {   // Hindernisse blockieren Figuren
+        if (o.dead) continue;
+        for (const u of U) { const ex = u.x - o.x, ey = u.y - o.y, e = Math.hypot(ex, ey), m = o.r + R; if (e < m) { const nx = e ? ex / e : 1, ny = e ? ey / e : 0; u.x = o.x + nx * m; u.y = o.y + ny * m; } }
+      }
+      for (const u of U) { u.x = clamp(u.x, R, AW - R); u.y = clamp(u.y, R, AH - R); }
     }
-    for (const u of U) { u.x = clamp(u.x, R, AW - R); u.y = clamp(u.y, R, AH - R); }
   }
   function update(dt) {
     if (over) { FL.forEach(f => { f.t -= dt; f.y -= 30 * dt; }); FL = FL.filter(f => f.t > 0); return; }
     if (cdT > 0) { cdT -= dt; wd = 0; return; }
     T += dt;
-    for (const u of U) if (!u.dead) step(u, u.isP ? playerCtl(u) : steer(u, ai(u, dt)), dt);
+    for (const u of U) if (!u.dead) { const ct = u.isP ? playerCtl(u) : steer(u, ai(u, dt), dt); u.mv = !!(ct.mx || ct.my); step(u, ct, dt); }
     collide();
     for (const a of AR) {
       a.x += a.dx * ARROW * dt; a.y += a.dy * ARROW * dt; a.l += ARROW * dt;
