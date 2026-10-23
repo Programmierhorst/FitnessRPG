@@ -36,6 +36,8 @@ window.R3D = (function () {
     M.stone = new T.MeshLambertMaterial({ color: 0x4a5166 });
     M.dark = new T.MeshLambertMaterial({ color: 0x2a2218 });
     M.debris = new T.MeshLambertMaterial({ color: 0x6a5036 });
+    M.debrisV = new T.MeshLambertMaterial({ color: 0xa8603c });
+    G.vase = keep(new T.LatheGeometry([[0, 0], [8, 0], [11, 3], [14, 12], [15, 22], [12, 32], [7, 38], [7, 42], [10, 47]].map(p => new T.Vector2(p[0], p[1])), 14));   // Vase: Drehkörper aus dem Umriss (Radius, Höhe)
   }
   const circ = arc => G.circ[arc] || (G.circ[arc] = keep(new THREE.CircleGeometry(1, 24, -arc / 2, arc).rotateX(-Math.PI / 2)));
 
@@ -160,17 +162,22 @@ window.R3D = (function () {
     for (const m of [q.fanW, q.fanH, q.rcW, q.rcH]) if (m) { m.visible = false; m.position.y = 1; scene.add(m); q.dec.push(m); }
     return q;
   }
-  // ── Hindernisse: Holzkisten, die Treffer abfangen (Zustand kommt aus kampf_live.js), mit Splittern beim Zerbrechen ──
+  // ── Hindernisse: Holzkisten und Vasen, die Treffer abfangen (Zustand kommt aus kampf_live.js), mit Splittern beim Zerbrechen ──
   function mkCover(o) {
     const T = THREE, grp = new T.Group(), mat = new T.MeshLambertMaterial({ color: 0x6a5036 }), mat2 = new T.MeshLambertMaterial({ color: 0x3c2d1e });
     const add = (w, h, d, x, y, z, m) => { const b = new T.Mesh(G.box, m); b.scale.set(w, h, d); b.position.set(x, y, z); b.castShadow = b.receiveShadow = true; grp.add(b); };
-    add(52, 46, 52, 0, 23, 0, mat); add(58, 6, 58, 0, 49, 0, mat2); add(58, 6, 58, 0, 3, 0, mat2); add(8, 46, 54, -16, 23, 0, mat2); add(8, 46, 54, 16, 23, 0, mat2);
+    if (o.kind === 'vase') {
+      mat.side = T.DoubleSide; const v = new T.Mesh(G.vase, mat); v.castShadow = v.receiveShadow = true; grp.add(v);
+      const band = new T.Mesh(new T.TorusGeometry(15.3, 1.6, 6, 16).rotateX(Math.PI / 2), mat2); band.position.y = 22; band.castShadow = true; grp.add(band);
+    } else {
+      add(52, 46, 52, 0, 23, 0, mat); add(58, 6, 58, 0, 49, 0, mat2); add(58, 6, 58, 0, 3, 0, mat2); add(8, 46, 54, -16, 23, 0, mat2); add(8, 46, 54, 16, 23, 0, mat2);
+    }
     grp.position.set(o.x, 0, o.y); grp.rotation.y = (o.x * 13 + o.y * 7) % 6.28; scene.add(grp);
-    return { o, grp, mat, dead: false };
+    return { o, grp, mat, base: o.kind === 'vase' ? [.66, .38, .24] : [.42, .31, .21], dead: false };
   }
   function spawnDebris(o) {
     for (let i = 0; i < 9; i++) {
-      const m = new THREE.Mesh(G.box, M.debris), s = 8 + Math.random() * 8, a = Math.random() * 6.28, v = 80 + Math.random() * 140;
+      const vs = o.kind === 'vase', m = new THREE.Mesh(G.box, vs ? M.debrisV : M.debris), s = (vs ? 5 : 8) + Math.random() * (vs ? 6 : 8), a = Math.random() * 6.28, v = 80 + Math.random() * 140;
       m.scale.set(s, s * .6, s); m.position.set(o.x, 20 + Math.random() * 20, o.y); m.castShadow = true; scene.add(m);
       debris.push({ m, vx: Math.cos(a) * v, vy: 160 + Math.random() * 140, vz: Math.sin(a) * v, t: .9, rx: Math.random() * 8, rz: Math.random() * 8 });
     }
@@ -237,7 +244,7 @@ window.R3D = (function () {
       const c = q.o;
       if (c.dead) { if (!q.dead) { q.dead = true; q.grp.visible = false; spawnDebris(c); } continue; }
       const f = Math.max(0, c.hp / c.max), k = .45 + .55 * f;
-      q.mat.color.setRGB(.42 * k, .31 * k, .21 * k); q.grp.rotation.z = f < .34 ? .07 : 0;
+      q.mat.color.setRGB(q.base[0] * k, q.base[1] * k, q.base[2] * k); q.grp.rotation.z = f < .34 ? (q.o.kind === 'vase' ? .1 : .07) : 0;
       q.grp.position.set(c.x + (c.hit > 0 ? Math.sin(now2 * 90) * 1.6 : 0), 0, c.y);
     }
     for (let i = debris.length - 1; i >= 0; i--) {   // Splitter fliegen kurz und fallen zu Boden
